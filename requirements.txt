@@ -1,0 +1,37 @@
+# NEXO - Faturamento Inteligente | Semanas 1 e 2
+# Plotly.js é JS e carrega via CDN — não entra aqui.
+# Suporte a .xls NÃO é declarado: o ETL lê .xlsx (openpyxl) e .csv. Para habilitar
+# .xls seria necessário adicionar 'xlrd' e o caminho de leitura correspondente.
+
+Flask==3.0.3
+Flask-SQLAlchemy==3.1.1
+Flask-Login==0.6.3
+python-dotenv==1.0.1
+Werkzeug==3.0.4
+
+# Semana 2 — motor de ETL
+pandas==3.0.3
+openpyxl==3.1.5
+
+# Infra cloud — migração SQLite -> Supabase (Postgres)
+psycopg2-binary==2.9.9
+Flask-Migrate==4.0.7
+
+# Engajamento e entregáveis
+Flask-Mail==0.10.0       # SMTP — e-mails HTML (tickets, publicação de análise)
+reportlab==4.2.5         # PDF — exportação da análise executiva (ABC + 5W2H)
+Pillow==13.0.0           # Verificação do conteúdo real das imagens enviadas ao Guia
+
+# Tempo real — sininho de notificações via WebSocket
+Flask-SocketIO==5.4.1    # async_mode="threading" (estável no Python 3.12)
+simple-websocket==1.1.0  # driver WebSocket para o modo threading
+
+# Segurança — proteção CSRF e rate limiting
+Flask-WTF==1.2.1         # CSRFProtect: token em todas as rotas mutáveis
+Flask-Limiter==3.8.0     # rate limit por IP (login, recuperação de senha)
+
+# Servidor de produção (deploy) — ver wsgi.py e render.yaml
+gunicorn==23.0.0
+
+# IA — geração automatizada da devolutiva (Claude / Anthropic)
+anthropic==0.109.1

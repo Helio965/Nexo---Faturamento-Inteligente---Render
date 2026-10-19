@@ -1,0 +1,68 @@
+test_development_import_without_production_secret (test_configuration_deploy.ConfigurationTests.test_development_import_without_production_secret) ... ok
+test_memory_sqlite_is_not_a_filename (test_configuration_deploy.ConfigurationTests.test_memory_sqlite_is_not_a_filename) ... ok
+test_postgres_alias_and_parameters (test_configuration_deploy.ConfigurationTests.test_postgres_alias_and_parameters) ... ok
+test_production_migrations_require_direct_url (test_configuration_deploy.ConfigurationTests.test_production_migrations_require_direct_url) ... ok
+test_production_rejects_blank_secret (test_configuration_deploy.ConfigurationTests.test_production_rejects_blank_secret) ... ok
+test_production_rejects_development_secret (test_configuration_deploy.ConfigurationTests.test_production_rejects_development_secret) ... ok
+test_production_rejects_sqlite (test_configuration_deploy.ConfigurationTests.test_production_rejects_sqlite) ... ok
+test_production_requires_database (test_configuration_deploy.ConfigurationTests.test_production_requires_database) ... ok
+test_production_requires_secret (test_configuration_deploy.ConfigurationTests.test_production_requires_secret) ... ok
+test_wsgi_production_import_and_liveness_without_database_connection (test_configuration_deploy.ConfigurationTests.test_wsgi_production_import_and_liveness_without_database_connection) ... ok
+test_cliente_cannot_access_admin_or_other_company (test_deploy.DeployTests.test_cliente_cannot_access_admin_or_other_company) ... C:\ADS\Nexo - Faturamento Inteligente\Nexo - Copia\Nexo-Faturamento-Inteligente\.audit_tmp\venv\Lib\site-packages\reportlab\lib\rl_safe_eval.py:12: DeprecationWarning: ast.NameConstant is deprecated and will be removed in Python 3.14; use ast.Constant instead
+  haveNameConstant = hasattr(ast,'NameConstant')
+ok
+test_cliente_uploads_persist_in_database_and_survive_cache_removal (test_deploy.DeployTests.test_cliente_uploads_persist_in_database_and_survive_cache_removal) ... ok
+test_etl_csv_and_xlsx_fictitious_data (test_deploy.DeployTests.test_etl_csv_and_xlsx_fictitious_data) ... ok
+test_etl_rejects_invalid_input_with_validation_error (test_deploy.DeployTests.test_etl_rejects_invalid_input_with_validation_error) ... ok
+test_health_routes_and_database_failure (test_deploy.DeployTests.test_health_routes_and_database_failure) ... ok
+test_login_logout_admin_and_cliente_with_csrf (test_deploy.DeployTests.test_login_logout_admin_and_cliente_with_csrf) ... ok
+test_migrations_empty_database_repeat_upgrade_and_metadata (test_deploy.DeployTests.test_migrations_empty_database_repeat_upgrade_and_metadata) ... ok
+test_missing_csrf_and_invalid_password_do_not_authenticate (test_deploy.DeployTests.test_missing_csrf_and_invalid_password_do_not_authenticate) ... ok
+test_public_pages_and_referenced_static_assets (test_deploy.DeployTests.test_public_pages_and_referenced_static_assets) ... C:\ADS\Nexo - Faturamento Inteligente\Nexo - Copia\Nexo-Faturamento-Inteligente\tests\test_deploy.py:73: ResourceWarning: unclosed file <_io.BufferedReader name='C:\\ADS\\Nexo - Faturamento Inteligente\\Nexo - Copia\\Nexo-Faturamento-Inteligente\\static/css/landing.css'>
+  self.assertEqual(self.client.get(asset).status_code, 200, asset)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+C:\ADS\Nexo - Faturamento Inteligente\Nexo - Copia\Nexo-Faturamento-Inteligente\tests\test_deploy.py:73: ResourceWarning: unclosed file <_io.BufferedReader name='C:\\ADS\\Nexo - Faturamento Inteligente\\Nexo - Copia\\Nexo-Faturamento-Inteligente\\static/js/landing.js'>
+  self.assertEqual(self.client.get(asset).status_code, 200, asset)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+C:\ADS\Nexo - Faturamento Inteligente\Nexo - Copia\Nexo-Faturamento-Inteligente\tests\test_deploy.py:73: ResourceWarning: unclosed file <_io.BufferedReader name='C:\\ADS\\Nexo - Faturamento Inteligente\\Nexo - Copia\\Nexo-Faturamento-Inteligente\\static/css/nexo.css'>
+  self.assertEqual(self.client.get(asset).status_code, 200, asset)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+C:\ADS\Nexo - Faturamento Inteligente\Nexo - Copia\Nexo-Faturamento-Inteligente\tests\test_deploy.py:73: ResourceWarning: unclosed file <_io.BufferedReader name='C:\\ADS\\Nexo - Faturamento Inteligente\\Nexo - Copia\\Nexo-Faturamento-Inteligente\\static/img/nexo-logo.jpeg'>
+  self.assertEqual(self.client.get(asset).status_code, 200, asset)
+ResourceWarning: Enable tracemalloc to get the object allocation traceback
+ok
+test_published_analysis_pdf_response (test_deploy.DeployTests.test_published_analysis_pdf_response) ... ok
+test_seed_initial_data_is_idempotent_on_test_database (test_deploy.DeployTests.test_seed_initial_data_is_idempotent_on_test_database) ... ok
+test_storage_rollback_does_not_publish_blob (test_deploy.DeployTests.test_storage_rollback_does_not_publish_blob) ... ok
+test_templates_imports_and_static_references_exist (test_deploy.DeployTests.test_templates_imports_and_static_references_exist) ... ok
+test_brevo_error_does_not_expose_provider_body_or_context (test_email_logging.EmailLoggingTests.test_brevo_error_does_not_expose_provider_body_or_context) ... ok
+test_brevo_failure_logs_no_provider_body (test_email_logging.EmailLoggingTests.test_brevo_failure_logs_no_provider_body) ... ok
+test_smtp_failure_logs_only_exception_type (test_email_logging.EmailLoggingTests.test_smtp_failure_logs_only_exception_type) ... ok
+test_success_logs_no_subject_or_addresses (test_email_logging.EmailLoggingTests.test_success_logs_no_subject_or_addresses) ... ok
+test_apply_commits_valid_uploads_and_guide_images_together (test_maintenance.MaintenanceSafetyTests.test_apply_commits_valid_uploads_and_guide_images_together) ... ok
+test_apply_rolls_back_everything_on_missing_file_or_hash_mismatch (test_maintenance.MaintenanceSafetyTests.test_apply_rolls_back_everything_on_missing_file_or_hash_mismatch) ... ok
+test_default_migration_simulates_without_writes_or_source_removal (test_maintenance.MaintenanceSafetyTests.test_default_migration_simulates_without_writes_or_source_removal) ... ok
+test_importing_guide_seed_does_not_create_app_or_write (test_maintenance.MaintenanceSafetyTests.test_importing_guide_seed_does_not_create_app_or_write) ... ok
+test_migration_cli_rejects_unknown_or_conflicting_flags_before_work (test_maintenance.MaintenanceSafetyTests.test_migration_cli_rejects_unknown_or_conflicting_flags_before_work) ... ok
+test_migration_cli_requires_explicit_apply (test_maintenance.MaintenanceSafetyTests.test_migration_cli_requires_explicit_apply) ... ok
+test_seed_uses_factory_environment_and_disables_echo (test_maintenance.MaintenanceSafetyTests.test_seed_uses_factory_environment_and_disables_echo) ... ok
+test_admin_remains_forbidden (test_security_deploy.BotInputTests.test_admin_remains_forbidden) ... ok
+test_rejects_non_object_json (test_security_deploy.BotInputTests.test_rejects_non_object_json) ... ok
+test_rejects_non_text_message (test_security_deploy.BotInputTests.test_rejects_non_text_message) ... ok
+test_valid_message_keeps_limit_and_response (test_security_deploy.BotInputTests.test_valid_message_keeps_limit_and_response) ... ok
+test_existing_image_formats_remain_supported (test_security_deploy.GuideImageTests.test_existing_image_formats_remain_supported) ... ok
+test_extension_must_match_content (test_security_deploy.GuideImageTests.test_extension_must_match_content) ... ok
+test_html_disguised_as_png_is_rejected (test_security_deploy.GuideImageTests.test_html_disguised_as_png_is_rejected) ... ok
+test_truncated_png_is_rejected (test_security_deploy.GuideImageTests.test_truncated_png_is_rejected) ... ok
+test_database_error_values_do_not_enter_admin_logs (test_security_deploy.SensitiveLogTests.test_database_error_values_do_not_enter_admin_logs) ... ok
+test_reset_link_and_email_do_not_enter_logs (test_security_deploy.SensitiveLogTests.test_reset_link_and_email_do_not_enter_logs) ... ok
+test_anonymous_user_is_rejected (test_security_deploy.SocketSessionTests.test_anonymous_user_is_rejected) ... ok
+test_current_active_session_connects (test_security_deploy.SocketSessionTests.test_current_active_session_connects) ... ok
+test_inactive_user_is_rejected (test_security_deploy.SocketSessionTests.test_inactive_user_is_rejected) ... ok
+test_pending_first_access_is_rejected (test_security_deploy.SocketSessionTests.test_pending_first_access_is_rejected) ... ok
+test_previous_boot_is_rejected (test_security_deploy.SocketSessionTests.test_previous_boot_is_rejected) ... ok
+
+----------------------------------------------------------------------
+Ran 49 tests in 28.508s
+
+OK

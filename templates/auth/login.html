@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Entrar — NEXO{% endblock %}
+
+{% block content %}
+{# Esta página é renderizada DENTRO de .auth-wrap (base.html, ramo não autenticado).
+   As flashes são exibidas localmente abaixo, dentro do card — base.html não mostra
+   flashes globais para visitantes. #}
+<div class="auth-card">
+    <div class="auth-brand">
+        <div class="auth-logo">
+            <img src="{{ url_for('static', filename='img/nexo-logo.jpeg') }}" alt="Logo NEXO">
+        </div>
+        <p class="auth-eyebrow">NEXO <span>Faturamento Inteligente</span></p>
+        <div>
+            <h1 class="auth-title">Acesso ao Portal</h1>
+            <p class="auth-sub">Entre com seu e-mail e senha</p>
+        </div>
+    </div>
+
+    {# Login unificado: o backend autentica por e-mail/senha e direciona conforme
+       Usuario.role. Não há mais toggle de perfil — o seletor visual "Time Nexo /
+       Cliente" era redundante (o role já é consultado no banco). #}
+    <form method="POST" action="{{ url_for('auth.login') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        {# Flashes locais (erro de credencial, sessão terminada etc.). #}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <div class="auth-flash-stack" aria-live="polite">
+                {% for category, message in messages %}
+                <div class="alert alert-{{ 'danger' if category == 'error' else category }}" role="alert">
+                    {{ message }}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+        {% endwith %}
+
+        <div class="mb-3">
+            <label for="email" class="nexo-label">E-mail</label>
+            <div class="position-relative">
+                <input type="email" name="email" id="email" class="form-control"
+                       value="{{ email_digitado|default('') }}"
+                       placeholder="voce@empresa.com.br" required autofocus autocomplete="username">
+            </div>
+        </div>
+        <div class="mb-4">
+            <div class="d-flex justify-content-between align-items-baseline">
+                <label for="senha" class="nexo-label">Senha</label>
+                <a href="{{ url_for('auth.recuperar_senha') }}" class="auth-forgot" style="font-size:0.8rem;color:#c4a0fb;text-decoration:none;">Esqueci minha senha</a>
+            </div>
+            <div class="password-field">
+                <input type="password" name="senha" id="senha" class="form-control"
+                       placeholder="••••••••" required autocomplete="current-password">
+                <button type="button" class="password-toggle" id="toggleSenha"
+                        aria-label="Mostrar senha" title="Mostrar senha">
+                    <i class="bi bi-eye" id="toggleSenhaIcon" aria-hidden="true"></i>
+                </button>
+            </div>
+        </div>
+        <button type="submit" class="btn-nexo auth-submit w-100 justify-content-center">
+            Entrar <i class="bi bi-arrow-right"></i>
+        </button>
+    </form>
+
+    {# Substitui o antigo "Cadastre-se aqui" — não há autocadastro no NEXO; o
+       onboarding é consultivo via /como-aderir. #}
+    <p class="auth-aside text-center mt-4 mb-0" style="font-size: 0.92rem; color: var(--text-muted, #9aa0b7);">
+        É novo por aqui?
+        <a href="{{ url_for('como_aderir') }}" style="color: var(--accent, #a855f7); font-weight: 600; text-decoration: none;">
+            Saiba como ter acesso ao portal!
+        </a>
+    </p>
+</div>
+<p class="auth-tagline">Nexo: inteligência que impulsiona seu faturamento.</p>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* Mostrar/ocultar senha — JS vanilla. (Toggle de perfil removido junto com o
+     access-switch — login é unificado e o role vem do banco.) */
+  (function () {
+    var btn = document.getElementById('toggleSenha');
+    var inp = document.getElementById('senha');
+    var ic  = document.getElementById('toggleSenhaIcon');
+    if (!btn || !inp) return;
+    btn.addEventListener('click', function () {
+      var mostrar = inp.type === 'password';
+      inp.type = mostrar ? 'text' : 'password';
+      var label = mostrar ? 'Ocultar senha' : 'Mostrar senha';
+      btn.setAttribute('aria-label', label);
+      btn.setAttribute('title', label);
+      if (ic) ic.className = mostrar ? 'bi bi-eye-slash' : 'bi bi-eye';
+      inp.focus();
+    });
+  })();
+</script>
+{% endblock %}

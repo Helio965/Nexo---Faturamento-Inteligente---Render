@@ -1,0 +1,176 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+
+{% block title %}Empresas — NEXO Admin{% endblock %}
+{% block page_title %}Empresas{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Empresas Clientes</h1>
+        <p class="sub">Carteira de lojas atendidas pela consultoria NEXO.</p>
+    </div>
+    <div class="page-head-actions">
+        {% if empresas %}
+        <div class="search-box">
+            <i class="bi bi-search"></i>
+            <input type="text" id="buscaEmpresa" class="form-control" placeholder="Buscar por nome, CNPJ, plano…" autocomplete="off">
+        </div>
+        {% endif %}
+        <a href="{{ url_for('admin.lixeira') }}" class="btn-ghost">
+            <i class="bi bi-trash"></i> Lixeira{% if na_lixeira %} <span class="nexo-badge b-muted">{{ na_lixeira }}</span>{% endif %}
+        </a>
+        <a href="{{ url_for('admin.empresa_nova') }}" class="btn-nexo"><i class="bi bi-plus-lg"></i> Nova empresa</a>
+    </div>
+</div>
+
+<div class="table-wrap">
+    {% if empresas %}
+    <div class="table-responsive-x">
+        <table class="nexo-table" id="tabelaEmpresas">
+            <thead>
+                <tr>
+                    <th>Razão social</th>
+                    <th>Nome fantasia</th>
+                    <th>CNPJ</th>
+                    <th>Segmento</th>
+                    <th>Plano</th>
+                    <th>Status</th>
+                    <th>E-mail de contato</th>
+                    <th class="text-end">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in empresas %}
+                <tr>
+                    <td class="t-strong">{{ e.razao_social }}</td>
+                    <td class="t-mut">{{ e.nome_fantasia or '—' }}</td>
+                    <td class="t-mono t-mut">{{ e.cnpj }}</td>
+                    <td>{{ m.segmento(e.segmento.nome_segmento if e.segmento else None) }}</td>
+                    <td>{{ m.badge_plano(e.plano_atual.nome_plano if e.plano_atual else '—') }}</td>
+                    <td>{{ m.badge_conta(e.status_conta) }}</td>
+                    <td class="t-mut">{{ e.email_contato }}</td>
+                    <td class="text-end t-mut" style="white-space:nowrap;">
+                        <a href="{{ url_for('admin.analises') }}" class="btn-ghost btn-sm-x"><i class="bi bi-clipboard-data"></i> Análises</a>
+                        <a href="{{ url_for('admin.empresa_editar', id_empresa=e.id_empresa) }}" class="btn-ghost btn-sm-x" title="Editar empresa"><i class="bi bi-pencil"></i></a>
+                        {# Trigger do modal central — o <form method=POST> real vive UMA única vez
+                           no fim do bloco; sua action é preenchida em runtime a partir do data-bs-url. #}
+                        <button type="button" class="btn-ghost is-danger btn-sm-x"
+                                data-bs-toggle="modal" data-bs-target="#confirmDeleteEmpresaModal"
+                                data-bs-url="{{ url_for('admin.empresa_excluir', id_empresa=e.id_empresa) }}"
+                                data-bs-empresa="{{ e.nome_fantasia or e.razao_social }}"
+                                data-bs-email="{{ e.email_contato }}"
+                                title="Mover para a lixeira" aria-label="Mover para a lixeira">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+                <tr id="semResultados" style="display:none;">
+                    <td colspan="8" class="text-center text-dim" style="padding:28px;">Nenhuma empresa encontrada para a busca.</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="es-icon"><i class="bi bi-buildings"></i></div>
+        <h3>Nenhuma empresa cadastrada ainda.</h3>
+        <p>Cadastre a primeira empresa cliente para começar a gerar análises de faturamento.</p>
+        <a href="{{ url_for('admin.empresa_nova') }}" class="btn-nexo mt-3"><i class="bi bi-plus-lg"></i> Nova empresa</a>
+    </div>
+    {% endif %}
+</div>
+
+{# =====================================================================
+   Modal único de confirmação — MOVER PARA A LIXEIRA (soft delete).
+   - 1 instância no DOM, reaproveitada por TODAS as linhas (1 trigger/linha).
+   - O <form id="confirmTrashEmpresaForm"> tem action vazia: é preenchida em
+     runtime pelo handler de show.bs.modal a partir do data-bs-url do botão.
+   - Ação reversível: o cliente vai para a lixeira, não é apagado do banco.
+   ===================================================================== #}
+<div class="modal fade" id="confirmDeleteEmpresaModal" tabindex="-1"
+     aria-labelledby="confirmDeleteEmpresaLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content bg-dark text-light border border-secondary">
+            <div class="modal-header border-secondary">
+                <h5 class="modal-title d-flex align-items-center gap-2" id="confirmDeleteEmpresaLabel">
+                    <i class="bi bi-trash text-warning"></i>
+                    Mover para a lixeira
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-2">Deseja mover este cliente para a lixeira?</p>
+                <ul class="mb-3" style="list-style:none; padding-left:0;">
+                    <li><strong class="text-light" id="confirmDeleteEmpresaNome">—</strong></li>
+                    <li class="text-muted t-mono" style="font-size:0.88rem;" id="confirmDeleteEmpresaEmail">—</li>
+                </ul>
+                <p class="mb-0 small text-muted">
+                    O cliente sairá das listagens e o acesso dele será suspenso, mas
+                    <strong class="text-light">nada é apagado</strong>. Você poderá restaurá-lo
+                    a qualquer momento em <strong class="text-light">Empresas → Lixeira</strong>.
+                </p>
+            </div>
+            <div class="modal-footer border-secondary">
+                <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">
+                    Cancelar
+                </button>
+                <form method="POST" action="" id="confirmTrashEmpresaForm" class="d-inline m-0">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-warning btn-sm">
+                        <i class="bi bi-trash"></i> Mover para a lixeira
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* Busca client-side (vanilla, sem AJAX): filtra linhas pelo texto. */
+  (function () {
+    var input = document.getElementById('buscaEmpresa');
+    var tabela = document.getElementById('tabelaEmpresas');
+    if (!input || !tabela) return;
+    var semResultados = document.getElementById('semResultados');
+    var linhas = Array.prototype.slice.call(tabela.tBodies[0].rows).filter(function (r) {
+      return r.id !== 'semResultados';
+    });
+    input.addEventListener('input', function () {
+      var q = input.value.trim().toLowerCase();
+      var visiveis = 0;
+      linhas.forEach(function (row) {
+        var match = row.textContent.toLowerCase().indexOf(q) !== -1;
+        row.style.display = match ? '' : 'none';
+        if (match) visiveis++;
+      });
+      if (semResultados) semResultados.style.display = visiveis === 0 ? '' : 'none';
+    });
+  })();
+
+  /* ---- Modal de confirmação de exclusão de empresa ----
+     Listener único em show.bs.modal: lê data-bs-url / -empresa / -email do
+     botão que abriu o modal (event.relatedTarget) e popula a action do form
+     + os spans de contexto. Substitui o confirm() nativo. */
+  (function () {
+    var modal = document.getElementById('confirmDeleteEmpresaModal');
+    if (!modal) return;
+    var form = document.getElementById('confirmTrashEmpresaForm');
+    var labelNome = document.getElementById('confirmDeleteEmpresaNome');
+    var labelEmail = document.getElementById('confirmDeleteEmpresaEmail');
+    modal.addEventListener('show.bs.modal', function (event) {
+      var trigger = event.relatedTarget;
+      if (!trigger) return;
+      var url = trigger.getAttribute('data-bs-url') || '';
+      var empresa = trigger.getAttribute('data-bs-empresa') || 'Empresa';
+      var email = trigger.getAttribute('data-bs-email') || '';
+      if (form) form.setAttribute('action', url);
+      if (labelNome) labelNome.textContent = empresa;
+      if (labelEmail) labelEmail.textContent = email;
+    });
+  })();
+</script>
+{% endblock %}

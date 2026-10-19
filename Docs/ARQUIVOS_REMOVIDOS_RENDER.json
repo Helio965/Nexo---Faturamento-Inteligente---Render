@@ -1,0 +1,92 @@
+[
+  {
+    "caminho": "blueprints/__pycache__/__init__.cpython-312.pyc",
+    "bytes": 187,
+    "sha256": "2b5b0b87e95bda4c8b6fb74decea16f4c26c476548730c8b61ee1d2bfd19ed67",
+    "motivo": "Cache Python recompilavel"
+  },
+  {
+    "caminho": "blueprints/__pycache__/admin.cpython-312.pyc",
+    "bytes": 68040,
+    "sha256": "4ec7ab2e542d78e734419f696805e77b3b1fdb42e783abe9dcbc0de2002adee9",
+    "motivo": "Cache Python recompilavel"
+  },
+  {
+    "caminho": "blueprints/__pycache__/api.cpython-312.pyc",
+    "bytes": 1357,
+    "sha256": "9f6453281f1968f6dc21b9182b2cf8baa286ca6908a47520318947af2196575e",
+    "motivo": "Cache Python recompilavel"
+  },
+  {
+    "caminho": "blueprints/__pycache__/auth.cpython-312.pyc",
+    "bytes": 13629,
+    "sha256": "87db5c56f4d81e79891b35b0b92e612bb98fb02f17da07fbbf43d7a2ab88c526",
+    "motivo": "Cache Python recompilavel"
+  },
+  {
+    "caminho": "blueprints/__pycache__/cliente.cpython-312.pyc",
+    "bytes": 27265,
+    "sha256": "6c6394da1f1f9f407bf54da8dbf75399979ae4d390de3dedbf54ec302c299d98",
+    "motivo": "Cache Python recompilavel"
+  },
+  {
+    "caminho": "blueprints/__pycache__/notificacoes.cpython-312.pyc",
+    "bytes": 3833,
+    "sha256": "805b2b48db3c8cbd8f6fbb8710d34f81afe84658cfe84e46136632b1d51db4bb",
+    "motivo": "Cache Python recompilavel"
+  },
+  {
+    "caminho": "migrations/__pycache__/env.cpython-312.pyc",
+    "bytes": 4531,
+    "sha256": "e4ec5b0a2bdece6c990442fcc96489172f73332df4aa5cdabc5713090bfe5659",
+    "motivo": "Cache Python recompilavel"
+  },
+  {
+    "caminho": "migrations/versions/__pycache__/91a2ecf56a41_primeiro_acesso_em_usuario.cpython-312.pyc",
+    "bytes": 1378,
+    "sha256": "fc21770e678b0486d7398d1b4eaefa2adb409e2348f38e0b5e115a049a7c0a77",
+    "motivo": "Cache Python recompilavel"
+  },
+  {
+    "caminho": "migrations/versions/__pycache__/a3f1c9b27d04_soft_delete_lixeira_empresa.cpython-312.pyc",
+    "bytes": 1368,
+    "sha256": "89b451bd9de459f3796ebc911a014b4a85f274052a005ae0d423348074e0fbed",
+    "motivo": "Cache Python recompilavel"
+  },
+  {
+    "caminho": "migrations/versions/__pycache__/b7c4e2a9f031_arquivo_armazenado_storage_no_banco.cpython-312.pyc",
+    "bytes": 2150,
+    "sha256": "956308fade8615c7225044862c2a22efc12a17d06237b06595889b22b048b0dd",
+    "motivo": "Cache Python recompilavel"
+  },
+  {
+    "caminho": "migrations/versions/__pycache__/c7189696a9cd_periodo_base_em_indicador_analise.cpython-312.pyc",
+    "bytes": 1603,
+    "sha256": "04b049d53d99898fe772b3f02e5a24843b5dd516c3397ef7af98bba058df4222",
+    "motivo": "Cache Python recompilavel"
+  },
+  {
+    "caminho": "migrations/versions/__pycache__/d61b5e68082c_guia_topico_cms_base_de_conhecimento.cpython-312.pyc",
+    "bytes": 2600,
+    "sha256": "f84276560b1cf39d0f35af89c594877eb5b5d2ffa98297e106d8aae1e0ca2418",
+    "motivo": "Cache Python recompilavel"
+  },
+  {
+    "caminho": "migrations/versions/__pycache__/d87a6fbc2fbe_schema_inicial_nexo_sqlite_para_.cpython-312.pyc",
+    "bytes": 24017,
+    "sha256": "219f0dd4c863ab7a2de53edfeaa5faced1e1d4a1ffe35156f4b8860848cc84ad",
+    "motivo": "Cache Python recompilavel"
+  },
+  {
+    "caminho": "migrations/versions/__pycache__/f958d38a7f19_gerado_por_ia_em_relatorio_analise.cpython-312.pyc",
+    "bytes": 1404,
+    "sha256": "2c1746a55368f52a4ed0d6965b24c7e634fd4c6c6d90490e00a4809f59bd624d",
+    "motivo": "Cache Python recompilavel"
+  },
+  {
+    "caminho": "static/uploads/guia/02fefd36c5d1d7fb.png",
+    "bytes": 60,
+    "sha256": "02fefd36c5d1d7fb2f9df6482ac059205aa0cbf7c6f7067147cf5fd05a3ea4d8",
+    "motivo": "Arquivo com extensao PNG contendo HTML/script de teste, nao uma imagem; preservado no backup privado"
+  }
+]

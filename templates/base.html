@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {# Token CSRF exposto para chamadas fetch/AJAX (enviado no header X-CSRFToken). #}
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>{% block title %}NEXO — Faturamento Inteligente{% endblock %}</title>
+
+    <!-- Fontes: Inter (texto) + JetBrains Mono (KPIs/números) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Bootstrap 5 + ícones (sem build step) -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+
+    <!-- Design system interno NEXO -->
+    <link href="{{ url_for('static', filename='css/nexo.css') }}" rel="stylesheet">
+
+    {% block extra_head %}{% endblock %}
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+{# ===================================================================
+   Layout interno (sidebar + topbar) para usuário autenticado.
+   Visitante (tela de login) cai no layout centralizado .auth-wrap.
+
+   NEXO/MVP — nav do admin (Dashboard, Empresas, Análises) e do cliente
+   (Visão Geral, Histórico) está completa. Itens de Tickets ficaram
+   fora do escopo do PI2 (tabelas chamado_suporte/mensagem_suporte são
+   documentação no DER, sem Model nem rotas no MVP — ver
+   .claude/prompt_context.md regra 4).
+   =================================================================== #}
+{% if current_user.is_authenticated %}
+<div class="app-shell" id="appShell">
+
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <span class="brand-logo">
+                <img src="{{ url_for('static', filename='img/nexo-logo.jpeg') }}" alt="NEXO">
+            </span>
+            <div class="brand-text">
+                <strong>NEXO</strong>
+                <small>Faturamento Inteligente</small>
+            </div>
+        </div>
+
+        <nav class="sidebar-nav">
+            {% if current_user.is_admin %}
+            <span class="nav-section">Administração</span>
+            <a class="nav-item {{ 'active' if request.endpoint == 'admin.dashboard' }}" href="{{ url_for('admin.dashboard') }}">
+                <i class="bi bi-grid-1x2"></i> Dashboard
+            </a>
+            <a class="nav-item {{ 'active' if request.endpoint in ['admin.empresas', 'admin.empresa_nova', 'admin.empresa_editar'] }}" href="{{ url_for('admin.empresas') }}">
+                <i class="bi bi-buildings"></i> Empresas
+            </a>
+            <a class="nav-item {{ 'active' if request.endpoint == 'admin.lixeira' }}" href="{{ url_for('admin.lixeira') }}">
+                <i class="bi bi-trash"></i> Lixeira
+            </a>
+            <a class="nav-item {{ 'active' if request.endpoint in ['admin.analises', 'admin.analise_nova', 'admin.analise_upload', 'admin.analise_relatorio', 'admin.processar_analise'] }}" href="{{ url_for('admin.analises') }}">
+                <i class="bi bi-clipboard-data"></i> Análises
+            </a>
+            <a class="nav-item {{ 'active' if request.endpoint in ['admin.tickets', 'admin.ticket_detalhe'] }}" href="{{ url_for('admin.tickets') }}">
+                <i class="bi bi-life-preserver"></i> Suporte
+            </a>
+            <a class="nav-item {{ 'active' if request.endpoint in ['admin.guia', 'admin.guia_novo', 'admin.guia_editar'] }}" href="{{ url_for('admin.guia') }}">
+                <i class="bi bi-journal-text"></i> Base de Conhecimento
+            </a>
+            {% else %}
+            <span class="nav-section">Minha Empresa</span>
+            <a class="nav-item {{ 'active' if request.endpoint == 'cliente.dashboard' }}" href="{{ url_for('cliente.dashboard') }}">
+                <i class="bi bi-speedometer2"></i> Visão Geral
+            </a>
+            <a class="nav-item {{ 'active' if request.endpoint == 'cliente.upload' }}" href="{{ url_for('cliente.upload') }}">
+                <i class="bi bi-cloud-arrow-up"></i> Enviar relatórios
+            </a>
+            <a class="nav-item {{ 'active' if request.endpoint in ['cliente.historico', 'cliente.analise'] }}" href="{{ url_for('cliente.historico') }}">
+                <i class="bi bi-clock-history"></i> Histórico
+            </a>
+            <a class="nav-item {{ 'active' if request.endpoint == 'cliente.guia' }}" href="{{ url_for('cliente.guia') }}">
+                <i class="bi bi-book"></i> Guia
+            </a>
+            <a class="nav-item {{ 'active' if request.endpoint in ['cliente.tickets', 'cliente.ticket_detalhe'] }}" href="{{ url_for('cliente.tickets') }}">
+                <i class="bi bi-life-preserver"></i> Suporte
+            </a>
+            {% endif %}
+        </nav>
+
+        <div class="sidebar-foot">
+            <a class="nav-item nav-logout" href="{{ url_for('auth.logout') }}">
+                <i class="bi bi-box-arrow-right"></i> Sair
+            </a>
+        </div>
+    </aside>
+
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <div class="main-area">
+        <header class="topbar">
+            <button class="nav-toggle" id="navToggle" type="button" aria-label="Abrir menu">
+                <i class="bi bi-list"></i>
+            </button>
+            <div class="topbar-title">{% block page_title %}NEXO{% endblock %}</div>
+            <div class="topbar-right">
+                {# ---------------- Sininho de notificações ---------------- #}
+                <div class="dropdown nexo-bell">
+                    <button class="bell-btn" type="button" id="bellBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="Notificações">
+                        <i class="bi bi-bell"></i>
+                        {% set _c = notif_nao_lidas or 0 %}
+                        <span class="bell-badge" id="bellBadge" data-count="{{ _c }}" {% if _c == 0 %}style="display:none;"{% endif %}>{{ _c if _c < 100 else '99+' }}</span>
+                    </button>
+                    <div class="dropdown-menu dropdown-menu-end bell-menu" aria-labelledby="bellBtn">
+                        <div class="bell-head">
+                            <span class="bell-head-title"><i class="bi bi-bell-fill"></i> Notificações</span>
+                        </div>
+                        <div class="bell-list" id="bellList">
+                            {% for n in notif_recentes %}
+                            {% set _b = badge_notif(n.texto) %}
+                            <a class="bell-item {{ 'is-unread' if not n.lida }}" href="{{ url_for('notificacoes.abrir', id_notificacao=n.id_notificacao) }}">
+                                <span class="bell-dot"></span>
+                                <span class="bell-text">
+                                    <span class="nbadge nb-{{ _b.tipo }}">{{ _b.rotulo }}</span>
+                                    <span class="bell-msg">{{ n.texto }}</span>
+                                    <small>{{ n.data_criacao.strftime('%d/%m %H:%M') }}</small>
+                                </span>
+                            </a>
+                            {% endfor %}
+                            <div class="bell-empty" id="bellEmpty" {% if notif_recentes %}style="display:none;"{% endif %}><i class="bi bi-bell-slash"></i> Nenhuma notificação ainda.</div>
+                        </div>
+                        <div class="bell-foot" id="bellFoot" {% if _c == 0 %}style="display:none;"{% endif %}>
+                            <form method="POST" action="{{ url_for('notificacoes.marcar_lidas') }}" class="m-0" id="bellMarkForm">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="bell-mark"><i class="bi bi-check2-all"></i> Marcar todas como lidas</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="user-chip">
+                    <span class="user-avatar">{{ (current_user.nome or '?')[:1]|upper }}</span>
+                    <div class="user-meta">
+                        <strong>{{ current_user.nome }}</strong>
+                        <small>{{ 'Administrador' if current_user.is_admin else 'Cliente' }}</small>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main class="page">
+{% else %}
+<div class="auth-wrap">
+{% endif %}
+
+            {# Flashes globais pertencem somente às páginas autenticadas.
+               A tela de login renderiza seus próprios erros dentro do card. #}
+            {% if current_user.is_authenticated %}
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                    <div class="flash-stack">
+                        {% for category, message in messages %}
+                        {% set dismiss_auto = category in ['success', 'info'] %}
+                        {% set cat = 'danger' if category == 'error' else category %}
+                        {% set icons = {'success': 'bi-check-circle-fill', 'danger': 'bi-exclamation-octagon-fill', 'warning': 'bi-exclamation-triangle-fill', 'info': 'bi-info-circle-fill'} %}
+                        <div class="alert alert-{{ cat }} d-flex align-items-start gap-2 {{ 'fade show' if dismiss_auto else 'alert-dismissible fade show' }}"
+                             role="alert"
+                             {% if dismiss_auto %}data-auto-dismiss-ms="4200"{% endif %}>
+                            <i class="bi {{ icons.get(cat, 'bi-info-circle-fill') }} flash-icon" aria-hidden="true"></i>
+                            <div class="flash-text">{{ message }}</div>
+                            {% if not dismiss_auto %}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                {% endwith %}
+            {% endif %}
+
+            {% block content %}{% endblock %}
+
+{% if current_user.is_authenticated %}
+        </main>
+    </div>
+</div>
+{% else %}
+</div>
+{% endif %}
+
+    <!-- Bootstrap bundle (Popper incluso) -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Plotly.js (gráficos em tema escuro) -->
+    <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+
+    <script>
+      /* ---- Toggle da sidebar no mobile ---- */
+      (function () {
+        var shell = document.getElementById('appShell');
+        var toggle = document.getElementById('navToggle');
+        var overlay = document.getElementById('sidebarOverlay');
+        if (toggle && shell) {
+          toggle.addEventListener('click', function () { shell.classList.toggle('nav-open'); });
+        }
+        if (overlay && shell) {
+          overlay.addEventListener('click', function () { shell.classList.remove('nav-open'); });
+        }
+      })();
+
+      /* ---- Fecha automaticamente confirmações globais leves ---- */
+      document.querySelectorAll('[data-auto-dismiss-ms]').forEach(function (alertEl) {
+        var delay = Number(alertEl.getAttribute('data-auto-dismiss-ms')) || 4200;
+        window.setTimeout(function () {
+          if (window.bootstrap && bootstrap.Alert) {
+            bootstrap.Alert.getOrCreateInstance(alertEl).close();
+          } else {
+            alertEl.remove();
+          }
+        }, delay);
+      });
+
+      /* ---- Helper de Plotly em tema escuro NEXO ----
+         Uso nos templates:
+           NEXO.plot('idDoDiv', [ {type:'bar', x:[...], y:[...]} ], { yaxis:{...} });
+         Verifica se o elemento e a lib existem antes de desenhar. */
+      window.NEXO = window.NEXO || {};
+      NEXO.colors = {
+        purple: '#a855f7', purpleSoft: '#7c3aed', green: '#22c55e',
+        amber: '#f59e0b', red: '#ef4444', info: '#38bdf8',
+        grid: 'rgba(255,255,255,0.06)', text: '#9aa0b7'
+      };
+      NEXO.plotlyLayout = function (extra) {
+        var base = {
+          paper_bgcolor: 'rgba(0,0,0,0)',
+          plot_bgcolor: 'rgba(0,0,0,0)',
+          font: { family: 'Inter, sans-serif', color: NEXO.colors.text, size: 12 },
+          margin: { l: 52, r: 18, t: 14, b: 42 },
+          xaxis: { gridcolor: NEXO.colors.grid, zerolinecolor: NEXO.colors.grid, automargin: true },
+          yaxis: { gridcolor: NEXO.colors.grid, zerolinecolor: NEXO.colors.grid, automargin: true },
+          colorway: [NEXO.colors.purple, NEXO.colors.green, NEXO.colors.amber, NEXO.colors.info, NEXO.colors.red],
+          showlegend: false,
+          hoverlabel: { bgcolor: '#181824', bordercolor: 'rgba(255,255,255,0.1)', font: { color: '#e8e9f0' } }
+        };
+        return Object.assign(base, extra || {});
+      };
+      NEXO.plot = function (id, traces, layout, config) {
+        var el = document.getElementById(id);
+        if (!el || typeof Plotly === 'undefined') return;
+        var plotConfig = Object.assign({
+          /* Toolbar do Plotly só aparece no hover -> look limpo do Hélio preservado,
+             e o botão Reset (resetScale2d) destrava o zoom sem precisar F5. */
+          displayModeBar: 'hover',
+          displaylogo: false,
+          modeBarButtons: [['zoom2d', 'pan2d', 'resetScale2d']],
+          /* Double-click no fundo do gráfico também faz reset (default do Plotly,
+             agora explícito para não depender de override acidental). */
+          doubleClick: 'reset+autosize',
+          responsive: true,
+          scrollZoom: false,
+          editable: false
+        }, config || {});
+        Plotly.newPlot(el, traces, NEXO.plotlyLayout(layout), plotConfig);
+      };
+      NEXO.staticPlot = function (id, traces, layout) {
+        var staticLayout = Object.assign({}, layout || {}, { dragmode: false });
+        staticLayout.xaxis = Object.assign({}, staticLayout.xaxis || {}, { fixedrange: true });
+        staticLayout.yaxis = Object.assign({}, staticLayout.yaxis || {}, { fixedrange: true });
+        NEXO.plot(id, traces, staticLayout, {
+          staticPlot: true,
+          displayModeBar: false,
+          scrollZoom: false,
+          editable: false,
+          showTips: false
+        });
+      };
+
+      /* Cores oficiais da Curva ABC (consistentes com os badges do CSS). */
+      NEXO.abcColor = { A: '#22c55e', B: '#f59e0b', C: '#9aa0b7' };
+
+      /* ---- GRÁFICO DE PARETO da Curva ABC (combo barras + linha) ----
+         data = { labels:[...], values:[...], classes:[...], acumulado:[...] }
+         - Barras verticais (eixo Y esquerdo): faturamento absoluto por produto,
+           em roxo da identidade NEXO (look premium / Pareto clássico).
+         - Linha + marcadores (eixo Y2 direito, 0–100%): % acumulado de
+           faturamento (calculado no back-end via pandas cumsum).
+         - Tooltip unificado por produto: faturamento (+ Classe ABC) e % acum. */
+      NEXO.plotParetoAbc = function (id, data) {
+        if (!data || !data.labels || !data.labels.length) return;
+        var labels = data.labels;                 /* já em ordem de ranking (desc) */
+        var values = data.values;
+        var classes = data.classes || [];
+        var acum = data.acumulado || [];
+        NEXO.plot(id, [
+          {
+            type: 'bar', name: 'Faturamento',
+            x: labels, y: values, yaxis: 'y',
+            marker: {
+              color: '#7c3aed',
+              line: { color: 'rgba(168, 85, 247, 0.55)', width: 1 }
+            },
+            width: 0.62,
+            customdata: classes,
+            hovertemplate: 'Faturamento: <b>R$ %{y:,.2f}</b>  ·  Classe %{customdata}<extra></extra>'
+          },
+          {
+            type: 'scatter', mode: 'lines+markers', name: '% acumulado',
+            x: labels, y: acum, yaxis: 'y2',
+            line: { color: '#fbbf24', width: 3, shape: 'spline' },
+            marker: { color: '#fbbf24', size: 7, line: { color: '#0c0c14', width: 1 } },
+            hovertemplate: '% acumulado: <b>%{y:.1f}%</b><extra></extra>'
+          }
+        ], {
+          height: 300,
+          margin: { l: 66, r: 58, t: 28, b: 104 },
+          hovermode: 'x unified',
+          showlegend: true,
+          legend: { orientation: 'h', y: 1.16, x: 0, font: { size: 11 }, bgcolor: 'rgba(0,0,0,0)' },
+          bargap: 0.35,
+          xaxis: {
+            gridcolor: NEXO.colors.grid, zerolinecolor: NEXO.colors.grid,
+            tickangle: -38, automargin: true, tickfont: { size: 10 }, fixedrange: true
+          },
+          yaxis: {
+            title: { text: 'Faturamento', font: { size: 11, color: NEXO.colors.text } },
+            gridcolor: NEXO.colors.grid, zerolinecolor: NEXO.colors.grid,
+            tickprefix: 'R$ ', tickformat: ',.0f', rangemode: 'tozero', fixedrange: true
+          },
+          yaxis2: {
+            title: { text: '% acumulado', font: { size: 11, color: '#fbbf24' } },
+            overlaying: 'y', side: 'right', range: [0, 100], ticksuffix: '%',
+            showgrid: false, zeroline: false, fixedrange: true, tickfont: { color: '#fbbf24' }
+          }
+        });
+      };
+
+      /* ---- Gráfico de LINHA temporal Vendas x Compras ----
+         data = { labels:[...], vendas:[...], compras:[...] } */
+      NEXO.plotLinhaTemporal = function (id, data) {
+        if (!data || !data.labels || data.labels.length < 2) return;
+        NEXO.plot(id, [
+          {
+            type: 'scatter', mode: 'lines+markers', name: 'Vendas',
+            x: data.labels, y: data.vendas,
+            line: { color: '#22c55e', width: 3, shape: 'spline' },
+            marker: { size: 7, color: '#22c55e' },
+            hovertemplate: '<b>Vendas</b> %{x}<br>R$ %{y:,.2f}<extra></extra>'
+          },
+          {
+            type: 'scatter', mode: 'lines+markers', name: 'Compras',
+            x: data.labels, y: data.compras,
+            line: { color: '#f59e0b', width: 3, shape: 'spline' },
+            marker: { size: 7, color: '#f59e0b' },
+            hovertemplate: '<b>Compras</b> %{x}<br>R$ %{y:,.2f}<extra></extra>'
+          }
+        ], {
+          showlegend: true,
+          legend: { orientation: 'h', y: 1.15, x: 0, font: { size: 12 } },
+          yaxis: { tickprefix: 'R$ ', tickformat: ',.0f', rangemode: 'tozero', fixedrange: true },
+          xaxis: { fixedrange: true, tickfont: { size: 12 } },
+          height: 280, margin: { l: 64, r: 18, t: 36, b: 42 }
+        });
+      };
+    </script>
+
+    {% if current_user.is_authenticated %}
+    {# ---------------- Tempo real: sininho ao vivo (Socket.IO) ---------------- #}
+    <div class="nexo-toast-wrap" id="nexoToasts" aria-live="polite" aria-atomic="true"></div>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+      (function () {
+        if (typeof io === 'undefined') return;
+        var socket = io({ transports: ['websocket', 'polling'] });
+
+        var badge = document.getElementById('bellBadge');
+        var list = document.getElementById('bellList');
+        var empty = document.getElementById('bellEmpty');
+        var foot = document.getElementById('bellFoot');
+
+        var ROTULO_PADRAO = { aberto: 'Aberto', resolvido: 'Resolvido', analise: 'Nova Análise' };
+
+        function escapeHtml(s) {
+          var d = document.createElement('div');
+          d.textContent = (s == null) ? '' : String(s);
+          return d.innerHTML;
+        }
+
+        function showToast(texto, link) {
+          var wrap = document.getElementById('nexoToasts');
+          if (!wrap) return;
+          var el = document.createElement('div');
+          el.className = 'nexo-toast';
+          el.innerHTML = '<span class="nt-icon"><i class="bi bi-bell-fill"></i></span>' +
+                         '<span class="nt-text">' + escapeHtml(texto) + '</span>';
+          if (link) {
+            el.style.cursor = 'pointer';
+            el.addEventListener('click', function () { window.location.href = link; });
+          }
+          wrap.appendChild(el);
+          requestAnimationFrame(function () { el.classList.add('show'); });
+          window.setTimeout(function () {
+            el.classList.remove('show');
+            window.setTimeout(function () { el.remove(); }, 300);
+          }, 5000);
+        }
+
+        socket.on('nova_notificacao', function (n) {
+          // 1) Badge: incrementa e pulsa
+          if (badge) {
+            var count = parseInt(badge.getAttribute('data-count') || '0', 10) + 1;
+            badge.setAttribute('data-count', count);
+            badge.textContent = count < 100 ? count : '99+';
+            badge.style.display = '';
+            badge.classList.remove('pulse');
+            void badge.offsetWidth;        // reinicia a animação
+            badge.classList.add('pulse');
+          }
+          if (foot) foot.style.display = '';
+          if (empty) empty.style.display = 'none';
+
+          // 2) Injeta a notificação no topo do dropdown (com badge de status)
+          if (list) {
+            var tipo = n.badge || 'aberto';
+            var rotulo = n.badge_rotulo || ROTULO_PADRAO[tipo] || 'Aberto';
+            var a = document.createElement('a');
+            a.className = 'bell-item is-unread';
+            a.href = '/notificacoes/' + n.id + '/abrir';
+            a.innerHTML = '<span class="bell-dot"></span><span class="bell-text">' +
+                          '<span class="nbadge nb-' + escapeHtml(tipo) + '">' + escapeHtml(rotulo) + '</span>' +
+                          '<span class="bell-msg">' + escapeHtml(n.texto) + '</span>' +
+                          '<small>' + escapeHtml(n.hora || '') + '</small></span>';
+            var first = list.querySelector('.bell-item');
+            if (first) { list.insertBefore(a, first); } else { list.insertBefore(a, list.firstChild); }
+            // mantém no máximo 5 itens visíveis
+            var items = list.querySelectorAll('.bell-item');
+            for (var i = items.length - 1; i >= 5; i--) { items[i].remove(); }
+          }
+
+          // 3) Alerta visual (toast) clicável
+          showToast(n.texto, n.link);
+        });
+      })();
+    </script>
+    {% endif %}
+
+    {% if current_user.is_authenticated and current_user.is_cliente %}
+    {# ---------------- NexoBot — widget de suporte flutuante ---------------- #}
+    <div class="nexobot" id="nexobot">
+        <button class="nexobot-launcher" id="nexobotLauncher" type="button" aria-label="Abrir NexoBot — assistente do portal">
+            <i class="bi bi-robot"></i>
+        </button>
+        <div class="nexobot-panel" id="nexobotPanel" hidden>
+            <div class="nexobot-head">
+                <span class="nexobot-title"><span class="nexobot-avatar"><i class="bi bi-robot"></i></span> NexoBot <small>assistente do portal</small></span>
+                <button class="nexobot-close" id="nexobotClose" type="button" aria-label="Fechar"><i class="bi bi-x-lg"></i></button>
+            </div>
+            <div class="nexobot-msgs" id="nexobotMsgs" aria-live="polite"></div>
+            <form class="nexobot-form" id="nexobotForm">
+                <input type="text" id="nexobotInput" placeholder="Pergunte sobre o portal…" autocomplete="off" maxlength="1000">
+                <button type="submit" aria-label="Enviar"><i class="bi bi-send"></i></button>
+            </form>
+        </div>
+    </div>
+    <script>
+      (function () {
+        var launcher = document.getElementById('nexobotLauncher'),
+            panel = document.getElementById('nexobotPanel'),
+            closeBtn = document.getElementById('nexobotClose'),
+            msgs = document.getElementById('nexobotMsgs'),
+            form = document.getElementById('nexobotForm'),
+            input = document.getElementById('nexobotInput');
+        if (!launcher) return;
+        var saudou = false;
+
+        function esc(s) { var d = document.createElement('div'); d.textContent = (s == null) ? '' : String(s); return d.innerHTML; }
+        function fmt(s) { return esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>'); }
+        function add(texto, who) {
+          var el = document.createElement('div');
+          el.className = 'nb-msg nb-' + who;
+          el.innerHTML = '<div class="nb-bubble">' + fmt(texto) + '</div>';
+          msgs.appendChild(el); msgs.scrollTop = msgs.scrollHeight;
+          return el;
+        }
+        function abrir() {
+          panel.hidden = false; launcher.classList.add('is-open');
+          if (!saudou) {
+            add('Olá! Sou o NexoBot 🤖. Posso ajudar com envio de relatórios, senha de acesso e exportação do seu PDV. Como posso ajudar?', 'bot');
+            saudou = true;
+          }
+          input.focus();
+        }
+        function fechar() { panel.hidden = true; launcher.classList.remove('is-open'); }
+        launcher.addEventListener('click', function () { panel.hidden ? abrir() : fechar(); });
+        closeBtn.addEventListener('click', fechar);
+
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          var txt = input.value.trim();
+          if (!txt) return;
+          add(txt, 'user'); input.value = ''; input.focus();
+          var typing = add('…', 'bot'); typing.classList.add('nb-typing');
+          var csrf = document.querySelector('meta[name="csrf-token"]');
+          fetch('/api/suporte-bot', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': csrf ? csrf.getAttribute('content') : '',
+            },
+            body: JSON.stringify({ mensagem: txt }),
+          }).then(function (r) { return r.json(); })
+            .then(function (d) { typing.remove(); add(d.resposta || 'Desculpe, tente de novo.', 'bot'); })
+            .catch(function () { typing.remove(); add('Não consegui responder agora. Tente novamente ou abra um chamado em “Suporte”.', 'bot'); });
+        });
+      })();
+    </script>
+    {% endif %}
+
+    {% block extra_js %}{% endblock %}
+    {% block extra_scripts %}{% endblock %}
+    {% block scripts %}{% endblock %}
+</body>
+</html>

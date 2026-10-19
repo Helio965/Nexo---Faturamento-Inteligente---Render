@@ -1,0 +1,90 @@
+# PREPARAÇÃO PARA HOSPEDAGEM NO RENDER - NEXO FATURAMENTO INTELIGENTE
+
+Este documento detalha a configuração técnica necessária para publicar a aplicação no GitHub e hospedá-la no Render.
+
+## 1. Requisitos Técnicos
+
+- **Linguagem:** Python 3.12.10
+- **Banco de Dados:** PostgreSQL (Recomendado: Supabase)
+- **Servidor WSGI:** Gunicorn (com worker threading para suporte a WebSockets)
+- **Infraestrutura:** Render Web Service (Plano Free)
+
+## 2. Publicação no GitHub
+
+1. Crie um repositório público ou privado no GitHub.
+2. Certifique-se de que o `.gitignore` está configurado para NÃO enviar:
+   - `.env`
+   - `instance/`
+   - `uploads/`
+   - `__pycache__/`
+   - `.audit_tmp/`
+3. Faça o push do código limpo para a branch `main`.
+
+## 3. Configuração no Render
+
+### A. Criação do Serviço
+- **Tipo:** Web Service
+- **Runtime:** Python
+- **Branch:** `main`
+- **Região:** Oregon (us-west-2) - *Mesma região do Supabase para menor latência.*
+
+### B. Comandos de Build e Inicialização
+- **Build Command:** `pip install -r requirements.txt`
+- **Start Command:** `gunicorn -w 1 --threads 50 --timeout 180 -b 0.0.0.0:$PORT wsgi:app`
+- **Health Check Path:** `/healthz`
+
+### C. Variáveis de Ambiente (Env Vars)
+| Variável | Obrigatória | Descrição |
+| :--- | :---: | :--- |
+| `FLASK_ENV` | Sim | Definir como `production` |
+| `SECRET_KEY` | Sim | Chave aleatória segura (use `generateValue: true` no Render) |
+| `DATABASE_URL` | Sim | URL de conexão do PostgreSQL (via Transaction Pooler - porta 6543) |
+| `DIRECT_URL` | Sim | URL de conexão direta do PostgreSQL (porta 5432) para migrações |
+| `PROXY_FIX_HOPS` | Sim | Definir como `1` (Render usa 1 proxy reverso) |
+| `BREVO_API_KEY` | Sim | Chave da API do Brevo para envio de e-mails via HTTPS (Render Free bloqueia SMTP) |
+| `MAIL_DEFAULT_SENDER` | Sim | E-mail remetente verificado no Brevo |
+| `PYTHON_VERSION` | Sim | `3.12.10` |
+
+---
+
+## 4. Procedimento de Primeira Instalação (Manual)
+
+O Render executa apenas o build e o start. A preparação do banco de dados e do administrador deve ser feita manualmente na primeira vez.
+
+### Passo 1: Migrações do Banco
+Para criar as tabelas no Supabase/PostgreSQL, execute localmente (conectado ao banco de produção via `DIRECT_URL`) ou via terminal do Render (se disponível):
+```bash
+export FLASK_ENV=production
+export NEXO_DB_DIRECT=1
+export DIRECT_URL="sua_url_direta_do_supabase"
+export SECRET_KEY="sua_chave_secreta"
+flask db upgrade
+```
+
+### Passo 2: Criação do Administrador Inicial
+Após as migrações, execute o script de seed para criar a conta master:
+```bash
+export ADMIN_EMAIL="seu-email@admin.com"
+export ADMIN_NOME="Nome do Administrador"
+export ADMIN_SENHA="senha_forte_escolhida"
+python seed.py
+```
+
+---
+
+## 5. Atualizações e Deploys Posteriores
+
+Para atualizar a aplicação:
+1. Faça o commit e push das alterações para o GitHub.
+2. O Render disparará o build automaticamente.
+3. Se houver mudanças no banco de dados (novos arquivos em `migrations/versions`), execute o comando `flask db upgrade` utilizando a `DIRECT_URL` antes de liberar o tráfego.
+
+## 6. Diagnóstico de Erros Comuns
+
+| Erro | Causa Provável | Solução |
+| :--- | :--- | :--- |
+| `RuntimeError: SECRET_KEY válida é obrigatória` | `SECRET_KEY` ausente ou igual ao padrão de dev. | Adicione a variável `SECRET_KEY` no painel do Render. |
+| `RuntimeError: DATABASE_URL PostgreSQL é obrigatória` | `DATABASE_URL` não configurada. | Insira a URL de conexão do Supabase. |
+| `503 Service Unavailable` em `/healthz/db` | App não consegue falar com o banco. | Verifique as credenciais e se o banco Supabase não está pausado. |
+| `400 Bad Request` em formulários | Token CSRF expirado ou ausente. | Atualize a página e tente novamente. |
+| Erro de upload de arquivo | Disco efêmero do Render. | Verifique se o código está usando `storage.py` (que salva no banco). |

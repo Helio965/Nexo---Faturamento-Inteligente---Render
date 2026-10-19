@@ -1,0 +1,1018 @@
+[
+  {
+    "caminho": ".gitignore",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 900,
+    "sha256": "1e09cf3e4e905710f3acb6bc577a3abd78f57e2d6182fee7113352efe1db3507"
+  },
+  {
+    "caminho": "ai_devolutiva.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 10025,
+    "sha256": "ed6c7e0a1f72bc238bbe336818cb8dd840a96d8221aa18bd4efa45073af3d6df"
+  },
+  {
+    "caminho": "app.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 14463,
+    "sha256": "c6a831fa5b9fc02b724879e0d8d00a8f8bcab7e6d9a19a24293df8273d7e0393"
+  },
+  {
+    "caminho": "blueprints",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "blueprints/__init__.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 33,
+    "sha256": "37ac50f4a3289a8386b8803d151bb411456d3c8e9b40452bb3976bcc1add3032"
+  },
+  {
+    "caminho": "blueprints/__pycache__",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "blueprints/__pycache__/__init__.cpython-312.pyc",
+    "tipo": "arquivo",
+    "classificacao": "TEMPORARIOS",
+    "motivo": "Artefato de execucao",
+    "bytes": 187,
+    "sha256": "2b5b0b87e95bda4c8b6fb74decea16f4c26c476548730c8b61ee1d2bfd19ed67"
+  },
+  {
+    "caminho": "blueprints/__pycache__/admin.cpython-312.pyc",
+    "tipo": "arquivo",
+    "classificacao": "TEMPORARIOS",
+    "motivo": "Artefato de execucao",
+    "bytes": 68040,
+    "sha256": "4ec7ab2e542d78e734419f696805e77b3b1fdb42e783abe9dcbc0de2002adee9"
+  },
+  {
+    "caminho": "blueprints/__pycache__/api.cpython-312.pyc",
+    "tipo": "arquivo",
+    "classificacao": "TEMPORARIOS",
+    "motivo": "Artefato de execucao",
+    "bytes": 1357,
+    "sha256": "9f6453281f1968f6dc21b9182b2cf8baa286ca6908a47520318947af2196575e"
+  },
+  {
+    "caminho": "blueprints/__pycache__/auth.cpython-312.pyc",
+    "tipo": "arquivo",
+    "classificacao": "TEMPORARIOS",
+    "motivo": "Artefato de execucao",
+    "bytes": 13629,
+    "sha256": "87db5c56f4d81e79891b35b0b92e612bb98fb02f17da07fbbf43d7a2ab88c526"
+  },
+  {
+    "caminho": "blueprints/__pycache__/cliente.cpython-312.pyc",
+    "tipo": "arquivo",
+    "classificacao": "TEMPORARIOS",
+    "motivo": "Artefato de execucao",
+    "bytes": 27265,
+    "sha256": "6c6394da1f1f9f407bf54da8dbf75399979ae4d390de3dedbf54ec302c299d98"
+  },
+  {
+    "caminho": "blueprints/__pycache__/notificacoes.cpython-312.pyc",
+    "tipo": "arquivo",
+    "classificacao": "TEMPORARIOS",
+    "motivo": "Artefato de execucao",
+    "bytes": 3833,
+    "sha256": "805b2b48db3c8cbd8f6fbb8710d34f81afe84658cfe84e46136632b1d51db4bb"
+  },
+  {
+    "caminho": "blueprints/admin.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 53936,
+    "sha256": "453209b9ef4a3d0a406e4e8f31a0c24c336a8662a64a8f0b5dc099d27b844ba1"
+  },
+  {
+    "caminho": "blueprints/api.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 771,
+    "sha256": "5d3aafe39edc37c0b176c1caf227db4186a46cdf57bb2e08d739606772269244"
+  },
+  {
+    "caminho": "blueprints/auth.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 11224,
+    "sha256": "27f4e77dc3cc2beea72f017f2ceb1b1b16663e89825fd178d4a1edd636601130"
+  },
+  {
+    "caminho": "blueprints/cliente.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 20827,
+    "sha256": "420effefe40e8bfb776668c12bfdba0d755fe9c5a2ca6aa46340acf0657e1368"
+  },
+  {
+    "caminho": "blueprints/notificacoes.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 2548,
+    "sha256": "5521f80a8d0ab697239e1206181bbfe7126dc014a90b3eae9165c3378de6b4ff"
+  },
+  {
+    "caminho": "config.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 9286,
+    "sha256": "4a8106151508258d99113aab6c21a9e8f64b99c0f9d7d1fe2395643bfbd82fa7"
+  },
+  {
+    "caminho": "criar_cliente_demo.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 2124,
+    "sha256": "6009adc46414ed9110132653ed83cc50d7067442c54a4dc70d53a2e3c3b3d029"
+  },
+  {
+    "caminho": "Docs",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "Docs/DER_NEXO_MVP_V4_Completo_Com_Roadmap.docx",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 25581,
+    "sha256": "46d9d3c63c8782fd5fd6361b6eeba83348076c0cc9a6480d19e4bf2255b27398"
+  },
+  {
+    "caminho": "Docs/RELATORIO_COBERTURA_ETL.md",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 8627,
+    "sha256": "871bb87eb80ca37892b91ec9a21ed0a05ec90eb6802ae5045252d199db84c926"
+  },
+  {
+    "caminho": "Docs/RELATORIO_TECNICO.md",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 24695,
+    "sha256": "b077ae21e975ad72d83cbbd787706c25e2a0e3bc731e80397cdadb43828ad18e"
+  },
+  {
+    "caminho": "Docs/schema_nexo_mvp_v4 (1).sql",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 15802,
+    "sha256": "2ac7d9dac282aa974d53e52362d00c5a1bf1c6d6dc2e84b286924eda7b7a2ff9"
+  },
+  {
+    "caminho": "emails.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 6070,
+    "sha256": "7bc83751634c4186db3fbaac95ee846bb39c94f92cb23d95b1ea243c3cab47da"
+  },
+  {
+    "caminho": "etl_processor.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 43503,
+    "sha256": "ceaed906a577e980519ad5a7906a8be92b5b838fd48bbdbda10c0c6218b2c7f6"
+  },
+  {
+    "caminho": "extensions.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 2150,
+    "sha256": "07bc72ada44ced65ce355ec75746b102b081c655b1d90fdbb153885ae559303b"
+  },
+  {
+    "caminho": "init_db.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 2791,
+    "sha256": "f4c64ff1042b5dc186a607e8e272f4c15dc070982e76c86499063b562e514f17"
+  },
+  {
+    "caminho": "insights.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 5193,
+    "sha256": "dad8cc35ece81642d8e96c829cf15b593f0a608183dbaf349a9611267a847edf"
+  },
+  {
+    "caminho": "LICENSE",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 1092,
+    "sha256": "67a6cd7b49f64713650aa76ec90fab7e97e18aca56566ae8f72c0b63911ada34"
+  },
+  {
+    "caminho": "migrar_arquivos_para_db.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 3715,
+    "sha256": "6c652e062194f695da6c5b5ecd6aa15b10db98bec0ee3cc54b65ef52d5c34dc7"
+  },
+  {
+    "caminho": "migrations",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "migrations/__pycache__",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "migrations/__pycache__/env.cpython-312.pyc",
+    "tipo": "arquivo",
+    "classificacao": "TEMPORARIOS",
+    "motivo": "Artefato de execucao",
+    "bytes": 4531,
+    "sha256": "e4ec5b0a2bdece6c990442fcc96489172f73332df4aa5cdabc5713090bfe5659"
+  },
+  {
+    "caminho": "migrations/alembic.ini",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 907,
+    "sha256": "aba9e18a46baa85be7991f0095c3fdfa5d2ba8afbc20f29a5bcca92b2ce2cb4c"
+  },
+  {
+    "caminho": "migrations/env.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 3457,
+    "sha256": "03ebd5f05d32d95c5289d75c70ba806a33e84b29d07ec8e9d399da147295006b"
+  },
+  {
+    "caminho": "migrations/README",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 42,
+    "sha256": "cfbdcfa6c8ca412e6ae93cace904babdefc3465ed9b4384ba5f92dfe5bd37ca6"
+  },
+  {
+    "caminho": "migrations/script.py.mako",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 518,
+    "sha256": "89ef11643db6e9bdbe323390882399939e0c0ac603a26e9d705f3951a8ba4963"
+  },
+  {
+    "caminho": "migrations/versions",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "migrations/versions/91a2ecf56a41_primeiro_acesso_em_usuario.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 876,
+    "sha256": "6f01abe4bdb013be6362085ed74516e5a9c8e872e27f8f3544204e6813964ae6"
+  },
+  {
+    "caminho": "migrations/versions/__pycache__",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "migrations/versions/__pycache__/91a2ecf56a41_primeiro_acesso_em_usuario.cpython-312.pyc",
+    "tipo": "arquivo",
+    "classificacao": "TEMPORARIOS",
+    "motivo": "Artefato de execucao",
+    "bytes": 1378,
+    "sha256": "fc21770e678b0486d7398d1b4eaefa2adb409e2348f38e0b5e115a049a7c0a77"
+  },
+  {
+    "caminho": "migrations/versions/__pycache__/a3f1c9b27d04_soft_delete_lixeira_empresa.cpython-312.pyc",
+    "tipo": "arquivo",
+    "classificacao": "TEMPORARIOS",
+    "motivo": "Artefato de execucao",
+    "bytes": 1368,
+    "sha256": "89b451bd9de459f3796ebc911a014b4a85f274052a005ae0d423348074e0fbed"
+  },
+  {
+    "caminho": "migrations/versions/__pycache__/b7c4e2a9f031_arquivo_armazenado_storage_no_banco.cpython-312.pyc",
+    "tipo": "arquivo",
+    "classificacao": "TEMPORARIOS",
+    "motivo": "Artefato de execucao",
+    "bytes": 2150,
+    "sha256": "956308fade8615c7225044862c2a22efc12a17d06237b06595889b22b048b0dd"
+  },
+  {
+    "caminho": "migrations/versions/__pycache__/c7189696a9cd_periodo_base_em_indicador_analise.cpython-312.pyc",
+    "tipo": "arquivo",
+    "classificacao": "TEMPORARIOS",
+    "motivo": "Artefato de execucao",
+    "bytes": 1603,
+    "sha256": "04b049d53d99898fe772b3f02e5a24843b5dd516c3397ef7af98bba058df4222"
+  },
+  {
+    "caminho": "migrations/versions/__pycache__/d61b5e68082c_guia_topico_cms_base_de_conhecimento.cpython-312.pyc",
+    "tipo": "arquivo",
+    "classificacao": "TEMPORARIOS",
+    "motivo": "Artefato de execucao",
+    "bytes": 2600,
+    "sha256": "f84276560b1cf39d0f35af89c594877eb5b5d2ffa98297e106d8aae1e0ca2418"
+  },
+  {
+    "caminho": "migrations/versions/__pycache__/d87a6fbc2fbe_schema_inicial_nexo_sqlite_para_.cpython-312.pyc",
+    "tipo": "arquivo",
+    "classificacao": "TEMPORARIOS",
+    "motivo": "Artefato de execucao",
+    "bytes": 24017,
+    "sha256": "219f0dd4c863ab7a2de53edfeaa5faced1e1d4a1ffe35156f4b8860848cc84ad"
+  },
+  {
+    "caminho": "migrations/versions/__pycache__/f958d38a7f19_gerado_por_ia_em_relatorio_analise.cpython-312.pyc",
+    "tipo": "arquivo",
+    "classificacao": "TEMPORARIOS",
+    "motivo": "Artefato de execucao",
+    "bytes": 1404,
+    "sha256": "2c1746a55368f52a4ed0d6965b24c7e634fd4c6c6d90490e00a4809f59bd624d"
+  },
+  {
+    "caminho": "migrations/versions/a3f1c9b27d04_soft_delete_lixeira_empresa.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 807,
+    "sha256": "c1650501b3a3fc44de8ba1dffd27b830f72bf6337f3473afe90f87445e145c7d"
+  },
+  {
+    "caminho": "migrations/versions/b7c4e2a9f031_arquivo_armazenado_storage_no_banco.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 1227,
+    "sha256": "2fb51bbdfe63a2fe16308b38d0b81897daa4bfd234aa324c8c6b95154447c05b"
+  },
+  {
+    "caminho": "migrations/versions/c7189696a9cd_periodo_base_em_indicador_analise.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 1019,
+    "sha256": "e8d577f56825698b63a766d5a151ce4677b15e5917d9bbf2e4be59c700157607"
+  },
+  {
+    "caminho": "migrations/versions/d61b5e68082c_guia_topico_cms_base_de_conhecimento.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 1523,
+    "sha256": "09950698d25d0b35860de9a6e18bf7155c30a5693b40fb933963b36a2589ac95"
+  },
+  {
+    "caminho": "migrations/versions/d87a6fbc2fbe_schema_inicial_nexo_sqlite_para_.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 14787,
+    "sha256": "8af3776d089ebc61aa8a9e4ebefdef6fa9a43321edce254da68b33009e87fce8"
+  },
+  {
+    "caminho": "migrations/versions/f958d38a7f19_gerado_por_ia_em_relatorio_analise.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 900,
+    "sha256": "e79af1108601fb331b4f18db4dcd66a553074f9d2f20f6f073467a4bf4752ce6"
+  },
+  {
+    "caminho": "models.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 26520,
+    "sha256": "360bd5a2e60b9c9109f7a3ee82f87e2de2dd6c5ad4db0afa4edf2f57ea159a5a"
+  },
+  {
+    "caminho": "notifications.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 5097,
+    "sha256": "a0939d56dd5fbf456b113b1298e868edb567648991da63fd9a63a9982f62d635"
+  },
+  {
+    "caminho": "pdf_export.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 11862,
+    "sha256": "27ce6c36b8c69564ea68af6cd435ef2c778d5f5f6f7fa027521c804cd831df33"
+  },
+  {
+    "caminho": "README.md",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 25514,
+    "sha256": "e5bc8a40c6e1fe875d59e7869c0bab111bf45920cd147268181bc444021f0ba1"
+  },
+  {
+    "caminho": "realtime.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 1427,
+    "sha256": "d79c5bfd1676ae568b7aa3e4d4ce38747c9519980dac50b512a17506e53c4d92"
+  },
+  {
+    "caminho": "render.yaml",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 1918,
+    "sha256": "585eea3c5b0c5122541ab2ab42dd5bb5e96fc6f1443b0012e446d96910e516d0"
+  },
+  {
+    "caminho": "requirements.txt",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 1334,
+    "sha256": "e06aaa729f908ae644fe9dffd6d13e1d5085f21c9dbdcbfbb209b94e44951385"
+  },
+  {
+    "caminho": "schema_nexo_mvp_v4.sql",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 19404,
+    "sha256": "2bedf425b0ede2a2b6a67782a519e723bb77bc33596da96b0a1211cfdbb5dfde"
+  },
+  {
+    "caminho": "seed.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 4450,
+    "sha256": "75893068294d8d1562e8a444c29772fd5f231ec4d7c797d06efc838ec00bf45c"
+  },
+  {
+    "caminho": "seed_guia.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 3507,
+    "sha256": "efa8428a7b140a9d8a713e100e8f32777c71ded3f419149f902d19e4282b1db5"
+  },
+  {
+    "caminho": "static",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "static/.gitkeep",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "caminho": "static/css",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "static/css/landing.css",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 24058,
+    "sha256": "49cdfb8b55ce76e5b2690824ec20fa3122d7effc1a7faa8fb8c250d60c6fbb15"
+  },
+  {
+    "caminho": "static/css/nexo.css",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 54618,
+    "sha256": "cef9fc914c5aba62f77a74649287db2608cc189e39904666b15929a926de2322"
+  },
+  {
+    "caminho": "static/img",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "static/img/nexo-logo.jpeg",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 67111,
+    "sha256": "94d1ac4cae1de8b44f47a8c43ff1b379221bc69c0356c29b8a7c2276dc961d07"
+  },
+  {
+    "caminho": "static/js",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "static/js/landing.js",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 6540,
+    "sha256": "acd5e1b0c75c815aea68c29f7bd2c5a3365cdfa152e70541cc64ac00de15521e"
+  },
+  {
+    "caminho": "static/js/nexo.js",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "caminho": "static/uploads",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "static/uploads/guia",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "static/uploads/guia/.gitkeep",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 0,
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  {
+    "caminho": "static/uploads/guia/02fefd36c5d1d7fb.png",
+    "tipo": "arquivo",
+    "classificacao": "INCERTOS",
+    "motivo": "Midia legada do CMS; referencias podem existir no banco remoto",
+    "bytes": 60,
+    "sha256": "02fefd36c5d1d7fb2f9df6482ac059205aa0cbf7c6f7067147cf5fd05a3ea4d8"
+  },
+  {
+    "caminho": "static/uploads/guia/5f6015e4f6a67c1c.png",
+    "tipo": "arquivo",
+    "classificacao": "INCERTOS",
+    "motivo": "Midia legada do CMS; referencias podem existir no banco remoto",
+    "bytes": 112,
+    "sha256": "5f6015e4f6a67c1c74c7e39039228e88db57189fd09d141081c9cc3c8a205ef1"
+  },
+  {
+    "caminho": "static/uploads/guia/e4b3a1eaad031d16.png",
+    "tipo": "arquivo",
+    "classificacao": "INCERTOS",
+    "motivo": "Midia legada do CMS; referencias podem existir no banco remoto",
+    "bytes": 112,
+    "sha256": "e4b3a1eaad031d16e22d24a802eb332e7831518e75f16332bc0c834eb190fe6a"
+  },
+  {
+    "caminho": "storage.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 5483,
+    "sha256": "cb501417b11ee7980c4d01d4ceca2efba81a465b8b1b450fca07afa48e9fb4b3"
+  },
+  {
+    "caminho": "suporte_bot.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 7981,
+    "sha256": "fae131f20b85676c70bbc98a6613d7aa8ab017434e3f7f34d15b5c94022c0106"
+  },
+  {
+    "caminho": "templates",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "templates/_auditoria.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 2161,
+    "sha256": "3dde89f8abbca4fd6f21e34214b2ff7ad74e7bd9311c18cdba113620f456ed76"
+  },
+  {
+    "caminho": "templates/_chat.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 1503,
+    "sha256": "7c5f808b5e478668d60d4ef45e531fde6e7962d1f9dfff52af00c7d722567a0f"
+  },
+  {
+    "caminho": "templates/_macros.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 7504,
+    "sha256": "0a2feca883ca06c85c02a2d3cb2cad0111593481db791f5f74cc14f3d80460eb"
+  },
+  {
+    "caminho": "templates/admin",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "templates/admin/analise_form.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 7394,
+    "sha256": "c9bf5d79abe02fd25c03e339585331c78dead75d6dca58f586a25506f3edbdc5"
+  },
+  {
+    "caminho": "templates/admin/analises.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 11994,
+    "sha256": "0c45f473a4654dbbd0c3b484cde0b3afb7874382e26e18f898a68c9e8b094c55"
+  },
+  {
+    "caminho": "templates/admin/dashboard.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 10459,
+    "sha256": "b7a4e6fad08e2cdb2a17376c2ea453693f0bccadad4136fb10df4cd2488ca51d"
+  },
+  {
+    "caminho": "templates/admin/empresa_form.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 8584,
+    "sha256": "a32f870fccea6e16268c3dd431ce23ffdc6d28d72866b484393045db88c0b81a"
+  },
+  {
+    "caminho": "templates/admin/empresas.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 9088,
+    "sha256": "e4102b6911f1b9ec72067650d0c48fa064c9427541fb2b4ae56c263bade49f81"
+  },
+  {
+    "caminho": "templates/admin/guia.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 2807,
+    "sha256": "8da74605a19510882209e83fd8f6c7503a146e6fda4f5b173ac5126fc89dcab9"
+  },
+  {
+    "caminho": "templates/admin/guia_form.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 3866,
+    "sha256": "8068d261c2a7b3a97f7526a6b6e475a62514e0e92120e530648e321e98e977f5"
+  },
+  {
+    "caminho": "templates/admin/lixeira.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 7421,
+    "sha256": "82bd21f86b5e400255398371196e03d91647ffd7cd4a398861c24f8df1021ed3"
+  },
+  {
+    "caminho": "templates/admin/processar_resultado.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 6180,
+    "sha256": "5a93925b9655d9b9959837b19f362ab5d865b543066068fc2809e53ccad3528c"
+  },
+  {
+    "caminho": "templates/admin/relatorio_editor.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 6061,
+    "sha256": "8c08e4adf4bcbd159df43bd157b037686899922dadbe822c831c722e7ad7a571"
+  },
+  {
+    "caminho": "templates/admin/ticket_detalhe.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 3436,
+    "sha256": "26dded8cf62889f91dd2d876949399a3660ed6297cd3006cc2c7f25d8727983e"
+  },
+  {
+    "caminho": "templates/admin/tickets.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 2556,
+    "sha256": "b968dc018b675df83cbecbc0282e5118d5c52778d00d9b9545af85ff672cab1a"
+  },
+  {
+    "caminho": "templates/admin/upload.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 9943,
+    "sha256": "163b4be883a5bc150a4865dfd0d4089074842d622a3841207269eaeaeb4211f3"
+  },
+  {
+    "caminho": "templates/auth",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "templates/auth/_layout.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 1133,
+    "sha256": "3b3a99e7cf3a167c50e7aede129e73b4d057b1862c9ebf8cd992d781799722fa"
+  },
+  {
+    "caminho": "templates/auth/login.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 4635,
+    "sha256": "b709e0f0d1d781b917684dc702f47dd056fcec7474c1b013fb132cc5c8879483"
+  },
+  {
+    "caminho": "templates/auth/primeiro_acesso.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 3504,
+    "sha256": "441229a38c566352df37560ec60f29ff1c8923839d6efc32542e9d0178f39151"
+  },
+  {
+    "caminho": "templates/auth/primeiro_acesso_token.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 3621,
+    "sha256": "9abfad7b012a347143b9653ecdd49cf923e6824b934c954fd94abbeaa85fab44"
+  },
+  {
+    "caminho": "templates/auth/recuperar_senha.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 2057,
+    "sha256": "c7a1d5a4521fc09d4c25a726d2795b56ee7f1c81e98776e4f161aeac38932adb"
+  },
+  {
+    "caminho": "templates/auth/resetar_senha.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 3500,
+    "sha256": "1cbdd3bc38dce731db5183beb602ab03fa411073abd82df8bc9eb41317d8ee03"
+  },
+  {
+    "caminho": "templates/base.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 27067,
+    "sha256": "32306ba9f0607ea54c728ad60afe57daef98faacef7023cc0de3eefb3579f3d3"
+  },
+  {
+    "caminho": "templates/cliente",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "templates/cliente/analise.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 11059,
+    "sha256": "7f8016d0271ff30e1f703d5e51f5cce259cec9c78ade3f7a48c979962306b0d1"
+  },
+  {
+    "caminho": "templates/cliente/dashboard.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 16799,
+    "sha256": "d2c1ee5db4a5b1e724e1a4d0908bcf7c6b043ffdea4b9d326b88594d0e9659db"
+  },
+  {
+    "caminho": "templates/cliente/guia.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 2807,
+    "sha256": "29758e1b456e73a8bf262d6546fdfe41ec378793441fcbf858176d0975dbfc9e"
+  },
+  {
+    "caminho": "templates/cliente/historico.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 2073,
+    "sha256": "b51ef2be62e3469a0274eaf2faa7766c066a98ca55b89ebff2150da95d1494a8"
+  },
+  {
+    "caminho": "templates/cliente/ticket_detalhe.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 1833,
+    "sha256": "e9ccc5dbe36a940ed2aa3f245173d94534ef2d461b05b57a11a4e45ce5a87f88"
+  },
+  {
+    "caminho": "templates/cliente/tickets.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 4419,
+    "sha256": "0e36c0b06eb9a37f2f4d2be356639889f90ee7da24e5d6b1cc36bebc2876d948"
+  },
+  {
+    "caminho": "templates/cliente/upload.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 5729,
+    "sha256": "62cbf733a58d23a5db24e362e2f67f0b064d91d04b072bd16f572a662ae17b7c"
+  },
+  {
+    "caminho": "templates/como_aderir.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 4334,
+    "sha256": "e68579df54e3ccc95187d0218d1cfca16b52ac24b3d53be7e4279423c8387226"
+  },
+  {
+    "caminho": "templates/emails",
+    "tipo": "diretorio",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Estrutura de diretorios",
+    "bytes": null,
+    "sha256": null
+  },
+  {
+    "caminho": "templates/emails/_base.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 1661,
+    "sha256": "5b074504390195b12febf825683c93f08d1957494a43514a9e2c63bd48cd9f10"
+  },
+  {
+    "caminho": "templates/emails/analise_publicada.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 1777,
+    "sha256": "28857dd12eabb98a9b7c328be9a5f9cf28e04f6b62a021c6a60c4376440f5b73"
+  },
+  {
+    "caminho": "templates/emails/boas_vindas.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 2026,
+    "sha256": "8a5f0bb274da96177ba639ae68a922ac09d9992c06eb5289378a18451061ba8d"
+  },
+  {
+    "caminho": "templates/emails/recuperacao_senha.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 1445,
+    "sha256": "2c54a15b293b86e1a3b264ddefb8908359f06ca5486a7f43ddf5b404234cb354"
+  },
+  {
+    "caminho": "templates/emails/ticket_resolvido.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 1389,
+    "sha256": "153357685e43347162e21210bcae72c6fffbc1f5a3fd90ce86cff0182fd95116"
+  },
+  {
+    "caminho": "templates/erro_simples.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 1157,
+    "sha256": "d162f1fd5ed31b883a77473dc7df95734f3ae650b6fd4011b05ab808e1f2dcaf"
+  },
+  {
+    "caminho": "templates/landing.html",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 37114,
+    "sha256": "689fb71bb3a873e079bac8d8e264416b1ba3c2aaeb759b992cc55ef3735826f9"
+  },
+  {
+    "caminho": "test_etl.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 3930,
+    "sha256": "f7488d2411628d62c9953de23e6e33878759f01b6aa5e94a14cf06443a4035a3"
+  },
+  {
+    "caminho": "wsgi.py",
+    "tipo": "arquivo",
+    "classificacao": "ESSENCIAIS",
+    "motivo": "Codigo, configuracao, recurso ou documentacao do projeto",
+    "bytes": 814,
+    "sha256": "35c05ec775d607db932ca63f6580412dfc902791633401dc8b121b615ff320ff"
+  }
+]

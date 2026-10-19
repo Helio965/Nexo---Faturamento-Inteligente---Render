@@ -1,0 +1,42 @@
+# NEXO - Faturamento Inteligente | Deploy no Render (Blueprint)
+# ============================================================
+# Cria 1 Web Service no plano FREE (sem cartão). No painel do Render:
+#   New > Blueprint > selecione este repositório.
+# As variáveis marcadas com `sync: false` são pedidas na criação (valores
+# secretos — nunca vão para o Git). Passo a passo completo no README.
+services:
+  - type: web
+    name: nexo-faturamento-inteligente
+    runtime: python
+    plan: free
+    # Oregon = mesma região AWS do banco Supabase (us-west-2): menor latência.
+    region: oregon
+    branch: main
+    # Build não altera o banco. Aplicar migrações revisadas separadamente antes
+    # de liberar o tráfego, conforme Docs/PREPARACAO_RENDER.md.
+    buildCommand: pip install -r requirements.txt
+    autoDeployTrigger: 'off'
+    # 1 worker + threads: exigência do Flask-SocketIO em modo threading (ver wsgi.py).
+    # timeout 180s: o ETL e o PDF rodam na requisição e o free tem só 0,1 CPU.
+    startCommand: gunicorn -w 1 --threads 50 --timeout 180 -b 0.0.0.0:$PORT wsgi:app
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      # Render fica atrás de 1 proxy reverso: IP real do cliente + links https.
+      - key: PROXY_FIX_HOPS
+        value: "1"
+      # Supabase > Connect: Transaction pooler (6543) e Session pooler (5432).
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      # E-mail via API HTTPS do Brevo (o Render Free bloqueia SMTP).
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_DEFAULT_SENDER
+        value: NEXO - Faturamento Inteligente <nexofaturamentointeligente@gmail.com>

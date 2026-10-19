@@ -1,0 +1,204 @@
+"""
+NEXO - Faturamento Inteligente | Configuração da aplicação
+==========================================================
+Configuração centralizada lida do .env via python-dotenv.
+Por que centralizar: facilita troca de ambiente (dev/prod) e teste,
+e evita espalhar os.environ.get() pelo código.
+"""
+
+import os
+from datetime import timedelta
+from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+
+from dotenv import load_dotenv
+
+# Diretório raiz do projeto (pasta que contém app.py)
+BASE_DIR = Path(__file__).resolve().parent
+
+# Carrega variáveis do .env localizado na raiz do projeto.
+# Em produção, as variáveis virão direto do ambiente do servidor.
+load_dotenv(BASE_DIR / ".env")
+
+
+# Query params que alguns provedores (Prisma/Supabase) anexam à URL mas que o
+# psycopg2/SQLAlchemy NÃO reconhecem — passá-los adiante quebra a conexão com
+# "invalid connection option". São removidos antes de entregar a URL ao engine.
+_PARAMS_PG_INCOMPATIVEIS = {"pgbouncer", "connection_limit", "pool_timeout", "schema"}
+
+
+def _limpar_url_pg(url: str) -> str:
+    """Remove de uma URL Postgres os query params que o psycopg2 não aceita."""
+    if not url:
+        return url
+    parts = urlsplit(url)
+    if not parts.scheme.startswith("postgres"):
+        return url
+    query = [
+        (k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
+        if k.lower() not in _PARAMS_PG_INCOMPATIVEIS
+    ]
+    # Explicita o driver instalado: SQLAlchemy 2.1 passou a preferir psycopg 3.
+    scheme = "postgresql+psycopg2" if parts.scheme in {"postgres", "postgresql"} else parts.scheme
+    return urlunsplit((scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+
+
+def _resolve_database_uri() -> str:
+    """
+    Resolve a URI do banco (runtime da app). Para SQLite relativo, transforma em
+    absoluto baseado em BASE_DIR. Para Postgres, remove params incompatíveis
+    (ex.: ?pgbouncer=true) antes de entregar ao SQLAlchemy.
+    """
+    raw = os.environ.get("DATABASE_URL", "").strip()
+    if not raw:
+        # Sem env: usa o default absoluto.
+        return f"sqlite:///{(BASE_DIR / 'instance' / 'nexo_mvp.db').as_posix()}"
+    if raw == "sqlite:///:memory:":
+        return raw
+    # Se a URI SQLite for relativa, transforma em absoluta.
+    if raw.startswith("sqlite:///") and not raw.startswith("sqlite:////"):
+        caminho_relativo = raw.replace("sqlite:///", "", 1)
+        caminho_abs = (BASE_DIR / caminho_relativo).resolve()
+        return f"sqlite:///{caminho_abs.as_posix()}"
+    return _limpar_url_pg(raw)
+
+
+def _resolve_direct_uri() -> str:
+    """
+    URI de conexão DIRETA (porta 5432) usada para DDL/migrações (Alembic).
+    No Supabase, migrações devem usar a conexão direta, não o PgBouncer (6543).
+    Cai na URI principal se DIRECT_URL não estiver definida.
+    """
+    raw = os.environ.get("DIRECT_URL", "").strip()
+    return _limpar_url_pg(raw) if raw else _resolve_database_uri()
+
+
+class Config:
+    """Configuração base. Use para dev local."""
+
+    # === Flask ===
+    SECRET_KEY = os.environ.get("SECRET_KEY", "dev-key-trocar-em-producao")
+
+    # === Sessão (segurança / anti login-automático) ===
+    # SESSION_PERMANENT=False -> cookie de sessão (sem Expires): expira quando o
+    # navegador fecha. PERMANENT_SESSION_LIFETIME só vale se algo marcar a sessão
+    # como permanente; deixamos curto por defesa.
+    SESSION_PERMANENT = False
+    PERMANENT_SESSION_LIFETIME = timedelta(hours=8)
+    SESSION_COOKIE_HTTPONLY = True          # JS não lê o cookie de sessão
+    SESSION_COOKIE_SAMESITE = "Lax"         # mitiga CSRF em navegação cross-site
+    # SESSION_COOKIE_SECURE é ligado só em produção (HTTPS) — ver ProductionConfig.
+
+    # === CSRF (Flask-WTF) ===
+    # Token sem expiração por tempo (a sessão já é curta e morre ao fechar o
+    # navegador); evita falsos "token expirado" em formulários longos.
+    WTF_CSRF_TIME_LIMIT = None
+
+    # === Rate limiting (Flask-Limiter) ===
+    # Storage em memória para dev/instância única. Em produção multi-instância,
+    # aponte RATELIMIT_STORAGE_URI para um Redis compartilhado.
+    RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
+    RATELIMIT_HEADERS_ENABLED = True
+
+    # === Tempo real (Socket.IO) ===
+    # Origens permitidas no handshake do WebSocket. NUNCA "*" com cookie de
+    # sessão (evita Cross-Site WebSocket Hijacking). Lista separada por vírgula
+    # no .env; default cobre o dev local.
+    SOCKETIO_CORS_ORIGINS = [
+        o.strip() for o in os.environ.get(
+            "SOCKETIO_CORS_ORIGINS",
+            "http://127.0.0.1:5000,http://localhost:5000",
+        ).split(",") if o.strip()
+    ]
+    # No Render, a URL pública (https://<servico>.onrender.com) chega pela
+    # variável RENDER_EXTERNAL_URL, definida automaticamente pela plataforma.
+    if os.environ.get("RENDER_EXTERNAL_URL"):
+        SOCKETIO_CORS_ORIGINS.append(os.environ["RENDER_EXTERNAL_URL"].rstrip("/"))
+
+    # === Proxy reverso ===
+    # Nº de proxies confiáveis à frente da app (Render = 1). 0 = sem proxy (dev).
+    # Ver ProxyFix em app.py.
+    PROXY_FIX_HOPS = int(os.environ.get("PROXY_FIX_HOPS", 0))
+
+    # === SQLAlchemy ===
+    SQLALCHEMY_DATABASE_URI = _resolve_database_uri()
+    # URI direta (5432) para Alembic/Flask-Migrate. A app usa a pooled (6543);
+    # as migrações usam esta quando create_app roda em modo direto.
+    SQLALCHEMY_DIRECT_URI = _resolve_direct_uri()
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # Mostra SQL gerado no console — útil em dev, ruim em prod.
+    SQLALCHEMY_ECHO = False
+    # Robustez com o PgBouncer do Supabase (porta 6543, transaction pooling): o
+    # pooler pode fechar conexões ociosas, então validamos a conexão antes de
+    # usar (pre_ping) e reciclamos antes do timeout típico. Inócuo para SQLite.
+    SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True, "pool_recycle": 280}
+
+    # === Admin Master (seed) ===
+    ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@nexo.com.br")
+    ADMIN_NOME = os.environ.get("ADMIN_NOME", "Administrador NEXO")
+    ADMIN_SENHA = os.environ.get("ADMIN_SENHA")  # sem default — quebra se faltar
+
+    # === Uploads ===
+    UPLOAD_FOLDER = BASE_DIR / os.environ.get("UPLOAD_FOLDER", "uploads")
+    MAX_CONTENT_LENGTH = int(
+        os.environ.get("MAX_CONTENT_LENGTH_MB", 20)
+    ) * 1024 * 1024  # MB → bytes
+
+    # === E-mail (Flask-Mail / SMTP) ===
+    MAIL_SERVER = os.environ.get("MAIL_SERVER", "smtp.gmail.com")
+    MAIL_PORT = int(os.environ.get("MAIL_PORT", 587))
+    MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "true").lower() == "true"
+    MAIL_USE_SSL = os.environ.get("MAIL_USE_SSL", "false").lower() == "true"
+    MAIL_USERNAME = os.environ.get("MAIL_USERNAME") or None
+    MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD") or None
+    MAIL_DEFAULT_SENDER = os.environ.get(
+        "MAIL_DEFAULT_SENDER",
+        os.environ.get("MAIL_USERNAME") or "nexofaturamentointeligente@gmail.com",
+    )
+    # SEGURANÇA: por padrão o Flask-Mail herda app.debug e, em modo debug, o
+    # smtplib imprime toda a conversa SMTP no log — inclusive a linha AUTH em
+    # base64, que contém a senha. Forçamos OFF para a credencial nunca vazar.
+    MAIL_DEBUG = False
+    # Envio por API HTTPS do Brevo (porta 443). Necessário em hosts gratuitos
+    # que BLOQUEIAM SMTP (Render Free bloqueia as portas 25/465/587). Com a chave
+    # definida, emails.py usa a API em vez do SMTP; sem ela, segue o SMTP acima.
+    # O remetente (MAIL_DEFAULT_SENDER) precisa estar verificado no Brevo.
+    BREVO_API_KEY = os.environ.get("BREVO_API_KEY") or None
+    BREVO_API_URL = os.environ.get("BREVO_API_URL", "https://api.brevo.com/v3/smtp/email")
+    # Quando não há credenciais, o envio é suprimido pela camada emails.py
+    # (sem quebrar fluxos). Flag derivada para checagem rápida nos gatilhos.
+    MAIL_ATIVO = bool((MAIL_USERNAME and MAIL_PASSWORD) or BREVO_API_KEY)
+    # Formatos REALMENTE suportados pelo ETL. .xls fica de fora porque não há
+    # dependência (xlrd) nem caminho de leitura — não anunciamos o que não lemos.
+    ALLOWED_EXTENSIONS = {"csv", "xlsx"}
+
+    # === IA (Claude / Anthropic) — geração automatizada da devolutiva ===
+    # Sem a chave, o motor cai no fallback determinístico local (não quebra).
+    ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY") or None
+    ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-4-8")
+
+    # === NexoBot (suporte) — Hugging Face Inference (gratuito, opcional) ===
+    # Sem o token, o bot usa o fallback determinístico por palavras-chave.
+    HF_API_TOKEN = os.environ.get("HF_API_TOKEN") or None
+    HF_MODEL = os.environ.get("HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.3")
+
+
+class DevelopmentConfig(Config):
+    DEBUG = True
+    SQLALCHEMY_ECHO = True
+
+
+class ProductionConfig(Config):
+    DEBUG = False
+    # Em produção, SECRET_KEY DEVE vir do ambiente. Sem fallback.
+    # A factory valida somente ao iniciar produção, sem impedir imports de dev.
+    SECRET_KEY = os.environ.get("SECRET_KEY")
+    # HTTPS em produção: cookie de sessão só trafega em conexão segura.
+    SESSION_COOKIE_SECURE = True
+
+
+# Dicionário usado pela factory para escolher config por nome.
+config_by_name = {
+    "development": DevelopmentConfig,
+    "production": ProductionConfig,
+}
