@@ -52,17 +52,19 @@ Este documento detalha a configuração técnica necessária para publicar a apl
 O Render executa apenas o build e o start. A preparação do banco de dados e do administrador deve ser feita manualmente na primeira vez.
 
 ### Passo 1: Migrações do Banco
-Para criar as tabelas no Supabase/PostgreSQL, execute localmente (conectado ao banco de produção via `DIRECT_URL`) ou via terminal do Render (se disponível):
+Para criar as tabelas no Supabase/PostgreSQL, execute localmente (conectado ao banco de produção via `DIRECT_URL`) ou via terminal do Render (se disponível).
+Em produção a aplicação exige `DATABASE_URL` mesmo no modo direto (sem ela, `create_app` falha com `RuntimeError: DATABASE_URL PostgreSQL é obrigatória em produção.`); com `NEXO_DB_DIRECT=1`, a migração usa a `DIRECT_URL`:
 ```bash
 export FLASK_ENV=production
 export NEXO_DB_DIRECT=1
-export DIRECT_URL="sua_url_direta_do_supabase"
+export DATABASE_URL="sua_url_pooled_do_supabase_porta_6543"
+export DIRECT_URL="sua_url_direta_do_supabase_porta_5432"
 export SECRET_KEY="sua_chave_secreta"
 flask db upgrade
 ```
 
 ### Passo 2: Criação do Administrador Inicial
-Após as migrações, execute o script de seed para criar a conta master:
+Após as migrações, no mesmo terminal (o `seed.py` precisa das mesmas variáveis do Passo 1), execute o script de seed para criar a conta master:
 ```bash
 export ADMIN_EMAIL="seu-email@admin.com"
 export ADMIN_NOME="Nome do Administrador"
@@ -74,10 +76,12 @@ python seed.py
 
 ## 5. Atualizações e Deploys Posteriores
 
+O deploy automático está desligado (`autoDeployTrigger: 'off'` no `render.yaml`): um push para `main` não dispara build no Render.
+
 Para atualizar a aplicação:
 1. Faça o commit e push das alterações para o GitHub.
-2. O Render disparará o build automaticamente.
-3. Se houver mudanças no banco de dados (novos arquivos em `migrations/versions`), execute o comando `flask db upgrade` utilizando a `DIRECT_URL` antes de liberar o tráfego.
+2. Se houver mudanças no banco de dados (novos arquivos em `migrations/versions`), execute `flask db upgrade` com as mesmas variáveis do Passo 1 da seção 4 antes de liberar o tráfego.
+3. No painel do Render, abra o serviço e use **Manual Deploy → Deploy latest commit**.
 
 ## 6. Diagnóstico de Erros Comuns
 
