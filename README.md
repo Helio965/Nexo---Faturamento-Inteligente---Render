@@ -1,8 +1,6 @@
 # NEXO — Faturamento Inteligente
 
-[![Assista ao vídeo promocional do NEXO](static/video/nexo_demo_preview.gif)](static/video/nexo_demo_motion.mp4)
-
-▶️ [Assistir ao vídeo promocional completo](static/video/nexo_demo_motion.mp4)
+![Prévia animada da apresentação do NEXO](static/video/nexo_demo_preview.gif)
 
 *Os valores e indicadores apresentados no vídeo são ilustrativos.*
 
@@ -188,7 +186,7 @@ Lista completa e versões exatas em [`requirements.txt`](requirements.txt).
 
 ## 🎬 Produção audiovisual
 
-O MP4 (40 s, 1920×1080), a prévia GIF, a capa original em PNG e a capa otimizada em JPEG ficam em [`static/video/`](static/video/). O vídeo pode ser assistido sem login na seção **Demonstração** da página inicial pública, com controles nativos e opção de download, ou aberto diretamente pelo link no topo deste README. Para poupar banda, o player usa a capa JPEG e `preload="none"`: o MP4 só é baixado quando o visitante aciona o play.
+O MP4 (40 s, 1920×1080), a prévia GIF, a capa original em PNG e a capa otimizada em JPEG ficam em [`static/video/`](static/video/). Na seção **Demonstração** da página inicial pública, o vídeo inicia automaticamente **sem som**, repete continuamente (`autoplay muted loop playsinline`) e oferece controles de pausa e volume por acessibilidade. Não há links de download no site ou neste README; `controlslist="nodownload"` apenas oculta a opção em navegadores compatíveis e não impede que o arquivo estático público seja obtido por outros meios. **A reprodução automática aumenta a transferência de dados no Render**, mesmo sem o visitante clicar em play. A capa JPEG otimizada foi preservada.
 
 O código-fonte do vídeo está em [`tools/nexo-motion/`](tools/nexo-motion/) (React, TypeScript e Remotion), isolado da aplicação Flask. Essa pasta não participa do build nem do runtime no Render: o serviço continua com `pip install -r requirements.txt` e Gunicorn, sem Node.js, Remotion ou FFmpeg. Para editar o vídeo, em uma máquina local com Node.js 22+, npm, Python 3, FFmpeg e Chromium, renderize novamente a partir da raiz do repositório:
 
