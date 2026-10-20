@@ -188,7 +188,7 @@ Lista completa e versões exatas em [`requirements.txt`](requirements.txt).
 
 ## 🎬 Produção audiovisual
 
-O MP4 (40 s, 1920×1080), a prévia GIF e a capa ficam em [`static/video/`](static/video/). O vídeo pode ser assistido sem login na seção **Demonstração** da página inicial pública, com controles nativos e opção de download, ou aberto diretamente pelo link no topo deste README.
+O MP4 (40 s, 1920×1080), a prévia GIF, a capa original em PNG e a capa otimizada em JPEG ficam em [`static/video/`](static/video/). O vídeo pode ser assistido sem login na seção **Demonstração** da página inicial pública, com controles nativos e opção de download, ou aberto diretamente pelo link no topo deste README. Para poupar banda, o player usa a capa JPEG e `preload="none"`: o MP4 só é baixado quando o visitante aciona o play.
 
 O código-fonte do vídeo está em [`tools/nexo-motion/`](tools/nexo-motion/) (React, TypeScript e Remotion), isolado da aplicação Flask. Essa pasta não participa do build nem do runtime no Render: o serviço continua com `pip install -r requirements.txt` e Gunicorn, sem Node.js, Remotion ou FFmpeg. Para editar o vídeo, em uma máquina local com Node.js 22+, npm, Python 3, FFmpeg e Chromium, renderize novamente a partir da raiz do repositório:
 
@@ -199,7 +199,7 @@ npm run render
 npm run verify
 ```
 
-A renderização sobrescreve os três arquivos de `static/video/`; eles só chegam à produção depois de versionados e publicados por deploy manual. Consulte o [README da produção](tools/nexo-motion/README.md) para os requisitos e a [validação](tools/nexo-motion/VALIDATION.md) para as especificações conferidas.
+A renderização sobrescreve o MP4, o GIF e o PNG de `static/video/`. A capa JPEG não é gerada pela ferramenta; recrie-a a partir do PNG, na raiz do repositório e com o Pillow do `requirements.txt`, usando `python -c "from PIL import Image; Image.open('static/video/nexo_demo_poster.png').convert('RGB').save('static/video/nexo_demo_poster.jpg', quality=80, subsampling=0, optimize=True, progressive=True)"`. Os arquivos só chegam à produção depois de versionados e publicados por deploy manual. Consulte o [README da produção](tools/nexo-motion/README.md) para os requisitos e a [validação](tools/nexo-motion/VALIDATION.md) para as especificações conferidas.
 
 ---
 
