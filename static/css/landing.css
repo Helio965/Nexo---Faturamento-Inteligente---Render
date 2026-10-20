@@ -440,9 +440,15 @@ section { padding: 96px 0; position: relative; }
 .motion-demo-intro { margin-bottom: 18px; }
 .motion-demo-intro h3 { margin-bottom: 8px; }
 .motion-demo-intro p { margin: 0; }
+/* Altura do vídeo <= área visível - cabeçalho fixo - margens, para que 100% do
+   vídeo possa ficar visível (condição do som). --nexo-demo-header é medido pelo
+   landing-video.js; 76px é o fallback. A 1ª declaração (vh) atende navegadores
+   sem svh; a 2ª (svh) a substitui onde houver suporte. */
 .motion-demo-frame {
+  --nexo-demo-gap: 16px;
   position: relative;
-  max-width: min(100%, calc(177.77778svh - 192px));
+  max-width: min(100%, max(240px, calc((100vh - var(--nexo-demo-header, 76px) - 2 * var(--nexo-demo-gap) - 2px) * 16 / 9)));
+  max-width: min(100%, max(240px, calc((100svh - var(--nexo-demo-header, 76px) - 2 * var(--nexo-demo-gap) - 2px) * 16 / 9)));
   margin-inline: auto;
   overflow: hidden;
   background: var(--nexo-bg);
@@ -456,18 +462,27 @@ section { padding: 96px 0; position: relative; }
   height: auto;
   aspect-ratio: 16 / 9;
   object-fit: contain;
-  pointer-events: none;
+  background: var(--nexo-bg);
+  pointer-events: none;   /* clique/toque no vídeo não pausa nem abre menu de mídia */
   user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
-.motion-demo-fullscreen, .motion-demo-sound-enable {
-  position: absolute;
-  z-index: 5;
+/* Sem controles nativos inline (WebKit/Blink). No iPhone, a tela cheia nativa
+   continua exibindo os controles do sistema — limitação documentada. */
+.motion-demo-video::-webkit-media-controls { display: none !important; }
+.motion-demo-video::-webkit-media-controls-start-playback-button { display: none !important; -webkit-appearance: none; }
+.motion-demo-fullscreen, .motion-demo-sound-enable, .motion-demo-retry {
   border: 1px solid rgba(255, 255, 255, 0.45);
   color: #fff;
   background: rgba(8, 8, 13, 0.84);
   border-radius: 9px;
   cursor: pointer;
   font: inherit;
+}
+.motion-demo-fullscreen, .motion-demo-sound-enable {
+  position: absolute;
+  z-index: 5;
 }
 .motion-demo-fullscreen {
   right: 14px;
@@ -476,6 +491,7 @@ section { padding: 96px 0; position: relative; }
   height: 42px;
   display: grid;
   place-items: center;
+  opacity: 0.86;
 }
 .motion-demo-sound-enable {
   left: 50%;
@@ -484,10 +500,35 @@ section { padding: 96px 0; position: relative; }
   min-height: 42px;
   padding: 7px 16px;
   white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
-.motion-demo-sound-enable[hidden], .motion-demo-fullscreen[hidden] { display: none; }
-.motion-demo-fullscreen:hover, .motion-demo-sound-enable:hover { background: rgba(35, 22, 55, 0.96); }
-.motion-demo-fullscreen:focus-visible, .motion-demo-sound-enable:focus-visible { outline: 3px solid var(--nexo-accent); outline-offset: 2px; }
+.motion-demo-sound-enable .motion-demo-icon-play,
+.motion-demo-sound-enable[data-action="play"] .motion-demo-icon-sound,
+.motion-demo-frame .motion-demo-icon-collapse,
+.motion-demo-frame[data-fullscreen="true"] .motion-demo-icon-expand { display: none; }
+.motion-demo-sound-enable[data-action="play"] .motion-demo-icon-play,
+.motion-demo-frame[data-fullscreen="true"] .motion-demo-icon-collapse { display: block; }
+.motion-demo-sound-enable[hidden], .motion-demo-fullscreen[hidden], .motion-demo-error[hidden] { display: none !important; }
+.motion-demo-fullscreen:hover, .motion-demo-sound-enable:hover, .motion-demo-retry:hover { background: rgba(35, 22, 55, 0.96); opacity: 1; }
+.motion-demo-fullscreen:focus-visible, .motion-demo-sound-enable:focus-visible, .motion-demo-retry:focus-visible { outline: 3px solid var(--nexo-accent); outline-offset: 2px; opacity: 1; }
+/* Falha de mídia: mensagem explícita sobre o pôster (nunca uma área preta sem explicação). */
+.motion-demo-error {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 16px;
+  text-align: center;
+  background: rgba(8, 8, 13, 0.78);
+}
+.motion-demo-error p { margin: 0; color: var(--nexo-text); font-weight: 600; }
+.motion-demo-retry { padding: 8px 16px; }
 .motion-demo-frame:fullscreen {
   width: 100%;
   max-width: none;
@@ -505,6 +546,27 @@ section { padding: 96px 0; position: relative; }
   height: 100%;
   max-height: 100%;
   object-fit: contain;
+  background: #000;
+}
+/* Safari/iPadOS anteriores ao 16.4 (pseudo-classe prefixada; regra separada de propósito). */
+.motion-demo-frame:-webkit-full-screen {
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.motion-demo-frame:-webkit-full-screen .motion-demo-video {
+  width: 100%;
+  height: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  background: #000;
 }
 @media (max-width: 480px) {
   .motion-demo-sound-enable { left: 10px; transform: none; max-width: calc(100% - 75px); white-space: normal; font-size: 0.82rem; }
