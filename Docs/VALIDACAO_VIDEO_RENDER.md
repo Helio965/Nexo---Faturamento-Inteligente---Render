@@ -1,5 +1,7 @@
 # Validação do vídeo promocional no NEXO Render
 
+> **Atualização posterior:** a funcionalidade mudou para reprodução automática, muda, em loop, sem links de download na interface. As medições de `preload="none"` e início sob clique descritas abaixo são históricas e **não comprovam o consumo de banda do novo modo autoplay**. A nova configuração deve ser medida antes de publicar em produção.
+
 Execução em 20 de outubro de 2026, a partir do commit `32aa11a` (igual a `origin/main`), em duas etapas:
 integração do vídeo (commit `3fcbc80`) e otimização do carregamento (commit seguinte).
 Fonte: `Helio965/Nexo-Faturamento-Inteligente`, commit `c8b0735` (introdução do vídeo),
@@ -164,3 +166,13 @@ de web services; sem forma de pagamento, o excedente desliga os serviços até o
   modo móvel foi emulado.
 - Redes lentas foram simuladas via CDP; os tempos refletem apenas os arquivos servidos pelo Flask.
 - Não houve deploy: o comportamento foi validado no Gunicorn local, não na infraestrutura do Render.
+
+## Atualização: demonstração contínua, sem link de download
+
+- O player da página pública usa `autoplay`, `muted`, `loop`, `playsinline`, `controls` e `controlslist="nodownload"`.
+- Foram removidos o link de download na legenda, a âncora de fallback HTML5 e os links diretos para MP4 no README. A prévia GIF do README não é mais clicável.
+- A reprodução começa sem som por política de autoplay dos navegadores; o usuário pode pausar ou ativar o som nos controles. O loop recomeça quando o vídeo termina, salvo interrupções impostas pelo navegador, dispositivo ou usuário.
+- `controlslist="nodownload"` não é DRM. O MP4 permanece um arquivo estático público, tecnicamente recuperável por usuários com ferramentas de rede.
+- A reprodução automática pode solicitar cerca de 12 MB ao iniciar e, conforme cache e comportamento do navegador, realizar transferências adicionais ao repetir. Não reutilize as estimativas anteriores de banda por visita sem uma nova medição; monitore consumo no Render.
+- Nenhum componente de backend, banco de dados, runtime, armazenamento, migrações ou hospedagem foi alterado nesta atualização.
+- Esta atualização foi revisada estaticamente no GitHub; testes de reprodução em navegador e regressão local **ainda precisam ser executados** antes da aprovação do deploy.

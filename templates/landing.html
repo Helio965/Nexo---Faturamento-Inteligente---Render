@@ -399,9 +399,12 @@
       <div class="motion-demo-frame">
         <video
           class="motion-demo-video"
-          controls
+          autoplay
+          muted
+          loop
           playsinline
-          preload="none"
+          controls
+          controlslist="nodownload"
           width="1920"
           height="1080"
           poster="{{ url_for('static', filename='video/nexo_demo_poster.jpg') }}"
@@ -409,13 +412,11 @@
           aria-describedby="motion-demo-caption"
         >
           <source src="{{ url_for('static', filename='video/nexo_demo_motion.mp4') }}" type="video/mp4" />
-          Seu navegador não suporta reprodução de vídeo.
-          <a href="{{ url_for('static', filename='video/nexo_demo_motion.mp4') }}" download>Baixe o vídeo completo em MP4.</a>
+          Seu navegador não suporta reprodução de vídeo HTML5.
         </video>
       </div>
       <figcaption id="motion-demo-caption" class="motion-demo-caption">
         <span>Os valores e indicadores apresentados no vídeo são dados ilustrativos.</span>
-        <a href="{{ url_for('static', filename='video/nexo_demo_motion.mp4') }}" download>Baixar vídeo em MP4</a>
       </figcaption>
     </figure>
 
