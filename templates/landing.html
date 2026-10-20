@@ -396,15 +396,16 @@
         <h3 id="motion-demo-title">Conheça o NEXO em movimento</h3>
         <p>Descubra como dados comerciais se transformam em indicadores e decisões estratégicas.</p>
       </div>
-      <div class="motion-demo-frame">
+      <div class="motion-demo-frame" id="nexo-demo-frame">
         <video
+          id="nexo-demo-video"
           class="motion-demo-video"
           autoplay
           muted
           loop
           playsinline
-          controls
-          controlslist="nodownload"
+          disablepictureinpicture
+          disableremoteplayback
           width="1920"
           height="1080"
           poster="{{ url_for('static', filename='video/nexo_demo_poster.jpg') }}"
@@ -414,9 +415,15 @@
           <source src="{{ url_for('static', filename='video/nexo_demo_motion.mp4') }}" type="video/mp4" />
           Seu navegador não suporta reprodução de vídeo HTML5.
         </video>
+        <button class="motion-demo-sound-enable" id="nexo-demo-sound-enable" type="button" hidden aria-label="Ativar som da demonstração">
+          <span aria-hidden="true">♫</span> Ativar som
+        </button>
+        <button class="motion-demo-fullscreen" id="nexo-demo-fullscreen" type="button" aria-label="Expandir vídeo para tela cheia" title="Tela cheia">
+          <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/></svg>
+        </button>
       </div>
       <figcaption id="motion-demo-caption" class="motion-demo-caption">
-        <span>Os valores e indicadores apresentados no vídeo são dados ilustrativos.</span>
+        <span>Os valores e indicadores apresentados no vídeo são dados ilustrativos. O som é ativado somente com o vídeo completamente visível.</span>
       </figcaption>
     </figure>
 
@@ -716,6 +723,7 @@
 
 <!-- Landing JS (Plotly mockups) -->
 <script src="{{ url_for('static', filename='js/landing.js') }}"></script>
+<script src="{{ url_for('static', filename='js/landing-video.js') }}"></script>
 
 </body>
 </html>
