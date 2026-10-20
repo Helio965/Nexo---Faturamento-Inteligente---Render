@@ -176,3 +176,15 @@ de web services; sem forma de pagamento, o excedente desliga os serviços até o
 - A reprodução automática pode solicitar cerca de 12 MB ao iniciar e, conforme cache e comportamento do navegador, realizar transferências adicionais ao repetir. Não reutilize as estimativas anteriores de banda por visita sem uma nova medição; monitore consumo no Render.
 - Nenhum componente de backend, banco de dados, runtime, armazenamento, migrações ou hospedagem foi alterado nesta atualização.
 - Esta atualização foi revisada estaticamente no GitHub; testes de reprodução em navegador e regressão local **ainda precisam ser executados** antes da aprovação do deploy.
+
+## Atualização adicional: áudio condicionado à visibilidade integral
+
+- Novo player sem controles nativos e com botão de tela cheia personalizado. A única ação inicial extra é **Ativar som**, exigida pelos navegadores que bloqueiam áudio automático. O vídeo continua em loop silencioso enquanto não houver liberação.
+- O JavaScript verifica que **todo o retângulo do vídeo** está dentro da viewport, considera a área coberta pelo cabeçalho sticky, usa `IntersectionObserver` com `threshold: 1` e silencia o vídeo na rolagem, no redimensionamento e quando a aba perde a visibilidade.
+- Quando volta a ficar integralmente visível, tenta restaurar o som autorizado. Não há tentativa de contornar as restrições de autoplay com áudio.
+- Ao usar tela cheia, a área do cabeçalho não entra no cálculo e o áudio permanece autorizado enquanto a aba estiver visível.
+- O navegador controla o formato de tela cheia e, no iOS, poderá fornecer uma interface nativa diferente. Se a API não estiver disponível, o botão deve ser desativado ou usar o fallback permitido.
+- **Limite funcional:** `muted` silencia a faixa de áudio, mas NÃO impede o download dos respectivos bytes que estão muxados dentro do MP4; essa separação exigiria arquitetura adicional.
+- **Risco:** reprodução em loop, mesmo fora de vista, pode elevar consumo de banda e bateria. Vídeos maiores que a viewport nunca atingiriam 100% visível; o CSS limita a largura do player em função da altura disponível.
+- **Acessibilidade:** remover a possibilidade de pausar uma animação automática com duração superior a cinco segundos viola WCAG 2.2 SC 2.2.2 para conteúdo não essencial; rever antes de afirmar conformidade.
+- Esta alteração foi analisada estaticamente; o teste de comportamento em navegadores físicos e a medição do novo consumo de dados ainda são **pendentes**.
