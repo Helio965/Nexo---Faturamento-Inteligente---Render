@@ -442,7 +442,7 @@ section { padding: 96px 0; position: relative; }
 .motion-demo-intro p { margin: 0; }
 .motion-demo-frame {
   position: relative;
-  max-width: min(100%, calc((100svh - 108px) * 1.7777778));
+  max-width: min(100%, calc(177.77778svh - 192px));
   margin-inline: auto;
   overflow: hidden;
   background: var(--nexo-bg);
