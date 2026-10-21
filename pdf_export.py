@@ -15,6 +15,7 @@ Função pública:
 
 from io import BytesIO
 from datetime import datetime
+from xml.sax.saxutils import escape
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
@@ -44,6 +45,17 @@ SEMAFORO_FUNDO = {
     "oportunidade": HexColor("#e9f9ef"),
 }
 SEMAFORO_ROTULO = {"critico": "CRÍTICO", "atencao": "ATENÇÃO", "oportunidade": "OPORTUNIDADE"}
+
+
+def _texto_pdf(valor) -> str:
+    """Escapa um valor externo uma única vez, na entrada de um Paragraph.
+
+    O parser do ReportLab aceita marcação que pode carregar imagens e criar
+    links. Dados comerciais são texto literal; somente a marcação fixa deste
+    módulo é confiável. Não usar este escape em strings desenhadas no canvas
+    ou em células de Table que não sejam Paragraphs.
+    """
+    return escape("" if valor is None else str(valor))
 
 
 def _brl(valor) -> str:
@@ -158,7 +170,7 @@ def _abc_flowable(abc_top, largura, est):
     for p in abc_top[:5]:
         linhas.append([
             str(p.posicao_ranking),
-            Paragraph(p.produto_nome, est["cell"]),
+            Paragraph(_texto_pdf(p.produto_nome), est["cell"]),
             p.classe_abc,
             _brl(p.faturamento),
             f"{float(p.percentual_acumulado or 0):.1f}%",
@@ -194,11 +206,11 @@ def _semaforo_flowable(card, largura, est):
     fundo = SEMAFORO_FUNDO.get(card["nivel"], FUNDO_SUAVE)
     rotulo = SEMAFORO_ROTULO.get(card["nivel"], card["nivel"].upper())
     interno = Table([
-        [Paragraph(f'<b>{card["titulo"]}</b>  <font size="7" color="#6a7088">· {rotulo}</font>', est["sc_title"])],
+        [Paragraph(f'<b>{_texto_pdf(card["titulo"])}</b>  <font size="7" color="#6a7088">· {_texto_pdf(rotulo)}</font>', est["sc_title"])],
         [Paragraph("O QUE FAZER", est["sc_key"])],
-        [Paragraph(card["o_que_fazer"], est["sc_val"])],
+        [Paragraph(_texto_pdf(card["o_que_fazer"]), est["sc_val"])],
         [Paragraph("POR QUE FAZER", est["sc_key"])],
-        [Paragraph(card["por_que"], est["sc_val"])],
+        [Paragraph(_texto_pdf(card["por_que"]), est["sc_val"])],
     ], colWidths=[largura - 8 * mm])
     interno.setStyle(TableStyle([
         ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
@@ -237,11 +249,11 @@ def gerar_pdf_analise(analise, semaforos, abc_top) -> bytes:
     elems.append(Spacer(1, 8 * mm))
 
     titulo = rel.titulo if rel else "Análise publicada"
-    elems.append(Paragraph(titulo, ParagraphStyle(
+    elems.append(Paragraph(_texto_pdf(titulo), ParagraphStyle(
         "tit", fontName="Helvetica-Bold", fontSize=16, textColor=TINTA, leading=19)))
     periodo = f"{analise.periodo_inicio.strftime('%d/%m/%Y')} – {analise.periodo_fim.strftime('%d/%m/%Y')}"
     elems.append(Paragraph(
-        f"{emp.nome_fantasia or emp.razao_social} &nbsp;·&nbsp; CNPJ {emp.cnpj} &nbsp;·&nbsp; Período {periodo}",
+        f"{_texto_pdf(emp.nome_fantasia or emp.razao_social)} &nbsp;·&nbsp; CNPJ {_texto_pdf(emp.cnpj)} &nbsp;·&nbsp; Período {_texto_pdf(periodo)}",
         est["small"]))
     elems.append(Spacer(1, 6 * mm))
 
@@ -272,9 +284,9 @@ def gerar_pdf_analise(analise, semaforos, abc_top) -> bytes:
     if rel:
         elems.append(Paragraph("Devolutiva do consultor", est["h2"]))
         if rel.resumo_executivo:
-            elems.append(Paragraph(f'<b>Resumo executivo.</b> {rel.resumo_executivo}', est["p"]))
+            elems.append(Paragraph(f'<b>Resumo executivo.</b> {_texto_pdf(rel.resumo_executivo)}', est["p"]))
             elems.append(Spacer(1, 3 * mm))
-        elems.append(Paragraph(f'<b>Conclusão estratégica.</b> {rel.conclusao_estrategica}', est["p"]))
+        elems.append(Paragraph(f'<b>Conclusão estratégica.</b> {_texto_pdf(rel.conclusao_estrategica)}', est["p"]))
 
     elems.append(Spacer(1, 6 * mm))
     elems.append(Paragraph(
