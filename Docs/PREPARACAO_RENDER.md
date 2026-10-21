@@ -78,6 +78,8 @@ python seed.py
 
 O deploy automático está desligado (`autoDeployTrigger: 'off'` no `render.yaml`): um push para `main` não dispara build no Render.
 
+Antes de alterar o schema, preparar backup autorizado, validar a restauração isolada e revisar o plano específico de recuperação conforme [Operação de backup, restauração e recuperação](OPERACAO_BACKUP_RESTAURACAO.md). Reverter o código não reverte o banco. Nenhum comando de migração ou publicação deste documento deve ser executado como teste de backup.
+
 Para atualizar a aplicação:
 1. Faça o commit e push das alterações para o GitHub.
 2. Se houver mudanças no banco de dados (novos arquivos em `migrations/versions`), execute `flask db upgrade` com as mesmas variáveis do Passo 1 da seção 4 antes de liberar o tráfego.

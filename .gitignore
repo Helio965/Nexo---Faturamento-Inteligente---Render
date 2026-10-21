@@ -69,7 +69,16 @@ backup/
 *.bak
 *.tmp
 *.dump
+*.dump.*
+*.backup
+*.backup.*
 *.sql.gz
+*.sql.gpg
+*.age
+*.pgpass
+pgpass.conf
+pg_service.conf
+.pg_service.conf
 *.zip
 
 # === Sistema operacional ===
