@@ -275,8 +275,15 @@ def create_app(config_name: str = None) -> Flask:
     # Tratamento amigável de CSRF inválido/ausente (Flask-WTF) e rate limit (429).
     from flask_wtf.csrf import CSRFError
 
+    def _erro_api(mensagem, status):
+        """Chamadas fetch (/api/) recebem JSON, não um redirect ou página HTML."""
+        from flask import jsonify
+        return jsonify(erro=mensagem, resposta=mensagem, fonte="local", acao=None, destino=None), status
+
     @app.errorhandler(CSRFError)
     def _csrf_error(e):
+        if request.path.startswith("/api/"):
+            return _erro_api("Sua sessão expirou. Atualize a página e tente novamente.", 400)
         # Token ausente/expirado → mensagem clara e volta para a origem (re-render
         # com token novo). Evita expor o traceback de "The CSRF token is missing".
         from flask import flash
@@ -285,6 +292,9 @@ def create_app(config_name: str = None) -> Flask:
 
     @app.errorhandler(429)
     def _rate_limit(e):
+        if request.path.startswith("/api/"):
+            return _erro_api("Você enviou muitas mensagens em pouco tempo. "
+                             "Aguarde um minuto e tente novamente.", 429)
         return render_template("erro_simples.html", titulo="Muitas tentativas",
                                mensagem="Você fez muitas requisições em pouco tempo. "
                                         "Aguarde um minuto e tente novamente."), 429

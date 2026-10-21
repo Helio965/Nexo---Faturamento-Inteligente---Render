@@ -70,7 +70,10 @@ class BotInputTests(unittest.TestCase):
             response = self.client.post("/api/suporte-bot", json={"mensagem": "  " + "a" * 1100})
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.get_json()["resposta"], "ok")
-            responder.assert_called_once_with("a" * 1000)
+            # NexoBot Advanced: o contexto opcional é repassado (ausente = None).
+            responder.assert_called_once_with(
+                "a" * 1000, ultimo_destino=None, contexto=None, pagina_atual=None,
+            )
 
     def test_admin_remains_forbidden(self):
         self.client = _login(self.app, _usuario(is_cliente=False))
