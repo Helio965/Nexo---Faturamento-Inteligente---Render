@@ -177,10 +177,13 @@ class Config:
     ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY") or None
     ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-opus-4-8")
 
-    # === NexoBot (suporte) — Hugging Face Inference (gratuito, opcional) ===
-    # Sem o token, o bot usa o fallback determinístico por palavras-chave.
+    # === NexoBot (suporte) — redação opcional via Hugging Face Inference Providers ===
+    # O NexoBot decide tudo localmente (intenção, página, resposta do Guia). Com
+    # o token, um modelo apenas REDIGE respostas a partir de trechos do Guia, pelo
+    # roteador https://router.huggingface.co/v1 (o endpoint antigo foi descontinuado).
+    # Uso cobrado por consumo na conta Hugging Face; sem token, nada é enviado.
     HF_API_TOKEN = os.environ.get("HF_API_TOKEN") or None
-    HF_MODEL = os.environ.get("HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.3")
+    HF_MODEL = os.environ.get("HF_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
 
 
 class DevelopmentConfig(Config):

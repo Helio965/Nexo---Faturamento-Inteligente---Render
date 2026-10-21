@@ -56,7 +56,7 @@ Flask App Factory (app.py)
           ├── insights.py        → Semáforos 5W2H derivados dos KPIs
           ├── ai_devolutiva.py   → Claude (Anthropic) com fallback determinístico
           ├── pdf_export.py      → ReportLab: PDF executivo da análise publicada
-          ├── suporte_bot.py     → NexoBot (Hugging Face + fallback por keywords)
+          ├── suporte_bot.py     → fachada do NexoBot (pacote nexobot/: NLP local + Guia)
           ├── realtime.py        → Salas Socket.IO por usuário (user_<id>)
           ├── notifications.py / emails.py → disparados SEMPRE depois do commit
           └── storage.py         → único ponto de I/O de arquivo (bytes no Postgres)
@@ -90,7 +90,7 @@ Para o detalhamento completo da arquitetura (incluindo diagrama Mermaid do fluxo
 
 **Tempo real e suporte**
 - Notificações via WebSocket (Socket.IO) em sala exclusiva por usuário — sininho da navbar, sem broadcast aberto.
-- **NexoBot:** assistente de suporte com base de conhecimento dinâmica (CMS `guia_topico`, editável pelo Admin), IA opcional via Hugging Face com fallback determinístico por palavras-chave — nunca fica mudo, e auditoria de saída bloqueia respostas vazias/fora de escopo.
+- **NexoBot Advanced:** assistente de navegação e suporte que entende português do Brasil sem depender de IA externa — normalização (acentos, abreviações, erros de digitação), intenções por evidências (ordem × pergunta × negação × comando citado × operação proibida), contexto curto de conversa ("me leva pra lá", "a anterior", "sim"), busca BM25 no Guia (CMS `guia_topico`) e navegação apenas por catálogo fechado de páginas do cliente. Redação opcional via Hugging Face, sempre validada. Detalhes em [`Docs/NEXOBOT_ADVANCED.md`](Docs/NEXOBOT_ADVANCED.md).
 - Central de chamados de suporte (Admin ↔ Cliente).
 
 **Segurança (hardened)**
@@ -143,7 +143,8 @@ nexo_mvp/
 ├── etl_processor.py          # Motor de ETL (leitura adaptativa → sanitização → KPIs → Curva ABC)
 ├── insights.py                # Semáforos executivos 5W2H
 ├── ai_devolutiva.py            # Devolutiva por IA (Claude) + fallback determinístico
-├── suporte_bot.py              # NexoBot (Hugging Face + fallback por keywords)
+├── suporte_bot.py              # Fachada do NexoBot (interface estável)
+├── nexobot/                    # NexoBot Advanced: normalização, intenções, contexto, Guia, decisão
 ├── pdf_export.py               # Exportação executiva em PDF (ReportLab)
 ├── realtime.py                 # Salas Socket.IO por usuário
 ├── notifications.py / emails.py # Disparo de notificações/e-mails (dispatch-after-commit)
@@ -177,7 +178,7 @@ nexo_mvp/
 | E-mail | Flask-Mail (SMTP) |
 | PDF | ReportLab (platypus) |
 | IA — devolutiva | SDK oficial `anthropic` (Claude) |
-| IA — suporte | Hugging Face Inference API (opcional) |
+| IA — suporte | NexoBot local (NLP próprio + BM25 sobre o Guia); redação opcional via Hugging Face Inference Providers |
 | Front-end | Bootstrap 5 + Plotly.js (via CDN) |
 
 Lista completa e versões exatas em [`requirements.txt`](requirements.txt).
@@ -250,7 +251,7 @@ Abra o `.env` e preencha pelo menos:
 - `SECRET_KEY` — string aleatória forte (`python -c "import secrets; print(secrets.token_hex(32))"`).
 - `ADMIN_EMAIL` / `ADMIN_NOME` / `ADMIN_SENHA` — credencial inicial do administrador master.
 
-Todo o resto é **opcional com fail-safe**: sem `ANTHROPIC_API_KEY` a devolutiva usa o gerador local; sem `HF_API_TOKEN` o NexoBot usa o fallback por palavras-chave; sem `MAIL_USERNAME`/`MAIL_PASSWORD` o envio de e-mail é apenas suprimido (logado, sem quebrar o fluxo). Veja a tabela completa de variáveis abaixo.
+Todo o resto é **opcional com fail-safe**: sem `ANTHROPIC_API_KEY` a devolutiva usa o gerador local; sem `HF_API_TOKEN` o NexoBot responde integralmente com o motor local; sem `MAIL_USERNAME`/`MAIL_PASSWORD` o envio de e-mail é apenas suprimido (logado, sem quebrar o fluxo). Veja a tabela completa de variáveis abaixo.
 
 ### 6. Escolher e preparar o banco de dados
 
@@ -354,7 +355,7 @@ Limitações conhecidas do plano free: 512 MB de RAM e 0,1 CPU (ETL e PDF ficam 
 | `RATELIMIT_STORAGE_URI` | Não (default `memory://`) | Backend do rate limiting; use Redis em multi-instância. |
 | `MAIL_SERVER` / `MAIL_PORT` / `MAIL_USE_TLS` / `MAIL_USE_SSL` / `MAIL_USERNAME` / `MAIL_PASSWORD` / `MAIL_DEFAULT_SENDER` | Não (fail-safe) | SMTP para e-mails de ativação/recuperação/publicação. Sem credenciais, o envio é suprimido. |
 | `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | Não (fail-safe) | Geração da devolutiva por IA. Sem chave, usa o fallback determinístico. |
-| `HF_API_TOKEN` / `HF_MODEL` | Não (fail-safe) | NexoBot via Hugging Face. Sem token, usa o fallback por palavras-chave. |
+| `HF_API_TOKEN` / `HF_MODEL` | Não (fail-safe) | Redação opcional das respostas do NexoBot via roteador da Hugging Face (uso cobrado pela HF). Sem token, o NexoBot funciona 100% local. |
 | `BREVO_API_KEY` / `BREVO_API_URL` | Não (fail-safe) | Envio de e-mail pela API HTTPS do Brevo. Com a chave definida, substitui o SMTP (necessário no Render Free, que bloqueia SMTP). |
 | `PROXY_FIX_HOPS` | Não (default `0`) | Nº de proxies reversos confiáveis à frente da app (Render = `1`): IP real do cliente no rate limit e links `https://` nos e-mails. |
 | `RENDER_EXTERNAL_URL` | Automática no Render | URL pública do serviço; é adicionada às origens permitidas do WebSocket. |

@@ -108,7 +108,7 @@ A segurança não é pontual, e sim transversal, aplicada em `@before_request` e
 | **pandas** | Espinha dorsal do ETL: leitura tolerante a sujeira, normalização, agregações vetorizadas e cálculo da Curva ABC (Pareto via `cumsum`/`np.select`). |
 | **openpyxl** | Leitura dos arquivos `.xlsx` exportados dos PDV. |
 | **anthropic (Claude)** | SDK oficial para gerar a devolutiva estratégica (modelo `claude-opus-4-8`), com saída em JSON estruturado e *system prompt* rígido. |
-| **httpx** | Cliente HTTP que consome a Inference API gratuita da Hugging Face no NexoBot (caminho opcional). |
+| **httpx** | Cliente HTTP (dependência do SDK `anthropic`) usado pela redação opcional do NexoBot via roteador da Hugging Face. |
 | **reportlab** | Geração do PDF profissional da análise executiva (platypus: tabelas, semáforos, Curva ABC). |
 
 ### 2.4. Front-end (via CDN, sem etapa de build)
@@ -172,10 +172,12 @@ Complementarmente, o `insights.py` traduz os mesmos KPIs em **cards-semáforo (5
 
 ### 3.6. Bot de Suporte (NexoBot)
 
-Assistente de chat (`suporte_bot.py`) restrito ao **uso do portal**, com a mesma filosofia *fail-safe* da IA:
+Assistente de navegação e suporte (fachada `suporte_bot.py`, implementação no pacote `nexobot/` — **NexoBot Advanced**) restrito ao **uso do portal**:
 
-- **Caminho primário (opcional):** se houver token, consulta a Inference API gratuita da Hugging Face, alimentando o modelo com a Base de Conhecimento como contexto. A resposta passa por **auditoria de escopo** (termos proibidos/vazia → descartada).
-- **Fallback determinístico:** sempre disponível, pontua os tópicos da Base de Conhecimento por **interseção de palavras-chave** e devolve o mais relevante; trata saudações e pedidos de atendimento humano (orientando a abrir chamado). O bot **nunca fica mudo**.
+- **Motor local, sempre ativo:** normalização do português (acentos, abreviações, erros de digitação), classificação de intenções por evidências (ordem, pergunta, negação, comando citado, operação proibida), contexto curto da conversa e busca BM25 na Base de Conhecimento. Navega apenas por um **catálogo fechado** de páginas do cliente, com URLs geradas por `url_for()`.
+- **Redação opcional por IA:** com `HF_API_TOKEN`, um modelo do roteador da Hugging Face apenas reescreve a resposta a partir de trechos do Guia já escolhidos localmente; a saída é validada e nunca define ações. Sem token ou em qualquer falha, vale a resposta local.
+
+Detalhes, contrato da API, testes e medições em [`NEXOBOT_ADVANCED.md`](NEXOBOT_ADVANCED.md).
 
 Como bot e aba Guia leem da **mesma tabela** (`guia_topico`, gerenciada pelo admin no CMS), a base de respostas é única e mantida sem alterar código.
 
