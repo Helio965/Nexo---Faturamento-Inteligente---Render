@@ -68,7 +68,8 @@ def _enviar_async(app, msg: Message) -> None:
                 _enviar_brevo(app, msg)
             else:
                 mail.send(msg)
-            logger.info("E-mail transacional enviado.")
+            # Aceitação do SMTP/API não confirma a entrega ao destinatário.
+            logger.info("E-mail transacional aceito pelo transporte.")
         except Exception as e:  # noqa: BLE001
             logger.warning("Falha ao enviar e-mail (%s).", type(e).__name__)
 
@@ -88,10 +89,15 @@ def enviar_email(destinatarios, assunto: str, template: str, **ctx) -> bool:
         logger.info("MAIL inativo (sem credenciais) — envio suprimido.")
         return False
 
-    html = render_template(f"emails/{template}", **ctx)
-    msg = Message(subject=assunto, recipients=destinatarios, html=html)
-    app = current_app._get_current_object()
-    threading.Thread(target=_enviar_async, args=(app, msg), daemon=True).start()
+    try:
+        html = render_template(f"emails/{template}", **ctx)
+        msg = Message(subject=assunto, recipients=destinatarios, html=html)
+        app = current_app._get_current_object()
+        threading.Thread(target=_enviar_async, args=(app, msg), daemon=True).start()
+    except Exception as erro:  # noqa: BLE001
+        # A falha de agendamento também é fail-safe; não publicar conteúdo/URLs.
+        logger.warning("Falha ao agendar e-mail (%s).", type(erro).__name__)
+        return False
     return True
 
 

@@ -25,6 +25,7 @@ from sqlalchemy.engine import Engine
 
 from config import config_by_name
 from extensions import db, login_manager, migrate, mail, socketio, csrf, limiter
+from log_security import install_token_log_redaction
 
 
 def _set_sqlite_pragma(dbapi_connection, connection_record):
@@ -122,6 +123,15 @@ def create_app(config_name: str = None) -> Flask:
         level=logging.INFO if not app.debug else logging.DEBUG,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     )
+    install_token_log_redaction()
+
+    @app.after_request
+    def _proteger_resposta_token(resposta):
+        # O bearer fica no caminho da URL: não propagar como Referer nem cachear.
+        if request.path.startswith(("/auth/resetar-senha/", "/auth/primeiro-acesso/")):
+            resposta.headers["Referrer-Policy"] = "no-referrer"
+            resposta.headers["Cache-Control"] = "no-store"
+        return resposta
 
     # Registra user loader do Flask-Login
     # (Necessário aqui porque depende do modelo Usuario)
