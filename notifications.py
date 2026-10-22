@@ -15,10 +15,14 @@ Gatilhos atuais:
 import logging
 from datetime import datetime
 
-from sqlalchemy import select
+from flask import has_app_context
+from sqlalchemy import event, select
+from sqlalchemy.orm import Session
 
 from extensions import db, socketio
 from models import Notificacao, Usuario
+from session_security import impressao_sessao
+from realtime import sala_do_usuario
 
 logger = logging.getLogger(__name__)
 
@@ -42,34 +46,107 @@ def classificar_notificacao(texto: str) -> dict:
 
 
 def _emitir_tempo_real(id_usuario: int, n: Notificacao) -> None:
-    """
-    Emite o evento WebSocket 'nova_notificacao' para a sala do usuário-alvo.
-    Falha de emit NUNCA quebra o fluxo de negócio (apenas loga). O badge do
-    sininho é sempre reconciliado pelo banco no próximo carregamento de página,
-    então uma eventual emissão perdida se autocorrige.
-    """
-    try:
-        badge = classificar_notificacao(n.texto)
+    """Enfileira payload sem ORM; só o COMMIT externo autoriza sua entrega."""
+    badge = classificar_notificacao(n.texto)
+    payload = {
+        "id": n.id_notificacao, "texto": n.texto,
+        "link": n.link_destino or "",
+        "hora": datetime.now().strftime("%d/%m %H:%M"),
+        "badge": badge["tipo"], "badge_rotulo": badge["rotulo"],
+    }
+    db.session.info.setdefault("nexo_notificacoes_pendentes", []).append((id_usuario, payload))
+
+
+def _entregar_tempo_real(bind, id_usuario, payload):
+    # A transação que criou a notificação já terminou. A sessão independente
+    # evita consultar uma sessão committed ou bloquear o próprio chamador.
+    # FOR SHARE mantém a credencial vigente até enfileirar o pacote; o UPDATE
+    # de senha só pode confirmar depois, ou será visto por esta consulta.
+    with Session(bind=bind) as consulta:
+        usuario = consulta.scalar(select(Usuario).where(
+            Usuario.id_usuario == id_usuario,
+        ).with_for_update(read=True))
+        if (usuario is None or not usuario.ativo
+                or usuario.role not in ("ADMIN", "CLIENTE")
+                or (usuario.role == "CLIENTE" and usuario.primeiro_acesso)):
+            return
         socketio.emit(
-            "nova_notificacao",
-            {
-                "id": n.id_notificacao,
-                "texto": n.texto,
-                "link": n.link_destino or "",
-                "hora": datetime.now().strftime("%d/%m %H:%M"),
-                "badge": badge["tipo"],
-                "badge_rotulo": badge["rotulo"],
-            },
-            room=f"user_{id_usuario}",
+            "nova_notificacao", payload,
+            room=sala_do_usuario(id_usuario, impressao_sessao(usuario)),
+            namespace="/",
         )
-    except Exception as e:  # noqa: BLE001
-        logger.warning("Falha ao emitir notificação em tempo real: %s", e)
+
+
+def _apos_commit_notificacoes(sessao):
+    # after_commit ainda retém a conexão original. Apenas marcar o COMMIT;
+    # a entrega precisa esperar after_transaction_end liberar essa conexão.
+    if not sessao.in_nested_transaction():
+        sessao.info["nexo_notificacoes_commit_confirmado"] = True
+
+
+def _despachar_notificacoes(sessao, pendentes):
+    if not pendentes:
+        return
+    if not has_app_context():
+        logger.warning("Notificação em tempo real sem contexto de aplicação; entrega descartada.")
+        return
+    bind = sessao.get_bind()
+    for id_usuario, payload in pendentes:
+        try:
+            _entregar_tempo_real(bind, id_usuario, payload)
+        except Exception as erro:  # negócio já confirmado; não anunciar falha dele
+            logger.warning("Entrega de notificação indisponível (%s).", type(erro).__name__)
+
+
+def _inicio_transacao_notificacoes(sessao, transacao):
+    if transacao.nested:
+        # SAVEPOINT reverte só os payloads criados desde sua abertura.
+        sessao.info.setdefault("nexo_notificacoes_checkpoints", {})[id(transacao)] = len(
+            sessao.info.get("nexo_notificacoes_pendentes", []),
+        )
+
+
+def _apos_rollback_notificacoes(sessao):
+    transacao = sessao.get_nested_transaction()
+    if transacao is None:
+        sessao.info.pop("nexo_notificacoes_pendentes", None)
+        sessao.info.pop("nexo_notificacoes_checkpoints", None)
+        sessao.info.pop("nexo_notificacoes_commit_confirmado", None)
+        return
+    inicio = sessao.info.get("nexo_notificacoes_checkpoints", {}).pop(id(transacao), 0)
+    pendentes = sessao.info.get("nexo_notificacoes_pendentes", [])
+    del pendentes[inicio:]
+
+
+def _fim_transacao_notificacoes(sessao, transacao):
+    if transacao.nested:
+        sessao.info.get("nexo_notificacoes_checkpoints", {}).pop(id(transacao), None)
+    elif transacao.parent is None:
+        # A conexão original já foi devolvida ao pool. Abrir a sessão de
+        # entrega aqui funciona também com pool_size=1 / max_overflow=0.
+        # Session.close sem COMMIT apenas descarta os payloads pendentes.
+        confirmado = sessao.info.pop("nexo_notificacoes_commit_confirmado", False)
+        pendentes = sessao.info.pop("nexo_notificacoes_pendentes", [])
+        sessao.info.pop("nexo_notificacoes_checkpoints", None)
+        if confirmado:
+            _despachar_notificacoes(sessao, pendentes)
+
+
+# Importar o módulo repetidamente não registra callbacks adicionais.
+if not event.contains(Session, "after_commit", _apos_commit_notificacoes):
+    event.listen(Session, "after_commit", _apos_commit_notificacoes)
+if not event.contains(Session, "after_rollback", _apos_rollback_notificacoes):
+    event.listen(Session, "after_rollback", _apos_rollback_notificacoes)
+if not event.contains(Session, "after_transaction_create", _inicio_transacao_notificacoes):
+    event.listen(Session, "after_transaction_create", _inicio_transacao_notificacoes)
+if not event.contains(Session, "after_transaction_end", _fim_transacao_notificacoes):
+    event.listen(Session, "after_transaction_end", _fim_transacao_notificacoes)
 
 
 def criar_notificacao(id_usuario: int, texto: str, link_destino: str | None = None) -> Notificacao:
     """
-    Cria UMA notificação (add na sessão, sem commit) e dispara o evento em
-    tempo real. O flush garante o id_notificacao para o payload do socket.
+    Cria UMA notificação e agenda o evento para depois do commit externo.
+    O flush garante o id_notificacao para o payload do socket.
     """
     n = Notificacao(id_usuario=id_usuario, texto=texto, link_destino=link_destino)
     db.session.add(n)

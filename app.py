@@ -18,7 +18,7 @@ import secrets
 import logging
 from pathlib import Path
 
-from flask import Flask, redirect, url_for, render_template, session, request, abort, make_response
+from flask import Flask, redirect, url_for, render_template, session, request, abort, make_response, g
 from flask_login import current_user, logout_user, login_required
 from sqlalchemy import event, text
 from sqlalchemy.engine import Engine
@@ -116,7 +116,8 @@ def create_app(config_name: str = None) -> Flask:
     # Rate limiting (limites explícitos por rota via decorator).
     limiter.init_app(app)
     # Registra os handlers de WebSocket (connect/disconnect → salas por usuário).
-    import realtime  # noqa: F401
+    import realtime
+    realtime.inicializar_realtime(app)
 
     # Configura logging básico
     logging.basicConfig(
@@ -136,11 +137,20 @@ def create_app(config_name: str = None) -> Flask:
     # Registra user loader do Flask-Login
     # (Necessário aqui porque depende do modelo Usuario)
     from models import Usuario
+    from sqlalchemy.exc import SQLAlchemyError
+    from session_security import carregar_usuario, sessao_valida
 
     @login_manager.user_loader
     def load_user(user_id: str):
-        # Usuario.id_usuario é INTEGER; Flask-Login passa como string.
-        return db.session.get(Usuario, int(user_id))
+        # Identificador inválido não deve causar 500. O snapshot do banco
+        # é recarregado em cada request, sem confiar no identity map antigo.
+        try:
+            return carregar_usuario(user_id)
+        except SQLAlchemyError as erro:
+            db.session.rollback()
+            g.falha_banco_autenticacao = True
+            app.logger.warning("Autenticação indisponível (%s).", type(erro).__name__)
+            return None
 
     @app.before_request
     def _guard_sessao():
@@ -156,15 +166,19 @@ def create_app(config_name: str = None) -> Flask:
         """
         if request.endpoint == "static":
             return
-        if current_user.is_authenticated:
-            # 1) Sessão de um boot anterior do servidor → derruba.
-            if session.get("boot_id") != app.config["BOOT_ID"]:
-                logout_user()
-                session.clear()
-            # 2) Conta desativada no meio da sessão (ex.: empresa movida para a
-            #    lixeira desativa seus usuários) → encerra a sessão na hora, sem
-            #    esperar um restart do servidor.
-            elif not current_user.is_active:
+        autenticado = current_user.is_authenticated
+        if getattr(g, "falha_banco_autenticacao", False):
+            logout_user()
+            session.clear()
+            mensagem = "Autenticação temporariamente indisponível. Tente novamente."
+            if request.path.startswith("/api/"):
+                return {"erro": mensagem}, 503
+            return render_template("erro_simples.html", titulo="Serviço indisponível",
+                                   mensagem=mensagem), 503
+        if autenticado:
+            # BOOT_ID, conta ativa e fingerprint da credencial são conferidos
+            # juntos. Cookie legado sem fingerprint também exige novo login.
+            if not sessao_valida(current_user):
                 logout_user()
                 session.clear()
         elif "_user_id" in session:
