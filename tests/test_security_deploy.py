@@ -157,7 +157,10 @@ class SensitiveLogTests(unittest.TestCase):
     def test_reset_link_and_email_do_not_enter_logs(self):
         app = _app()
         app.register_blueprint(auth.auth_bp, url_prefix="/auth")
-        usuario = SimpleNamespace(email="synthetic@example.invalid", ativo=True)
+        usuario = SimpleNamespace(
+            email="synthetic@example.invalid", ativo=True, id_usuario=1,
+            senha_hash="synthetic-credential-state", role="CLIENTE", primeiro_acesso=False,
+        )
         fake_db = SimpleNamespace(session=MagicMock())
         fake_db.session.execute.return_value.scalar_one_or_none.return_value = usuario
         with app.test_request_context("/auth/recuperar-senha", method="POST", data={"email": usuario.email}):

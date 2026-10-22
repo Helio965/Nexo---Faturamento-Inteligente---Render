@@ -373,7 +373,7 @@ def empresa_nova():
         link_definir = None
         try:
             from blueprints.auth import gerar_token_definir_senha
-            token = gerar_token_definir_senha(novo_user.email)
+            token = gerar_token_definir_senha(novo_user)
             link_definir = url_for("auth.ativar_acesso", token=token, _external=True)
             current_app.logger.info("Link de ativação gerado para o novo cadastro.")
             email_boas_vindas(novo_user, link_definir)
