@@ -8,13 +8,16 @@ from unittest.mock import MagicMock, patch
 
 from flask import Flask, get_flashed_messages
 from flask_login import LoginManager
-from flask_socketio import SocketIO
 from PIL import Image
 from sqlalchemy.exc import IntegrityError
 from werkzeug.datastructures import FileStorage
 
 from blueprints import admin, api, auth
+from extensions import db, socketio
+from models import Usuario
+from tests import test_auth_tokens_security as token_cases
 import realtime
+import session_security
 
 
 def _app():
@@ -81,13 +84,22 @@ class BotInputTests(unittest.TestCase):
         self.assertEqual(response.status_code, 403)
 
 
-class SocketSessionTests(unittest.TestCase):
+class SocketSessionTests(token_cases._TokenCase):
     def _connect(self, usuario, boot_id="test-boot"):
-        app = _app()
-        client = _login(app, usuario, boot_id)
-        socket = SocketIO(app, async_mode="threading")
-        socket.on_event("connect", realtime._on_connect)
-        connection = socket.test_client(app, flask_test_client=client)
+        client = self.app.test_client()
+        if usuario is not None:
+            with self.app.app_context():
+                stored = db.session.get(Usuario, self.ids["active"])
+                stored.ativo = usuario.is_active
+                stored.primeiro_acesso = usuario.primeiro_acesso
+                db.session.commit()
+                fingerprint = session_security.impressao_sessao(stored)
+                with client.session_transaction() as session:
+                    session["_user_id"] = str(stored.id_usuario)
+                    session["_fresh"] = True
+                    session["boot_id"] = self.app.config["BOOT_ID"] if boot_id == "test-boot" else boot_id
+                    session[session_security.CHAVE_CREDENCIAL] = fingerprint
+        connection = socketio.test_client(self.app, flask_test_client=client)
         connected = connection.is_connected()
         if connected:
             connection.disconnect()
