@@ -1,0 +1,88 @@
+name: NEXO Security CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexo-security-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PYTHONDONTWRITEBYTECODE: "1"
+  PYTHONUTF8: "1"
+  FLASK_ENV: development
+  SECRET_KEY: synthetic-ci-only-not-production
+  DATABASE_URL: "sqlite:///:memory:"
+  DIRECT_URL: ""
+  NEXO_DB_DIRECT: "0"
+  BREVO_API_KEY: ""
+  MAIL_USERNAME: ""
+  MAIL_PASSWORD: ""
+  ANTHROPIC_API_KEY: ""
+  HF_API_TOKEN: ""
+
+jobs:
+  sqlite-browser:
+    name: security-sqlite-browser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Ferramentas de PDF e PostgreSQL descartavel
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends poppler-utils postgresql postgresql-client
+          pg_bin="$(pg_config --bindir)"
+          test -x "$pg_bin/initdb"
+          test -x "$pg_bin/pg_dump"
+          echo "NEXO_TEST_POSTGRES_BIN=$pg_bin" >> "$GITHUB_ENV"
+      - name: Dependencias declaradas de teste
+        run: python -m pip install -r requirements-dev.txt
+      - name: Chromium de teste
+        run: python -m playwright install --with-deps chromium
+      - name: Suite completa, navegador e ensaio de backup
+        env:
+          NEXO_TEST_BROWSER: "1"
+        run: python -B -m unittest discover -s tests -t . -v
+
+  postgresql-security:
+    name: security-postgresql
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Python 3.12
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Binarios para o servico PostgreSQL isolado
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends postgresql postgresql-client
+          pg_bin="$(pg_config --bindir)"
+          test -x "$pg_bin/initdb"
+          echo "NEXO_TEST_POSTGRES_BIN=$pg_bin" >> "$GITHUB_ENV"
+          "$pg_bin/postgres" --version
+      - name: Dependencias declaradas de teste
+        run: python -m pip install -r requirements-dev.txt
+      - name: Tokens e concorrencia no PostgreSQL real
+        run: python -B -m unittest tests.postgresql_auth_tokens -v
+      - name: Sessoes e corridas de notificacao no PostgreSQL real
+        run: python -B -m unittest tests.postgresql_session_revocation -v

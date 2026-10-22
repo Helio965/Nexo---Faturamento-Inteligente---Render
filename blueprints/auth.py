@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
-from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app, has_request_context
 from flask_login import login_user, logout_user, login_required, current_user
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadData
 from sqlalchemy import select, update
@@ -15,6 +15,10 @@ from werkzeug.security import generate_password_hash
 from extensions import db, limiter
 from models import Usuario
 from emails import email_recuperacao_senha, email_boas_vindas
+from session_security import (
+    CHAVE_CREDENCIAL, impressao_sessao, impressao_credencial_sessao,
+    mesma_impressao, registrar_sessao,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -160,7 +164,7 @@ def _ler_token_ativacao(token: str):
     return _ler_token_senha(token, _ATIVACAO)
 
 
-def _atualizar_credencial(estado: _CredencialEsperada, nova_senha: str) -> bool:
+def _atualizar_credencial(estado: _CredencialEsperada, nova_senha: str, *, renovar_sessao=False) -> bool:
     """CAS transacional: só uma requisição substitui a credencial esperada.
 
     O hash salgado muda mesmo ao escolher a mesma senha. No PostgreSQL em
@@ -185,11 +189,33 @@ def _atualizar_credencial(estado: _CredencialEsperada, nova_senha: str) -> bool:
         if resultado.rowcount != 1:
             db.session.rollback()
             return False
+        renovar_cliente = (
+            renovar_sessao and has_request_context()
+            and session.get("_user_id") == str(estado.id_usuario)
+            and session.get("boot_id") == current_app.config["BOOT_ID"]
+            and mesma_impressao(impressao_sessao(estado), session.get(CHAVE_CREDENCIAL))
+        )
         db.session.commit()
-        return True
     except SQLAlchemyError as erro:
         _falha_banco_senha(erro)
         return False
+
+    # Usar o hash que esta operação confirmou, nunca refresh de uma senha
+    # posterior alterada por outra requisição entre commit e renovação.
+    impressao_atual = impressao_credencial_sessao(estado.id_usuario, novo_hash)
+    if renovar_cliente:
+        registrar_sessao(estado, impressao_esperada=impressao_atual)
+    try:
+        from realtime import revogar_conexoes_usuario
+        revogar_conexoes_usuario(
+            estado.id_usuario, impressao_atual,
+            impressao_revogada=impressao_sessao(estado),
+        )
+    except Exception as erro:
+        # Senha já confirmada: falha de transporte não muda seu resultado.
+        # Salas por geração continuam negando dados aos sockets antigos.
+        logger.warning("Revogação Socket.IO indisponível (%s).", type(erro).__name__)
+    return True
 
 
 def _validar_nova_senha(nova: str, confirma: str):
@@ -224,6 +250,9 @@ def login():
 
         # Valida o utilizador e a senha (usando o método check_senha definido no Model)
         if usuario and usuario.check_senha(senha):
+            # Capturar a credencial cuja senha foi verificada antes de criar
+            # a sessão; nunca adotar um hash posterior por refresh do ORM.
+            impressao_login = impressao_sessao(usuario)
             if not usuario.ativo:
                 flash("Esta conta está desativada. Contacte o administrador.", "danger")
                 return render_template("auth/login.html")
@@ -232,7 +261,7 @@ def login():
             # navegador). Carimba a sessão com o BOOT_ID atual para que um
             # restart do servidor invalide o login automaticamente.
             login_user(usuario, remember=False)
-            session["boot_id"] = current_app.config["BOOT_ID"]
+            registrar_sessao(usuario, impressao_esperada=impressao_login)
 
             # Trata o redirecionamento caso o utilizador tenha tentado aceder a uma
             # página protegida antes. Só aceitamos destinos LOCAIS (anti open redirect).
@@ -282,7 +311,7 @@ def primeiro_acesso():
             return render_template("auth/primeiro_acesso.html")
 
         estado = _estado_credencial(current_user)
-        if not _atualizar_credencial(estado, nova):
+        if not _atualizar_credencial(estado, nova, renovar_sessao=True):
             flash("Não foi possível definir a senha. Faça login ou solicite um novo link.", "danger")
             return redirect(url_for("auth.login"))
         flash("Senha definida com sucesso. Bem-vindo(a) ao NEXO!", "success")

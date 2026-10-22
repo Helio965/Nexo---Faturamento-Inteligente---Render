@@ -370,20 +370,21 @@ def empresa_nova():
         # Insert confirmado → e-mail de boas-vindas com LINK SEGURO de definição
         # de senha (token de 15 min), DIRETO pelo Flask (sem webhook externo).
         # Envio assíncrono e fail-safe; nunca derruba o cadastro.
-        link_definir = None
+        agendado = False
         try:
             from blueprints.auth import gerar_token_definir_senha
             token = gerar_token_definir_senha(novo_user)
             link_definir = url_for("auth.ativar_acesso", token=token, _external=True)
             current_app.logger.info("Link de ativação gerado para o novo cadastro.")
-            email_boas_vindas(novo_user, link_definir)
+            agendado = email_boas_vindas(novo_user, link_definir)
         except Exception as e:  # noqa: BLE001
             current_app.logger.warning("Falha ao agendar e-mail de boas-vindas: %s", type(e).__name__)
 
-        # Sem SMTP configurado (dev): mostra o link ao admin para teste/repasse manual.
-        if link_definir and not current_app.config.get("MAIL_ATIVO") and current_app.debug:
-            flash(f"[Modo simulação · SMTP não configurado] Link de ativação do cliente: {link_definir}", "info")
-        flash(f"Empresa '{nova_emp.razao_social}' cadastrada. Enviamos ao cliente um link para definir a senha.", "success")
+        flash(f"Empresa '{nova_emp.razao_social}' cadastrada.", "success")
+        if agendado:
+            flash("O e-mail de ativação foi agendado. A entrega depende do serviço de e-mail.", "info")
+        else:
+            flash("Não foi possível agendar o e-mail de ativação. O cliente pode solicitar um novo link pela recuperação de senha.", "warning")
         return redirect(url_for("admin.empresas"))
 
     return render_template("admin/empresa_form.html", empresa=None, planos=planos, segmentos=segmentos)
