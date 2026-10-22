@@ -119,9 +119,23 @@ O serviço PostgreSQL é iniciado e removido pelos testes, somente em socket Uni
 privado. Não há contêiner ou DSN externo redundante. A dependência Playwright é
 fixada apenas em requirements-dev.txt; requirements.txt permanece preservado.
 
-Estado de execução real: **ainda não confirmado nesta versão inicial do relatório**.
-A criação da PR e a consulta aos runs são a próxima verificação. Não considerar
-o CI operacional até haver execução real aprovada e link registrado aqui.
+Execução real **concluída com sucesso** na PR #12:
+[run 39705086856](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/39705086856),
+head `bb8578818cedf7da5bfc48a8c4469fc7143e1e8b`, evento pull_request.
+`security-postgresql` passou em 76 s e `security-sqlite-browser` em 135 s.
+Ambos os jobs e suas etapas obrigatórias de testes foram executados com sucesso,
+sem jobs marcados como skipped. A atualização deste
+relatório apenas registra a evidência; código e workflow desse run são a
+referência validada. A disponibilidade permanente para main/futuras PRs depende
+da integração autorizada do workflow. Nenhum merge foi feito para habilitá-la.
+
+O download dos logs retornou Forbidden 403 no armazenamento de logs; sem
+cabeçalhos disponíveis não foi possível classificar proxy versus serviço.
+Não houve liberação de domínio ou tentativa de contorno. A API de run/job/step
+confirma o sucesso e os tempos, mas as contagens e a versão PostgreSQL do runner
+não foram extraídas. As contagens/versão apresentadas nas outras seções são das
+execuções locais, não são atribuídas à CI sem leitura dos logs. O proprietário
+pode consultar a interface do run para auditoria adicional.
 
 ## ETAPA 6 - PROTEÇÃO DO REPOSITÓRIO
 
@@ -165,12 +179,12 @@ atual do Supabase. Acesso, backup real, merge e deploy exigem autorizações pr�
 | Tokens específicos inicial | SQLite sintético | 36/36 aprovados, 3,874 s | SEC-002 preservada |
 | Tokens PostgreSQL final | PG 17.11 descartável | 37/37 aprovados, 6,451 s | módulo postgresql_auth_tokens |
 | E-mail/logs + regressões focadas | Transporte simulado | 75/75 aprovados, 5,055 s | 20 novos + 55 existentes |
-| Browser antes ignorado | Playwright 1.56.0/Chromium | 11/11 aprovados, 17,642 s | teste_nexobot_navegador |
+| Browser antes ignorado | Playwright 1.56.0/Chromium | 11/11 aprovados, 17,642 s | test_nexobot_navegador |
 | Backup antes ignorado | PG 17.11 descartável | 1/1 aprovado, 1,916 s | production_access=false |
 | SEC-003 focada | SQLite | 41/41 aprovados, 5,236 s | PR #11 |
 | SEC-003 PostgreSQL | PG 17.11 descartável | 41/41 aprovados, 8,376 s | quatro corridas + pool1 |
 | Regressão final integrada | SQLite/browser/backup | 315/315 aprovados, zero skips/falhas, 64,130 s | execução local da branch SEC-003 |
-| GitHub Actions | Runner GitHub | Não confirmado nesta versão inicial | ver seção CI |
+| GitHub Actions | Ubuntu/Python 3.12 | Ambos os jobs aprovados, 76 s / 135 s | [run real](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/39705086856) |
 | E-mail real entregue | Provedor externo | Não executado: destinatário/ambiente autorizado ausente | procedimento documentado |
 | Render/painel/health real | Produção | Bloqueado por acesso externo ausente | não inferido do YAML |
 | Supabase real | Produção | Não executado, fora da autorização | nenhum acesso/migração |
@@ -188,7 +202,7 @@ ignorados. PostgreSQL explícito fica fora do discovery SQLite e é job obrigat�
 | --- | --- | --- | --- | --- |
 | Homologação SEC-002/e-mails/logs | security/sec-002-homologacao | b728fe05284803e3e7999364a78a0fc3c78bde4f | [#10](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/10) | Rascunho aberto, base main |
 | SEC-003 | security/sec-003-session-revocation | c9b1f312659bc1c83387499b1d930d6c339ddd79 | [#11](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/11) | Rascunho aberto, base branch #10 |
-| CI/proteção/publicação | infra/nexo-security-ci | Ver HEAD da PR de CI | Criação pendente nesta versão inicial | Base branch #11 |
+| CI/proteção/publicação | infra/nexo-security-ci | bb8578818cedf7da5bfc48a8c4469fc7143e1e8b + atualização documental de evidências | [#12](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/12) | Rascunho aberto, base branch #11, CI aprovado |
 
 Revisar #10, depois #11 e por último CI. Após integração autorizada de uma base,
 ajustar a base da PR seguinte para main e conferir o diff; nenhuma branch deve
@@ -198,9 +212,9 @@ schema, configurações de produção e funcionalidades comerciais foram preserv
 
 ## Prontidão e intervenções pendentes
 
-Código e testes locais permitem revisão das frentes implementadas. Publicação
-de produção continua condicionada a CI real aprovado, revisão e autorização
-dos merges, verificação do Render/SHA/auto deploy, e-mails/domínio/HTTPS/logs
+Código, testes locais e CI real aprovado permitem revisão das frentes implementadas.
+Publicação de produção continua condicionada a revisão e autorização
+dos merges, checks aprovados no candidato, verificação do Render/SHA/auto deploy, e-mails/domínio/HTTPS/logs
 externos, backup real autorizado e homologação operacional com conta controlada.
 
 Limites: dados autorizados/enfileirados antes do commit podem estar em trânsito;
@@ -210,3 +224,21 @@ worker: múltiplas instâncias exigem broker, BOOT_ID e rate limiting compartilh
 e testes próprios. SQLite não comprova locks PostgreSQL.
 
 Nenhum serviço em produção foi declarado atualizado ou pronto sem acesso.
+
+## Estado dos requisitos finais
+
+| Requisito | Estado comprovado |
+| --- | --- |
+| SEC-001/002 incorporadas e preservadas | Concluído, main/PRs #8/#9 verificadas e testes aprovados |
+| SEC-002 PostgreSQL, uso único e concorrência | Concluído em PG descartável, 37/37 |
+| Fluxos de e-mail e transição v1 | Concluído com transporte simulado; entrega real pendente externa |
+| SEC-003, cookies HTTP e sockets antigos | Implementado e testado nas PRs, 41/41 focados e 41/41 PG |
+| Suíte existente, novas regressões e autenticação | Executadas, 315/315 na versão integrada |
+| Skips | 12 na linha de base, todos posteriormente executados; zero na regressão ampliada |
+| GitHub Actions | Configurado e executado com sucesso na PR #12; ainda não incorporado à main |
+| Proteção da main e plano | Verificados; aplicação de regras bloqueada por permissão/plano externo |
+| PRs e ausência de merge | #10/#11/#12 confirmadas em rascunho; nenhum merge realizado |
+| Render e versão publicada | Não verificáveis sem acesso conectado ao serviço real |
+| Plano de deploy, validação e rollback | Preparado, com critérios de interrupção e autorizações |
+| Produção e Supabase | Não alterados; nenhum deploy/migração/acesso a dados reais |
+| Relatório, evidências e riscos | Documentados nesta PR e nos documentos específicos |

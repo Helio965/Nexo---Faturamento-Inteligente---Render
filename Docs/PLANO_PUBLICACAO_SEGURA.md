@@ -40,7 +40,7 @@ Não há ferramenta Render autorizada conectada na sessão. A busca de ferrament
 | Auto deploy efetivo do painel | Não verificado. O arquivo versionado não prova o estado do painel. |
 | Health check real | Não executado: URL do serviço real não foi identificada por fonte verificável. |
 | YAML versionado | `branch: main`, `autoDeployTrigger: 'off'`, build `pip install -r requirements.txt`, `/healthz`, Gunicorn com 1 worker e 50 threads. |
-| Ensaio de backup/restore | Existe teste isolado opt-in em `tests/test_backup_restore.py`; resultado desta execução deve ser preenchido a partir dos testes efetivamente rodados pela equipe. Não comprova backup do Supabase. |
+| Ensaio de backup/restore | Executado em PostgreSQL 17.11 descartável: 1/1 aprovado em 1,916 s, 15 tabelas, quatro uploads, cinco arquivos e production_access=false; também aprovado na regressão completa. Não comprova backup do Supabase. |
 
 O `wsgi.py` explica que salas Socket.IO e rate limiting são locais ao processo; a arquitetura versionada usa um worker com threads. Não presumir que esse estado de memória atende múltiplas instâncias. A nova SEC-003 precisa manter a autoridade no banco e definir proteção das emissões, não somente o handshake.
 
@@ -84,3 +84,11 @@ Preferir correção adiante quando reverter reabrir falha de segurança. Antes d
 | Backup/migração/recuperação real Supabase | Autorização específica e plano próprio; não realizado. |
 
 Fontes lidas: `render.yaml`, `wsgi.py`, `README.md`, `Docs/PREPARACAO_RENDER.md`, `Docs/OPERACAO_BACKUP_RESTAURACAO.md`, `tests/test_backup_restore.py`; respostas GET da API GitHub acima.
+
+## Referências preparadas nesta tarefa
+
+Homologação: PR #10, commit `b728fe0`. Revogação: PR #11, commit `c9b1f31`.
+CI/documentação: PR #12, commit inicial `bb85788`. As bases estão encadeadas;
+esses commits não foram incorporados à main por esta tarefa. A referência final
+de publicação só deve ser escolhida após revisão/merges autorizados, CI aprovado
+e identificação do serviço real. Nenhuma dessas PRs autoriza deploy.

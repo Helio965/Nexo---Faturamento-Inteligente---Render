@@ -101,3 +101,15 @@ falhas antes de repetir e registrar os links e as contagens no relatório final.
 Validar os nomes de checks efetivamente registrados antes de preparar regras
 obrigatórias da `main`. A existência deste workflow não configura proteção de
 branch nem autoriza merge ou deploy.
+
+Primeira execução real confirmada:
+[39705086856](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/39705086856),
+PR #12, head `bb8578818cedf7da5bfc48a8c4469fc7143e1e8b`: ambos os checks
+concluíram com sucesso. PostgreSQL levou 76 s e SQLite/browser 135 s. O relatório
+de conclusão registra os detalhes. O workflow permanece em PR; disponibilizá-lo
+na main/futuras PRs exige revisão e integração autorizada.
+
+Nesta sessão, a API confirmou jobs/etapas aprovados, mas baixar os logs retornou
+403 Forbidden. A origem desse 403 não foi comprovada por cabeçalhos; nenhum
+controle foi contornado. Contagens locais e PostgreSQL 17.11 local são evidências
+separadas: a contagem/versão específica do runner não foi extraída dos logs.
