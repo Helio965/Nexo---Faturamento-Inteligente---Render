@@ -21,8 +21,8 @@ Os nomes estáveis dos checks são:
 | `security-postgresql` | Tokens, consumo único, concorrência, erros transacionais e revogação de sessões/notificações em PostgreSQL real. |
 
 Ambos usam Ubuntu 24.04, Python 3.12 e as dependências declaradas em
-`requirements-dev.txt`. Playwright 1.56.0 é exclusivamente de desenvolvimento;
-`requirements.txt` de produção permanece preservado. Chromium é instalado no
+`requirements-dev.txt`. Playwright 1.56.0 é exclusivamente de desenvolvimento.
+O instalador compartilhado `tools/install_dependencies.py` prepara pip 26.2.2 a partir do wheel oficial com SHA256 fixo, confirma a versão efetiva e só então instala os requisitos. Configurações pip herdadas e índices adicionais são excluídos; proxy e TLS permanecem ativos. Chromium é instalado no
 runner pelo comando oficial do Playwright. `poppler-utils` habilita a inspeção
 do texto PDF; o APT fornece os binários PostgreSQL da distribuição.
 
@@ -71,7 +71,7 @@ registrada como bloqueio, sem converter uma execução ausente em aprovação.
 Em uma virtualenv de teste, sem credenciais de produção:
 
 ```bash
-python -m pip install -r requirements-dev.txt
+python -I tools/install_dependencies.py --requirements requirements-dev.txt
 python -m pip check
 python -m playwright install chromium
 export NEXO_TEST_POSTGRES_BIN=/caminho/absoluto/postgresql/bin

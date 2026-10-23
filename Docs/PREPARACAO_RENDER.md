@@ -18,7 +18,7 @@ Este documento detalha a configuração técnica necessária para publicar a apl
    - `uploads/`
    - `__pycache__/`
    - `.audit_tmp/`
-3. Faça o push do código limpo para a branch `main`.
+3. Publique em branch própria e abra uma PR para revisão. Merge e implantação exigem autorização separada.
 
 ## 3. Configuração no Render
 
@@ -29,9 +29,11 @@ Este documento detalha a configuração técnica necessária para publicar a apl
 - **Região:** Oregon (us-west-2) - *Mesma região do Supabase para menor latência.*
 
 ### B. Comandos de Build e Inicialização
-- **Build Command:** `pip install -r requirements.txt`
+- **Build Command:** `python -I tools/install_dependencies.py --requirements requirements.txt`
 - **Start Command:** `gunicorn -w 1 --threads 50 --timeout 180 -b 0.0.0.0:$PORT wsgi:app`
 - **Health Check Path:** `/healthz`
+
+O build versionado prepara pip 26.2.2 verificado por SHA256 antes da aplicação e confirma a versão. O comando efetivo no painel pode divergir deste arquivo: sua adoção deve ser verificada pelo operador em etapa autorizada. A SEC-006B não acessa o painel nem corrige automaticamente builds/produção já existentes. Não são executados seed ou migrações pelo instalador.
 
 ### C. Variáveis de Ambiente (Env Vars)
 | Variável | Obrigatória | Descrição |
@@ -76,7 +78,7 @@ python seed.py
 
 ## 5. Atualizações e Deploys Posteriores
 
-O deploy automático está desligado (`autoDeployTrigger: 'off'` no `render.yaml`): um push para `main` não dispara build no Render.
+O YAML versionado declara `autoDeployTrigger: 'off'`, mas isso não comprova a configuração efetiva do painel. O proprietário informou Auto-Deploy **ativado** durante a SEC-006. Merge/push na `main` pode disparar implantação: verificar o painel e obter autorização antes de qualquer integração. Esta documentação não modifica a configuração real nem autoriza deploy.
 
 Antes de alterar o schema, preparar backup autorizado, validar a restauração isolada e revisar o plano específico de recuperação conforme [Operação de backup, restauração e recuperação](OPERACAO_BACKUP_RESTAURACAO.md). Reverter o código não reverte o banco. Nenhum comando de migração ou publicação deste documento deve ser executado como teste de backup.
 

@@ -14,7 +14,7 @@ services:
     branch: main
     # Build não altera o banco. Aplicar migrações revisadas separadamente antes
     # de liberar o tráfego, conforme Docs/PREPARACAO_RENDER.md.
-    buildCommand: pip install -r requirements.txt
+    buildCommand: python -I tools/install_dependencies.py --requirements requirements.txt
     autoDeployTrigger: 'off'
     # 1 worker + threads: exigência do Flask-SocketIO em modo threading (ver wsgi.py).
     # timeout 180s: o ETL e o PDF rodam na requisição e o free tem só 0,1 CPU.

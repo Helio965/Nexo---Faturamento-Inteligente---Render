@@ -50,8 +50,8 @@ jobs:
           test -x "$pg_bin/initdb"
           test -x "$pg_bin/pg_dump"
           echo "NEXO_TEST_POSTGRES_BIN=$pg_bin" >> "$GITHUB_ENV"
-      - name: Dependencias declaradas de teste
-        run: python -m pip install -r requirements-dev.txt
+      - name: Instalador verificado e dependencias de teste
+        run: python -I tools/install_dependencies.py --requirements requirements-dev.txt
       - name: Chromium de teste
         run: python -m playwright install --with-deps chromium
       - name: Suite completa, navegador e ensaio de backup
@@ -80,8 +80,8 @@ jobs:
           test -x "$pg_bin/initdb"
           echo "NEXO_TEST_POSTGRES_BIN=$pg_bin" >> "$GITHUB_ENV"
           "$pg_bin/postgres" --version
-      - name: Dependencias declaradas de teste
-        run: python -m pip install -r requirements-dev.txt
+      - name: Instalador verificado e dependencias de teste
+        run: python -I tools/install_dependencies.py --requirements requirements-dev.txt
       - name: Tokens e concorrencia no PostgreSQL real
         run: python -B -m unittest tests.postgresql_auth_tokens -v
       - name: Sessoes e corridas de notificacao no PostgreSQL real

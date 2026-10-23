@@ -1,7 +1,7 @@
 """NexoBot Advanced — interface em navegador real (Chromium via Playwright).
 
 Opcional: Playwright NÃO faz parte de requirements.txt. Para executar:
-    pip install playwright==1.56.0        # somente no ambiente de teste
+    python -I tools/install_dependencies.py --requirements requirements-dev.txt
     python -m playwright install chromium # ou NEXO_TEST_CHROMIUM=/caminho/do/chrome
     NEXO_TEST_BROWSER=1 python -m unittest tests.test_nexobot_navegador -v
 
