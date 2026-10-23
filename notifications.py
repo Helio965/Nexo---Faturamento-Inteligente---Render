@@ -20,8 +20,8 @@ from sqlalchemy import event, select
 from sqlalchemy.orm import Session
 
 from extensions import db, socketio
-from models import Notificacao, Usuario
-from session_security import impressao_sessao
+from models import Empresa, Notificacao, Usuario
+from session_security import impressao_sessao, usuario_pode_acessar
 from realtime import sala_do_usuario
 
 logger = logging.getLogger(__name__)
@@ -60,14 +60,14 @@ def _emitir_tempo_real(id_usuario: int, n: Notificacao) -> None:
 def _entregar_tempo_real(bind, id_usuario, payload):
     # A transação que criou a notificação já terminou. A sessão independente
     # evita consultar uma sessão committed ou bloquear o próprio chamador.
-    # FOR SHARE mantém a credencial vigente até enfileirar o pacote; o UPDATE
-    # de senha só pode confirmar depois, ou será visto por esta consulta.
+    # FOR SHARE mantém credencial e geração até enfileirar o pacote. O UPDATE
+    # de senha ou exclusão da empresa só confirma depois, ou já é visto aqui.
+    # A leitura da empresa é MVCC, na mesma Session e sem lock invertido.
     with Session(bind=bind) as consulta:
         usuario = consulta.scalar(select(Usuario).where(
             Usuario.id_usuario == id_usuario,
         ).with_for_update(read=True))
-        if (usuario is None or not usuario.ativo
-                or usuario.role not in ("ADMIN", "CLIENTE")
+        if (not usuario_pode_acessar(usuario, consulta=consulta)
                 or (usuario.role == "CLIENTE" and usuario.primeiro_acesso)):
             return
         socketio.emit(
@@ -172,6 +172,10 @@ def notificar_clientes_empresa(id_empresa: int, texto: str, link_destino: str | 
             Usuario.role == "CLIENTE",
             Usuario.id_empresa == id_empresa,
             Usuario.ativo.is_(True),
+            select(Empresa.id_empresa).where(
+                Empresa.id_empresa == Usuario.id_empresa,
+                Empresa.deletado_em.is_(None),
+            ).exists(),
         )
     ).scalars().all()
     for uid in clientes:

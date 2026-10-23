@@ -1,13 +1,14 @@
-"""NEXO-SEC-003: sessões vinculadas à credencial atual, sem expor seu hash."""
+"""SEC-003/004: autorização persistida e sessões ligadas à credencial atual."""
 
 import hashlib
 import hmac
 
 from flask import current_app, session
 from sqlalchemy import select
+from sqlalchemy.orm import object_session
 
 from extensions import db
-from models import Usuario
+from models import Empresa, Usuario
 
 
 CHAVE_CREDENCIAL = "credential_fingerprint"
@@ -29,17 +30,60 @@ def id_sessao(dados=None):
     return _id_valido(dados.get("_user_id"))
 
 
-def impressao_credencial_sessao(id_usuario: int, senha_hash: str) -> str:
+def usuario_pode_acessar(usuario, *, consulta=None) -> bool:
+    """Estado administrativo e bloqueio da empresa, sempre lido do banco.
+
+    Não usa o relacionamento ORM potencialmente desatualizado nem outra
+    conexão: notificações/varreduras passam sua própria Session. O SELECT da
+    empresa é MVCC, sem lock: os leitores Socket.IO já mantêm FOR SHARE no
+    usuário, e a exclusão atualiza sua geração na mesma transação da empresa.
+    Assim, a exclusão só confirma depois da emissão autorizada anterior, sem
+    inverter a ordem Empresa -> Usuario dos locks de escrita.
+    """
+    if (usuario is None or not usuario.ativo
+            or usuario.role not in ("ADMIN", "CLIENTE")):
+        return False
+    if usuario.role == "ADMIN":
+        return usuario.id_empresa is None
+    if usuario.id_empresa is None:
+        return False
+    consulta = object_session(usuario) if consulta is None else consulta
+    if consulta is None:
+        return False
+    with consulta.no_autoflush:
+        return consulta.scalar(select(Empresa.id_empresa).where(
+            Empresa.id_empresa == usuario.id_empresa,
+            Empresa.deletado_em.is_(None),
+        )) is not None
+
+
+def vincular_geracao_autorizacao(mensagem: bytes, geracao: int) -> bytes:
+    """Geração zero preserva a SEC-003; gerações posteriores nunca a reutilizam."""
+    if type(geracao) is not int or geracao < 0:
+        raise ValueError("Geração de autorização inválida.")
+    if geracao == 0:
+        return mensagem
+    return (b"nexo-authorization-generation-v1\0" + str(geracao).encode("ascii")
+            + b"\0" + mensagem)
+
+
+def impressao_credencial_sessao(
+        id_usuario: int, senha_hash: str, geracao_autorizacao: int = 0) -> str:
     """HMAC padrão, com contexto distinto dos tokens de ativação/recuperação."""
     chave = current_app.config["SECRET_KEY"]
     if isinstance(chave, str):
         chave = chave.encode("utf-8")
-    mensagem = _CONTEXTO_SESSAO + f"{id_usuario}\0{senha_hash}".encode("utf-8")
+    mensagem = vincular_geracao_autorizacao(
+        _CONTEXTO_SESSAO + f"{id_usuario}\0{senha_hash}".encode("utf-8"),
+        geracao_autorizacao,
+    )
     return hmac.new(chave, mensagem, hashlib.sha256).hexdigest()
 
 
 def impressao_sessao(usuario) -> str:
-    return impressao_credencial_sessao(usuario.id_usuario, usuario.senha_hash)
+    return impressao_credencial_sessao(
+        usuario.id_usuario, usuario.senha_hash, usuario.geracao_autorizacao,
+    )
 
 
 def mesma_impressao(esperada, recebida) -> bool:
@@ -59,10 +103,9 @@ def registrar_sessao(usuario, *, impressao_esperada=None) -> None:
     session["boot_id"] = current_app.config["BOOT_ID"]
 
 
-def sessao_valida(usuario, dados=None, *, permitir_primeiro_acesso=True) -> bool:
+def sessao_valida(usuario, dados=None, *, permitir_primeiro_acesso=True, consulta=None) -> bool:
     dados = session if dados is None else dados
-    if (usuario is None or not usuario.ativo
-            or usuario.role not in ("ADMIN", "CLIENTE")
+    if (not usuario_pode_acessar(usuario, consulta=consulta)
             or id_sessao(dados) != usuario.id_usuario
             or dados.get("boot_id") != current_app.config["BOOT_ID"]):
         return False
@@ -73,7 +116,7 @@ def sessao_valida(usuario, dados=None, *, permitir_primeiro_acesso=True) -> bool
 
 
 def carregar_usuario(id_usuario, *, bloquear=False):
-    """Leitura atual; FOR SHARE serializa envio/evento com troca da senha no PG."""
+    """FOR SHARE serializa envio/evento com senha e geração de autorização no PG."""
     id_usuario = _id_valido(id_usuario)
     if id_usuario is None:
         return None

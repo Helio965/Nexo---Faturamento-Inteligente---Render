@@ -19,7 +19,12 @@ from models import (
 from etl_processor import processar_arquivos_analise
 from notifications import notificar_clientes_empresa
 from emails import email_analise_publicada, email_ticket_resolvido, email_boas_vindas
-from sqlalchemy.exc import IntegrityError, DataError
+from sqlalchemy.exc import IntegrityError, DataError, SQLAlchemyError
+from company_security import (
+    bloquear_empresa, bloquear_usuarios_empresa,
+    excluir_empresa as excluir_empresa_segura,
+    restaurar_empresa as restaurar_empresa_segura,
+)
 import storage
 
 # Categorias de ticket (token persistido -> rótulo exibido) — espelha cliente.py.
@@ -393,80 +398,82 @@ def empresa_nova():
 @admin_bp.route("/empresas/<int:id_empresa>/editar", methods=["GET", "POST"])
 @admin_required
 def empresa_editar(id_empresa):
-    """Atualização de dados cadastrais da empresa (CNPJ é imutável pelo formulário)."""
-    empresa = db.session.get(Empresa, id_empresa)
-    if not empresa:
-        flash("Empresa não encontrada.", "danger")
-        return redirect(url_for("admin.empresas"))
-    planos, segmentos = _planos_segmentos()
-
-    if request.method == "POST":
-        form = request.form
-        try:
-            data_contratacao = datetime.strptime(form.get("data_contratacao", "").strip(), "%Y-%m-%d").date()
-        except ValueError:
-            flash("Data de contratação inválida.", "danger")
-            return redirect(url_for("admin.empresa_editar", id_empresa=id_empresa))
-
-        # CNPJ é readonly no formulário; ignoramos qualquer valor vindo dele.
-        empresa.id_segmento = int(form["id_segmento"])
-        empresa.id_plano_atual = int(form["id_plano_atual"])
-        empresa.razao_social = form["razao_social"].strip()
-        empresa.nome_fantasia = (form.get("nome_fantasia") or "").strip() or None
-        empresa.email_contato = form["email_contato"].strip()
-        empresa.telefone_contato = (form.get("telefone_contato") or "").strip() or None
-        empresa.data_contratacao = data_contratacao
-        empresa.faturamento_base_mensal = _parse_decimal_opcional(form.get("faturamento_base_mensal", ""))
-        empresa.status_conta = form.get("status_conta", "ATIVA")
-        empresa.data_atualizacao = datetime.now(timezone.utc)
-
-        try:
-            db.session.commit()
-        except (IntegrityError, DataError) as e:
+    """Atualização cadastral serializada com o ciclo da empresa; CNPJ imutável."""
+    try:
+        empresa = (bloquear_empresa(db.session, id_empresa) if request.method == "POST"
+                   else db.session.get(Empresa, id_empresa))
+        if not empresa:
             db.session.rollback()
-            current_app.logger.warning("Falha ao editar empresa %s: %s", id_empresa, type(e.orig or e).__name__)
-            flash("Não foi possível salvar as alterações (dados inválidos ou duplicados).", "danger")
-            return redirect(url_for("admin.empresa_editar", id_empresa=id_empresa))
+            flash("Empresa não encontrada.", "danger")
+            return redirect(url_for("admin.empresas"))
+        planos, segmentos = _planos_segmentos()
 
-        flash("Empresa atualizada com sucesso.", "success")
+        if request.method == "POST":
+            form = request.form
+            try:
+                data_contratacao = datetime.strptime(form.get("data_contratacao", "").strip(), "%Y-%m-%d").date()
+            except ValueError:
+                db.session.rollback()
+                flash("Data de contratação inválida.", "danger")
+                return redirect(url_for("admin.empresa_editar", id_empresa=id_empresa))
+
+            # CNPJ é readonly no formulário; ignoramos qualquer valor vindo dele.
+            empresa.id_segmento = int(form["id_segmento"])
+            empresa.id_plano_atual = int(form["id_plano_atual"])
+            empresa.razao_social = form["razao_social"].strip()
+            empresa.nome_fantasia = (form.get("nome_fantasia") or "").strip() or None
+            empresa.email_contato = form["email_contato"].strip()
+            empresa.telefone_contato = (form.get("telefone_contato") or "").strip() or None
+            empresa.data_contratacao = data_contratacao
+            empresa.faturamento_base_mensal = _parse_decimal_opcional(form.get("faturamento_base_mensal", ""))
+            empresa.status_conta = form.get("status_conta", "ATIVA")
+            empresa.data_atualizacao = datetime.now(timezone.utc)
+            db.session.commit()
+            flash("Empresa atualizada com sucesso.", "success")
+            return redirect(url_for("admin.empresas"))
+
+        return render_template("admin/empresa_form.html", empresa=empresa, planos=planos, segmentos=segmentos)
+    except SQLAlchemyError as erro:
+        db.session.rollback()
+        current_app.logger.warning("Falha ao editar empresa %s: %s", id_empresa, type(erro).__name__)
+        flash("Não foi possível salvar as alterações (dados inválidos ou indisponibilidade do banco).", "danger")
         return redirect(url_for("admin.empresas"))
-
-    return render_template("admin/empresa_form.html", empresa=empresa, planos=planos, segmentos=segmentos)
 
 
 @admin_bp.route("/empresa/excluir/<int:id_empresa>", methods=["POST"])
 @admin_required
 def empresa_excluir(id_empresa):
-    """
-    SOFT DELETE — move a empresa para a Lixeira (estilo Google Drive/Windows).
-
-    Não apaga nada: apenas carimba `deletado_em` com o instante atual, o que a
-    remove das listagens normais (que filtram deletado_em IS NULL). Os usuários
-    CLIENTE vinculados são desativados (ativo=False) para impedir login enquanto
-    a empresa estiver na lixeira — a flag é restaurada em /empresa/restaurar.
-    Reversível e não-destrutivo; a exclusão física só ocorre em
-    /empresa/excluir-permanente. POST-only + confirmação no modal.
-    """
-    empresa = db.session.get(Empresa, id_empresa)
-    if not empresa or empresa.deletado_em is not None:
-        flash("Empresa não encontrada (ou já está na lixeira).", "danger")
-        return redirect(url_for("admin.empresas"))
-
-    nome_emp = empresa.nome_fantasia or empresa.razao_social
-    agora = datetime.now(timezone.utc)
-    empresa.deletado_em = agora
-    empresa.data_atualizacao = agora
-    # Bloqueia o acesso do cliente enquanto estiver na lixeira.
-    for u in empresa.usuarios:
-        u.ativo = False
-
+    """Move para a lixeira sem sobrescrever ativo; revoga a geração persistida."""
     try:
+        resultado = excluir_empresa_segura(db.session, id_empresa)
+        if resultado is None:
+            db.session.rollback()
+            flash("Empresa não encontrada (ou já está na lixeira).", "danger")
+            return redirect(url_for("admin.empresas"))
+        nome_emp = resultado.empresa.nome_fantasia or resultado.empresa.razao_social
+        from session_security import impressao_sessao, impressao_credencial_sessao
+        revogacoes = [
+            (usuario.id_usuario, impressao_sessao(usuario), impressao_credencial_sessao(
+                usuario.id_usuario, usuario.senha_hash, usuario.geracao_autorizacao - 1,
+            )) for usuario in resultado.usuarios
+        ]
         db.session.commit()
-    except IntegrityError as e:
+    except SQLAlchemyError as erro:
         db.session.rollback()
-        current_app.logger.warning("Falha ao mover empresa %s para a lixeira: %s", id_empresa, type(e.orig or e).__name__)
-        flash(f"Não foi possível mover '{nome_emp}' para a lixeira. Tente novamente.", "danger")
+        current_app.logger.warning("Falha ao mover empresa %s para a lixeira: %s", id_empresa, type(erro).__name__)
+        flash("Não foi possível mover a empresa para a lixeira. Tente novamente.", "danger")
         return redirect(url_for("admin.empresas"))
+
+    # Fechar conexões locais é best-effort após COMMIT. Geração, autorização
+    # pelo banco e salas continuam protegendo os demais processos/conexões.
+    try:
+        from realtime import revogar_conexoes_usuario
+        for id_usuario, impressao_atual, impressao_anterior in revogacoes:
+            revogar_conexoes_usuario(
+                id_usuario, impressao_atual, impressao_revogada=impressao_anterior,
+            )
+    except Exception as erro:
+        current_app.logger.warning("Revogação Socket.IO após exclusão indisponível (%s).", type(erro).__name__)
 
     flash(f"Cliente '{nome_emp}' movido para a lixeira com sucesso.", "success")
     return redirect(url_for("admin.empresas"))
@@ -487,31 +494,25 @@ def lixeira():
 @admin_bp.route("/empresa/restaurar/<int:id_empresa>", methods=["POST"])
 @admin_required
 def empresa_restaurar(id_empresa):
-    """
-    Restaura uma empresa da lixeira: limpa `deletado_em` (volta às listagens) e
-    reativa os usuários CLIENTE vinculados. Traz de volta todo o histórico
-    (análises, relatórios, chamados) intacto — nada havia sido apagado.
-    """
-    empresa = db.session.get(Empresa, id_empresa)
-    if not empresa or empresa.deletado_em is None:
-        flash("Empresa não encontrada na lixeira.", "danger")
-        return redirect(url_for("admin.lixeira"))
-
-    nome_emp = empresa.nome_fantasia or empresa.razao_social
-    empresa.deletado_em = None
-    empresa.data_atualizacao = datetime.now(timezone.utc)
-    for u in empresa.usuarios:
-        u.ativo = True
-
+    """Restaura a empresa e seu histórico sem ativar contas ou sessões antigas."""
     try:
+        resultado = restaurar_empresa_segura(db.session, id_empresa)
+        if resultado is None:
+            db.session.rollback()
+            flash("Empresa não encontrada na lixeira.", "danger")
+            return redirect(url_for("admin.lixeira"))
+        nome_emp = resultado.empresa.nome_fantasia or resultado.empresa.razao_social
+        contas_bloqueadas = resultado.contas_bloqueadas
         db.session.commit()
-    except IntegrityError as e:
+    except SQLAlchemyError as erro:
         db.session.rollback()
-        current_app.logger.warning("Falha ao restaurar empresa %s: %s", id_empresa, type(e.orig or e).__name__)
-        flash(f"Não foi possível restaurar '{nome_emp}'. Tente novamente.", "danger")
+        current_app.logger.warning("Falha ao restaurar empresa %s: %s", id_empresa, type(erro).__name__)
+        flash("Não foi possível restaurar a empresa. Tente novamente.", "danger")
         return redirect(url_for("admin.lixeira"))
 
-    flash(f"Cliente '{nome_emp}' restaurado com sucesso.", "success")
+    flash(f"Cliente '{nome_emp}' restaurado com sucesso. Usuários autorizados devem realizar novo login.", "success")
+    if contas_bloqueadas:
+        flash("Contas bloqueadas permaneceram bloqueadas e exigem revisão administrativa antes de qualquer reativação.", "warning")
     return redirect(url_for("admin.lixeira"))
 
 
@@ -535,14 +536,16 @@ def empresa_excluir_permanente(id_empresa):
 
     Qualquer falha de integridade → rollback atômico (nada é apagado) + aviso.
     """
-    empresa = db.session.get(Empresa, id_empresa)
-    if not empresa or empresa.deletado_em is None:
-        flash("A exclusão permanente só é possível para empresas que estão na lixeira.", "danger")
-        return redirect(url_for("admin.lixeira"))
-
-    nome_emp = empresa.nome_fantasia or empresa.razao_social
-
+    nome_emp = "empresa"
     try:
+        empresa = bloquear_empresa(db.session, id_empresa)
+        if not empresa or empresa.deletado_em is None:
+            db.session.rollback()
+            flash("A exclusão permanente só é possível para empresas que estão na lixeira.", "danger")
+            return redirect(url_for("admin.lixeira"))
+        usuarios = bloquear_usuarios_empresa(db.session, id_empresa)
+        nome_emp = empresa.nome_fantasia or empresa.razao_social
+
         # 1) Análises e tudo que depende delas.
         analises = db.session.execute(
             select(Analise).where(Analise.id_empresa == id_empresa)
@@ -578,27 +581,27 @@ def empresa_excluir_permanente(id_empresa):
             db.session.delete(ch)
 
         # 3/4) Notificações dos usuários da empresa + os próprios usuários.
-        ids_usuarios = [u.id_usuario for u in empresa.usuarios]
+        ids_usuarios = [u.id_usuario for u in usuarios]
         if ids_usuarios:
             db.session.execute(
                 Notificacao.__table__.delete().where(
                     Notificacao.id_usuario.in_(ids_usuarios)
                 )
             )
-        for u in list(empresa.usuarios):
+        for u in usuarios:
             db.session.delete(u)
 
         # 5) A própria empresa.
         db.session.delete(empresa)
 
         db.session.commit()
-    except IntegrityError as e:
+    except SQLAlchemyError as erro:
         db.session.rollback()
         flash(
             f"Não foi possível excluir permanentemente '{nome_emp}': ainda há dados vinculados.",
             "danger",
         )
-        current_app.logger.warning("Falha no hard delete da empresa %s: %s", id_empresa, type(e.orig or e).__name__)
+        current_app.logger.warning("Falha no hard delete da empresa %s: %s", id_empresa, type(erro).__name__)
         return redirect(url_for("admin.lixeira"))
 
     flash(f"Cliente '{nome_emp}' e todos os seus dados foram excluídos permanentemente.", "success")

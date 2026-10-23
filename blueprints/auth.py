@@ -8,16 +8,17 @@ from urllib.parse import urlparse
 from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app, has_request_context
 from flask_login import login_user, logout_user, login_required, current_user
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadData
-from sqlalchemy import select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.security import generate_password_hash
 
 from extensions import db, limiter
-from models import Usuario
+from models import Empresa, Usuario
 from emails import email_recuperacao_senha, email_boas_vindas
 from session_security import (
     CHAVE_CREDENCIAL, impressao_sessao, impressao_credencial_sessao,
-    mesma_impressao, registrar_sessao,
+    mesma_impressao, registrar_sessao, usuario_pode_acessar,
+    vincular_geracao_autorizacao,
 )
 
 logger = logging.getLogger(__name__)
@@ -57,13 +58,16 @@ class _CredencialEsperada:
     senha_hash: str = field(repr=False)
     role: str
     primeiro_acesso: bool
+    geracao_autorizacao: int
+    id_empresa: int | None
     usuario: Usuario = field(repr=False, compare=False)
 
 
 def _estado_credencial(usuario: Usuario) -> _CredencialEsperada:
     return _CredencialEsperada(
         usuario.id_usuario, usuario.senha_hash, usuario.role,
-        bool(usuario.primeiro_acesso), usuario,
+        bool(usuario.primeiro_acesso), usuario.geracao_autorizacao,
+        usuario.id_empresa, usuario,
     )
 
 
@@ -85,6 +89,7 @@ def _impressao_credencial(usuario) -> str:
     mensagem = b"nexo-password-credential-v2\0" + (
         f"{usuario.id_usuario}\0{usuario.senha_hash}".encode("utf-8")
     )
+    mensagem = vincular_geracao_autorizacao(mensagem, usuario.geracao_autorizacao)
     return hmac.new(chave, mensagem, hashlib.sha256).hexdigest()
 
 
@@ -102,7 +107,7 @@ def _emitir_token(usuario: Usuario, finalidade: str) -> str:
     if (type(usuario.id_usuario) is not int or usuario.id_usuario <= 0
             or not isinstance(usuario.senha_hash, str) or not usuario.senha_hash):
         raise ValueError("Usuário persistido com credencial é obrigatório.")
-    if not usuario.ativo or not _permite_finalidade(usuario, finalidade):
+    if not usuario_pode_acessar(usuario) or not _permite_finalidade(usuario, finalidade):
         raise ValueError("Conta não elegível para esta operação de senha.")
     return _serializer(finalidade).dumps({
         "v": 2, "uid": usuario.id_usuario, "purpose": finalidade,
@@ -145,11 +150,11 @@ def _ler_token_senha(token: str, finalidade: str):
         return None
     try:
         usuario = db.session.get(Usuario, dados["uid"], populate_existing=True)
+        if (not usuario_pode_acessar(usuario)
+                or not _permite_finalidade(usuario, finalidade)):
+            return None
     except SQLAlchemyError as erro:
         _falha_banco_senha(erro)
-        return None
-    if (usuario is None or not usuario.ativo
-            or not _permite_finalidade(usuario, finalidade)):
         return None
     if not hmac.compare_digest(impressao, _impressao_credencial(usuario)):
         return None
@@ -175,7 +180,16 @@ def _atualizar_credencial(estado: _CredencialEsperada, nova_senha: str, *, renov
     comando = update(Usuario).where(
         Usuario.id_usuario == estado.id_usuario,
         Usuario.senha_hash == estado.senha_hash,
+        Usuario.geracao_autorizacao == estado.geracao_autorizacao,
+        Usuario.id_empresa == estado.id_empresa,
         Usuario.ativo.is_(True),
+        or_(
+            and_(Usuario.role == "ADMIN", Usuario.id_empresa.is_(None)),
+            and_(Usuario.role == "CLIENTE", select(Empresa.id_empresa).where(
+                Empresa.id_empresa == Usuario.id_empresa,
+                Empresa.deletado_em.is_(None),
+            ).exists()),
+        ),
         Usuario.role == estado.role,
         Usuario.primeiro_acesso.is_(estado.primeiro_acesso),
     ).values(
@@ -200,9 +214,11 @@ def _atualizar_credencial(estado: _CredencialEsperada, nova_senha: str, *, renov
         _falha_banco_senha(erro)
         return False
 
-    # Usar o hash que esta operação confirmou, nunca refresh de uma senha
-    # posterior alterada por outra requisição entre commit e renovação.
-    impressao_atual = impressao_credencial_sessao(estado.id_usuario, novo_hash)
+    # Usar hash e geração que esta operação confirmou, nunca refresh de uma
+    # senha ou exclusão/restauração posterior entre commit e renovação.
+    impressao_atual = impressao_credencial_sessao(
+        estado.id_usuario, novo_hash, estado.geracao_autorizacao,
+    )
     if renovar_cliente:
         registrar_sessao(estado, impressao_esperada=impressao_atual)
     try:
@@ -253,7 +269,7 @@ def login():
             # Capturar a credencial cuja senha foi verificada antes de criar
             # a sessão; nunca adotar um hash posterior por refresh do ORM.
             impressao_login = impressao_sessao(usuario)
-            if not usuario.ativo:
+            if not usuario_pode_acessar(usuario):
                 flash("Esta conta está desativada. Contacte o administrador.", "danger")
                 return render_template("auth/login.html")
 
@@ -333,7 +349,7 @@ def recuperar_senha():
             usuario = db.session.execute(
                 select(Usuario).where(Usuario.email == email)
             ).scalar_one_or_none()
-            if usuario and usuario.ativo:
+            if usuario_pode_acessar(usuario):
                 if _permite_finalidade(usuario, _ATIVACAO):
                     token = gerar_token_definir_senha(usuario)
                     link = url_for("auth.ativar_acesso", token=token, _external=True)

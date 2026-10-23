@@ -172,11 +172,14 @@ class SensitiveLogTests(unittest.TestCase):
         usuario = SimpleNamespace(
             email="synthetic@example.invalid", ativo=True, id_usuario=1,
             senha_hash="synthetic-credential-state", role="CLIENTE", primeiro_acesso=False,
+            geracao_autorizacao=0, id_empresa=1,
         )
         fake_db = SimpleNamespace(session=MagicMock())
         fake_db.session.execute.return_value.scalar_one_or_none.return_value = usuario
         with app.test_request_context("/auth/recuperar-senha", method="POST", data={"email": usuario.email}):
-            with patch.object(auth, "db", fake_db), patch.object(auth, "email_recuperacao_senha", return_value=True) as enviar:
+            # Esta fixture isola somente o sigilo dos logs; os testes de
+            # autenticação/SEC-004 exercitam a elegibilidade com banco real.
+            with patch.object(auth, "db", fake_db), patch.object(auth, "usuario_pode_acessar", return_value=True), patch.object(auth, "email_recuperacao_senha", return_value=True) as enviar:
                 with patch.object(auth.logger, "disabled", False), self.assertLogs(auth.logger, level="INFO") as logs:
                     response = inspect.unwrap(auth.recuperar_senha)()
                 self.assertEqual(response.status_code, 302)

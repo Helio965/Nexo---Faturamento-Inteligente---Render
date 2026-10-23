@@ -88,7 +88,8 @@ def revogar_sockets_invalidos(app=None):
                         "boot_id": dados["boot_id"],
                         CHAVE_CREDENCIAL: dados["impressao"],
                     }
-                    if not sessao_valida(usuario, cookie, permitir_primeiro_acesso=False):
+                    if not sessao_valida(
+                            usuario, cookie, permitir_primeiro_acesso=False, consulta=consulta):
                         invalidos.append(sid)
         except SQLAlchemyError as erro:
             logger.warning("Verificação Socket.IO indisponível (%s).", type(erro).__name__)
@@ -115,7 +116,7 @@ def _iniciar_varredura(app, estado):
 
 
 def guarded_socket_event(funcao):
-    """Obrigatório em eventos autenticados; mantém FOR SHARE até fim do handler.
+    """Mantém FOR SHARE no usuário/geração até o fim do evento autenticado.
 
     O handler não deve liberar sua transação antes de terminar a ação privada.
     Novos envios privados devem usar o despachante de notificações protegido.

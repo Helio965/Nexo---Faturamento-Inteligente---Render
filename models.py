@@ -131,6 +131,10 @@ class Usuario(db.Model, UserMixin):
     senha_hash: Mapped[str] = mapped_column(String, nullable=False)
     role: Mapped[str] = mapped_column(String, nullable=False)
     ativo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # SEC-004: revogacao persistente, independente da senha e do estado ativo.
+    geracao_autorizacao: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
     # Primeiro acesso: novos clientes (criados via ORM) nascem com True e são
     # obrigados a trocar a senha temporária no 1º login. server_default="false"
     # garante que usuários JÁ existentes não sejam disruptados pela migração.
@@ -147,6 +151,9 @@ class Usuario(db.Model, UserMixin):
 
     __table_args__ = (
         CheckConstraint("role IN ('ADMIN', 'CLIENTE')"),
+        CheckConstraint(
+            "geracao_autorizacao >= 0", name="ck_usuario_geracao_autorizacao"
+        ),
         CheckConstraint(
             "(role = 'CLIENTE' AND id_empresa IS NOT NULL) OR "
             "(role = 'ADMIN'   AND id_empresa IS NULL)",
