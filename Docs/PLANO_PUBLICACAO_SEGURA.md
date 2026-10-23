@@ -1,6 +1,6 @@
 # Evidências de infraestrutura — NEXO
 
-Verificação somente de leitura em 22/10/2026 UTC. Repositório oficial `Helio965/Nexo---Faturamento-Inteligente---Render`. Nenhuma configuração externa, merge, deploy, backup ou dado de produção foi alterado.
+Auditoria inicial em 22/10/2026 UTC; estado de integração atualizado em 23/10/2026 (America/Sao_Paulo). Repositório oficial `Helio965/Nexo---Faturamento-Inteligente---Render`. O Codex não alterou configurações externas nem executou merges, deploy, backup ou alterações de dados de produção.
 
 ## GitHub: estado observado
 
@@ -9,6 +9,7 @@ Verificação somente de leitura em 22/10/2026 UTC. Repositório oficial `Helio9
 | Metadados do repositório | Privado, `visibility=private`, não arquivado, não desabilitado; branch padrão `main`. |
 | Permissões expostas para o usuário | `admin`, `maintain`, `push`, `pull` e `triage`: `true`. Isso não comprova que a integração possua toda permissão administrativa de API. |
 | `GET /branches/main` | SHA `255957d1807b792cd18298b34df01653db8afc22`; `protected=false`. |
+| Verificação após integração externa | SHA `d6f0a9e20ccf0879919a10e0e6223c8290f5a8c2`; `protected=false`; CI de push aprovado no run 39705823783. |
 | `GET /actions/workflows` | `total_count=0` na auditoria inicial, antes da nova implementação de CI. |
 | `GET /branches/main/protection` | HTTP 403, `Resource not accessible by integration`. Endpoint exige `administration=read`; detalhes da configuração clássica não foram acessíveis. |
 | `GET /rulesets` | HTTP 403, `Upgrade to GitHub Pro or make this repository public to enable this feature.` Recurso indisponível para a combinação atual de conta/repositório privado. |
@@ -36,20 +37,21 @@ Não há ferramenta Render autorizada conectada na sessão. A busca de ferrament
 | --- | --- |
 | `main` GitHub no início | `255957d1807b792cd18298b34df01653db8afc22` confirmado pela API. |
 | Commit publicado no Render | Não verificado: acesso ao serviço/painel não disponível. |
+| Metadados GitHub de deployment | Leitura negada pela integração (403); sem statuses tradicionais Render no commit da main. Checks Actions não comprovam deploy. |
 | Histórico, status e logs de inicialização | Não verificados. |
 | Auto deploy efetivo do painel | Não verificado. O arquivo versionado não prova o estado do painel. |
 | Health check real | Não executado: URL do serviço real não foi identificada por fonte verificável. |
 | YAML versionado | `branch: main`, `autoDeployTrigger: 'off'`, build `pip install -r requirements.txt`, `/healthz`, Gunicorn com 1 worker e 50 threads. |
 | Ensaio de backup/restore | Executado em PostgreSQL 17.11 descartável: 1/1 aprovado em 1,916 s, 15 tabelas, quatro uploads, cinco arquivos e production_access=false; também aprovado na regressão completa. Não comprova backup do Supabase. |
 
-O `wsgi.py` explica que salas Socket.IO e rate limiting são locais ao processo; a arquitetura versionada usa um worker com threads. Não presumir que esse estado de memória atende múltiplas instâncias. A nova SEC-003 precisa manter a autoridade no banco e definir proteção das emissões, não somente o handshake.
+O `wsgi.py` explica que salas Socket.IO e rate limiting são locais ao processo; a arquitetura versionada usa um worker com threads. Não presumir que esse estado de memória atende múltiplas instâncias. A SEC-003 mantém a autoridade no banco e protege as emissões, além do handshake.
 
 ## Plano de publicação futura — exige autorização específica
 
 Este é um procedimento preparado, não executado. Nenhum comando de deploy ou migração deve ser inferido como autorização.
 
 1. **Inventário privado**: proprietário registra ID/domínio do serviço, commit publicado, histórico, status, configuração real de auto deploy, comando Gunicorn e número de instâncias. Conferir acesso e retorno de `/healthz` e `/healthz/db`. Não divulgar valores de variáveis nem caminhos contendo tokens nos registros.
-2. **Referência candidata**: após revisão e autorização dos merges das PRs separadas, escolher o SHA exato aprovado, que ainda não existe na `main` durante a preparação. Não usar simplesmente “latest commit” sem comparar o SHA do deploy ao candidato. O SHA `255957d` é a base analisada, não a referência final de publicação das três frentes.
+2. **Referência candidata**: as três frentes já alcançaram a main por merges externos, no SHA `d6f0a9e20ccf0879919a10e0e6223c8290f5a8c2`, com CI aprovado. Esse é um candidato técnico, ainda sujeito à verificação operacional e autorização explícita de deploy. Não usar simplesmente “latest commit” sem comparar o SHA do deploy ao candidato. O SHA `255957d` permanece como base histórica da auditoria.
 3. **Dependências e schema**: registrar versões e diff de requirements/migrations. Se nenhuma migração for adicionada pelas implementações, a publicação não precisa executar DDL, seed, `create_all`, upgrade/downgrade ou restauração. Qualquer mudança de schema inesperada interrompe o procedimento para plano e autorização próprios.
 4. **Evidências antes da publicação**: CI real aprovado, suíte completa, concorrência PostgreSQL, backup/restore sintético, fluxos de e-mail com transporte simulado, revogação de cookies antigos e bloqueio de notificações Socket.IO revogadas, CSRF, rate limiting, PDF e regressões gerais. Teste ignorado ou não executado continua identificado como tal.
 5. **E-mails e domínio**: conferir HTTPS e URLs externas, remetente verificado, disponibilidade/configuração do Brevo sem exibir chaves. Teste real de e-mail somente em homologação autorizada, com destinatário controlado. Retorno de agendamento não prova entrega; revisar falha assíncrona e evento de entrega no provedor.
@@ -79,7 +81,7 @@ Preferir correção adiante quando reverter reabrir falha de segurança. Antes d
 | Confirmar configurações e entrega real do provedor de e-mail | Proprietário do Brevo/homologação, com destinatário controlado. |
 | Proteção administrativa GitHub | Proprietário avalia plano privado e permissões da integração; não mudar visibilidade nem comprar plano automaticamente. |
 | Configurar checks obrigatórios | Somente após CI real aprovado e autorização administrativa, se suportado pelo plano. |
-| Merge das PRs | Revisão e autorização do proprietário; não realizado automaticamente. |
+| Integração das PRs | #12/#11/#10 já integradas externamente; o Codex não realizou merges. Novas PRs continuam exigindo revisão e autorização. |
 | Deploy no Render | Autorização explícita posterior; não executado nesta tarefa. |
 | Backup/migração/recuperação real Supabase | Autorização específica e plano próprio; não realizado. |
 
@@ -88,7 +90,8 @@ Fontes lidas: `render.yaml`, `wsgi.py`, `README.md`, `Docs/PREPARACAO_RENDER.md`
 ## Referências preparadas nesta tarefa
 
 Homologação: PR #10, commit `b728fe0`. Revogação: PR #11, commit `c9b1f31`.
-CI/documentação: PR #12, commit inicial `bb85788`. As bases estão encadeadas;
-esses commits não foram incorporados à main por esta tarefa. A referência final
-de publicação só deve ser escolhida após revisão/merges autorizados, CI aprovado
-e identificação do serviço real. Nenhuma dessas PRs autoriza deploy.
+CI/documentação: PR #12, commit inicial `bb85788`. Os merges externos das bases
+encadeadas incorporaram as três frentes à main `d6f0a9e`, com CI aprovado no
+[run 39705823783](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/39705823783).
+A seleção para publicação continua dependendo de autorização explícita e da
+identificação/validação do serviço real. Nenhuma dessas PRs autoriza deploy.

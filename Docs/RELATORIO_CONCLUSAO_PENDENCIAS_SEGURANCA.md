@@ -2,6 +2,7 @@
 
 Verificação em 22/10/2026 UTC. Repositório privado oficial:
 `Helio965/Nexo---Faturamento-Inteligente---Render`.
+Atualização do estado integrado: 23/10/2026 (America/Sao_Paulo).
 
 ## Resumo executivo
 
@@ -17,8 +18,11 @@ adiciona GitHub Actions, dependência exclusiva de teste e documentação de
 proteção/publicação. O estado real de execução do pipeline está registrado na
 seção própria; configuração versionada não significa CI operacional.
 
-Não houve merge, deploy, migração, backup/restauração de produção, acesso aos
-dados reais do Supabase, alteração de segredo, visibilidade ou contratação.
+O Codex não executou merges. Durante a pausa, as PRs #12, #11 e #10 foram
+integradas externamente pela sequência de bases até a main. A API confirmou
+main em `d6f0a9e20ccf0879919a10e0e6223c8290f5a8c2`, com CI aprovado.
+Não foram executados pelo Codex deploy, migração, backup/restauração de produção,
+acesso aos dados reais do Supabase, alteração de segredo, visibilidade ou contratação.
 Entrega real de e-mail, painel Render e configuração administrativa de proteção
 dependem de acesso/autorização externa. Código testado não comprova prontidão
 operacional de serviços que não foram acessados.
@@ -126,8 +130,16 @@ head `bb8578818cedf7da5bfc48a8c4469fc7143e1e8b`, evento pull_request.
 Ambos os jobs e suas etapas obrigatórias de testes foram executados com sucesso,
 sem jobs marcados como skipped. A atualização deste
 relatório apenas registra a evidência; código e workflow desse run são a
-referência validada. A disponibilidade permanente para main/futuras PRs depende
-da integração autorizada do workflow. Nenhum merge foi feito para habilitá-la.
+referência validada. Posteriormente o workflow foi incorporado à main pelos
+merges externos das três PRs. O Codex não realizou esses merges.
+
+A execução de push na **main** também concluiu com sucesso:
+[run 39705823783](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/39705823783),
+SHA `d6f0a9e20ccf0879919a10e0e6223c8290f5a8c2`. A API confirmou
+`security-sqlite-browser` em 178 s e `security-postgresql` em 83 s, com todas
+as etapas de testes aprovadas. O conteúdo integrado é idêntico ao HEAD
+`c128763` antes dos merges (`git diff` vazio), sem necessidade de refazer código
+ou repetir os testes locais somente por essa integração.
 
 O download dos logs retornou Forbidden 403 no armazenamento de logs; sem
 cabeçalhos disponíveis não foi possível classificar proxy versus serviço.
@@ -158,6 +170,9 @@ Não há ferramenta Render autorizada nem URL real verificável conectada. Commi
 implantado, histórico, estado, logs, health real e auto deploy efetivo permanecem
 **não verificados**. O YAML apenas documenta main, autoDeployTrigger off,
 build pip, /healthz e um worker Gunicorn. Não foi presumida equivalência com o painel.
+Na conferência posterior, a API GitHub de deployments também retornou 403 por
+permissão da integração, e o commit da main não possuía statuses tradicionais
+com destino Render. Os check runs Actions aprovados não comprovam publicação.
 
 O plano em [publicação segura](PLANO_PUBLICACAO_SEGURA.md) define candidato por
 SHA aprovado após revisão dos merges, dependências/schema, e-mails/HTTPS, backup,
@@ -185,6 +200,7 @@ atual do Supabase. Acesso, backup real, merge e deploy exigem autorizações pr�
 | SEC-003 PostgreSQL | PG 17.11 descartável | 41/41 aprovados, 8,376 s | quatro corridas + pool1 |
 | Regressão final integrada | SQLite/browser/backup | 315/315 aprovados, zero skips/falhas, 64,130 s | execução local da branch SEC-003 |
 | GitHub Actions | Ubuntu/Python 3.12 | Ambos os jobs aprovados, 76 s / 135 s | [run real](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/39705086856) |
+| GitHub Actions na main integrada | Ubuntu/Python 3.12 | Ambos os jobs aprovados, 178 s / 83 s | [run main](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/39705823783) |
 | E-mail real entregue | Provedor externo | Não executado: destinatário/ambiente autorizado ausente | procedimento documentado |
 | Render/painel/health real | Produção | Bloqueado por acesso externo ausente | não inferido do YAML |
 | Supabase real | Produção | Não executado, fora da autorização | nenhum acesso/migração |
@@ -196,25 +212,27 @@ integrações/volume/configurações reais de produção. Nenhum teste ignorado 
 convertido em aprovação; a execução ampliada habilitou os 12 casos previamente
 ignorados. PostgreSQL explícito fica fora do discovery SQLite e é job obrigatório.
 
-## GitHub e sequência de revisão
+## GitHub e estado de integração
 
 | Etapa | Branch | Commit | Pull Request | Status |
 | --- | --- | --- | --- | --- |
-| Homologação SEC-002/e-mails/logs | security/sec-002-homologacao | b728fe05284803e3e7999364a78a0fc3c78bde4f | [#10](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/10) | Rascunho aberto, base main |
-| SEC-003 | security/sec-003-session-revocation | c9b1f312659bc1c83387499b1d930d6c339ddd79 | [#11](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/11) | Rascunho aberto, base branch #10 |
-| CI/proteção/publicação | infra/nexo-security-ci | bb8578818cedf7da5bfc48a8c4469fc7143e1e8b + atualização documental de evidências | [#12](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/12) | Rascunho aberto, base branch #11, CI aprovado |
+| Homologação SEC-002/e-mails/logs | security/sec-002-homologacao | b728fe05284803e3e7999364a78a0fc3c78bde4f | [#10](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/10) | MERGED externamente na main, merge d6f0a9e |
+| SEC-003 | security/sec-003-session-revocation | c9b1f312659bc1c83387499b1d930d6c339ddd79 | [#11](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/11) | MERGED externamente na branch #10, merge 178f61a; alcançou main |
+| CI/proteção/publicação | infra/nexo-security-ci | bb8578818cedf7da5bfc48a8c4469fc7143e1e8b + c128763 documental | [#12](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/12) | MERGED externamente na branch #11, merge 745e735; alcançou main |
+| Atualização do estado integrado | docs/security-integration-evidence | 7a5988583c902312ff50ca2ace6061c7e7167abe + registro documental desta PR | [#13](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/13) | Rascunho aberto, base main; somente documentação |
 
-Revisar #10, depois #11 e por último CI. Após integração autorizada de uma base,
-ajustar a base da PR seguinte para main e conferir o diff; nenhuma branch deve
-ser excluída automaticamente. As três PRs são rascunhos. Não houve merge ou push
-na main, force push ou exclusão de branch. Mecanismos existentes de PDF/tokens,
+As três PRs foram abertas pelo Codex em rascunho e posteriormente integradas
+externamente: #12 → branch #11, #11 → branch #10, #10 → main. Não há retarget
+pendente para essas PRs já incorporadas. O Codex não fez merge, push direto na
+main, force push ou exclusão de branch. Mecanismos existentes de PDF/tokens,
 schema, configurações de produção e funcionalidades comerciais foram preservados.
+A PR #13 registra essa conferência posterior e preserva as evidências históricas.
 
 ## Prontidão e intervenções pendentes
 
-Código, testes locais e CI real aprovado permitem revisão das frentes implementadas.
-Publicação de produção continua condicionada a revisão e autorização
-dos merges, checks aprovados no candidato, verificação do Render/SHA/auto deploy, e-mails/domínio/HTTPS/logs
+Código, testes locais e CI real aprovado na main confirmam a integração das frentes.
+Publicação de produção continua condicionada a autorização de deploy,
+checks aprovados no candidato, verificação do Render/SHA/auto deploy, e-mails/domínio/HTTPS/logs
 externos, backup real autorizado e homologação operacional com conta controlada.
 
 Limites: dados autorizados/enfileirados antes do commit podem estar em trânsito;
@@ -232,13 +250,13 @@ Nenhum serviço em produção foi declarado atualizado ou pronto sem acesso.
 | SEC-001/002 incorporadas e preservadas | Concluído, main/PRs #8/#9 verificadas e testes aprovados |
 | SEC-002 PostgreSQL, uso único e concorrência | Concluído em PG descartável, 37/37 |
 | Fluxos de e-mail e transição v1 | Concluído com transporte simulado; entrega real pendente externa |
-| SEC-003, cookies HTTP e sockets antigos | Implementado e testado nas PRs, 41/41 focados e 41/41 PG |
+| SEC-003, cookies HTTP e sockets antigos | Incorporado à main; 41/41 focados e 41/41 PG |
 | Suíte existente, novas regressões e autenticação | Executadas, 315/315 na versão integrada |
 | Skips | 12 na linha de base, todos posteriormente executados; zero na regressão ampliada |
-| GitHub Actions | Configurado e executado com sucesso na PR #12; ainda não incorporado à main |
+| GitHub Actions | Incorporado e executado com sucesso na main d6f0a9e |
 | Proteção da main e plano | Verificados; aplicação de regras bloqueada por permissão/plano externo |
-| PRs e ausência de merge | #10/#11/#12 confirmadas em rascunho; nenhum merge realizado |
+| PRs e limite de autorização | #10/#11/#12 integradas externamente; Codex não executou merges |
 | Render e versão publicada | Não verificáveis sem acesso conectado ao serviço real |
 | Plano de deploy, validação e rollback | Preparado, com critérios de interrupção e autorizações |
-| Produção e Supabase | Não alterados; nenhum deploy/migração/acesso a dados reais |
+| Produção e Supabase | Nenhum deploy/migração/acesso a dados reais executado pelo Codex; estado externo não verificado |
 | Relatório, evidências e riscos | Documentados nesta PR e nos documentos específicos |
