@@ -9,7 +9,8 @@ Data: 23/10/2026. Este relatório distingue validação local, publicação no G
 | Projeto | NEXO: Faturamento Inteligente |
 | Repositório oficial | `Helio965/Nexo---Faturamento-Inteligente---Render` |
 | Diretório | `/workspace/Nexo---Faturamento-Inteligente---Render` |
-| Branch de trabalho | `security/sec-006-dependency-updates` |
+| Branch da implementação | `security/sec-006-dependency-updates`, integrada pela PR #14. |
+| Branch do complemento documental | `docs/sec-006-publication-evidence`, a partir de `origin/main`. |
 | Commit inicial e base da correção | `f4fd6d31f3ff5eefea534222700623d3e1c3d989` |
 | Destino da Pull Request | `main` |
 | Validação local | Linux, Python 3.12.14, virtualenv descartável `/tmp/nexo-sec006-validation` |
@@ -21,7 +22,7 @@ As correções SEC-001, SEC-002 e SEC-003 e o workflow `.github/workflows/nexo-s
 
 Foram encontrados os três pins atualizados em `requirements.txt`, os novos testes `tests/test_dependency_security_compat.py` e `tests/test_dependency_wsgi_runtime.py`, o relatório técnico e a auditoria em `Docs/`. O pacote `/workspace/artifacts/NEXO_SEC_006_DEPENDENCIAS_REVISAO.zip` também existe, fora do repositório. A implementação correta foi reaproveitada; não foi reconstruída nem substituída por conteúdo hipotético.
 
-`requirements-dev.txt`, aplicação, autenticação, tokens, sessões, modelos, migrações, workflow, configurações de produção, regras comerciais, identidade visual, NexoBot e vídeo permaneceram sem alterações de implementação. Nesta etapa os relatórios foram atualizados para registrar a autorização de publicação, a nova execução dos testes, a reavaliação dos sete avisos residuais e as condições de merge. O ZIP continua fora do conjunto proposto para commit.
+`requirements-dev.txt`, aplicação, autenticação, tokens, sessões, modelos, migrações, workflow, configurações de produção, regras comerciais, identidade visual, NexoBot e vídeo permaneceram sem alterações de implementação. Nesta etapa os relatórios foram atualizados para registrar a autorização de publicação, a nova execução dos testes, a reavaliação dos sete avisos residuais e as condições de merge. O ZIP permaneceu fora do commit de implementação e do complemento documental.
 
 ## C. Dependências atualizadas
 
@@ -108,74 +109,98 @@ O cluster não aceita servidor existente: ambiente filtrado, socket Unix privado
 
 ## G. GitHub Actions
 
-O workflow existente `.github/workflows/nexo-security-ci.yml` foi preservado. Os jobs esperados são `security-sqlite-browser` e `security-postgresql`. Execuções da nova Pull Request: pendentes de criação da PR e execução nesta etapa. Nenhum resultado local ou de PR anterior está sendo apresentado como aprovação da CI atual. Os links e conclusões reais deverão ser registrados após consulta da execução correspondente ao commit publicado.
+O workflow `.github/workflows/nexo-security-ci.yml` foi preservado. Os resultados abaixo pertencem às execuções reais desta SEC-006 e são distintos dos testes locais.
+
+| Execução | Referência validada | `security-sqlite-browser` | `security-postgresql` | Conclusão registrada |
+| --- | --- | --- | --- | --- |
+| [PR #14 — 39994368046](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/39994368046) | Implementação `2540ebc9bc0c02c2da545dbd03101f4dff713641` | Aprovado (`success`) | Aprovado (`success`) | **Sucesso** |
+| [Push em main — 39994575603](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/39994575603) | Merge `415466ef2c89fb3e1fbae6dec4ce575a6688923e` | Aprovado (`success`) | Aprovado (`success`) | **Sucesso** |
+
+A execução da PR e a execução disparada pelo merge externo em `main` foram concluídas com os dois jobs aprovados em cada uma. As conclusões `completed/success` foram confirmadas pela API GitHub. O proprietário integrou a PR enquanto a CI da PR ainda estava em andamento; o sucesso observado posteriormente não altera essa cronologia nem constitui aprovação retroativa da decisão operacional de merge.
+
+O complemento deste relatório será publicado separadamente em branch documental, com PR em rascunho e sem merge realizado por esta execução. Sua CI deve ser identificada como documental e não substituir as evidências das execuções de implementação acima.
 
 ## H. Arquivos modificados
 
-Conjunto exclusivo da SEC-006 proposto para commit:
+O commit de implementação `2540ebc9bc0c02c2da545dbd03101f4dff713641`, integrado pela PR #14, contém exclusivamente estes cinco arquivos da SEC-006:
 
 | Arquivo | Conteúdo |
 | --- | --- |
 | `requirements.txt` | Três pins atualizados; CRLF preservado. |
 | `tests/test_dependency_security_compat.py` | 18 testes de sessão, `Vary`, limites multipart, formulários, CSRF, CSV/XLSX e proxy. |
 | `tests/test_dependency_wsgi_runtime.py` | Gunicorn/WSGI com PostgreSQL privado e cookies seguros. |
-| `Docs/RELATORIO_NEXO_SEC006_DEPENDENCIAS.md` | Relatório A–M, testes, CVEs, publicação e limitações. |
+| `Docs/RELATORIO_NEXO_SEC006_DEPENDENCIAS.md` | Relatório técnico inicialmente registrado antes da publicação. |
 | `Docs/AUDITORIA_DEPENDENCIAS_SEC006.md` | Metadata, fontes, hashes e análise dos avisos. |
 
-Não fazem parte do commit: ZIP, patch externo, inventários de validação, logs, `.env`, credenciais, bancos, backups, virtualenvs, caches ou dados de clientes. As correções anteriores, configurações de produção, workflow e funcionalidades do NEXO permanecem preservados.
+O complemento documental altera somente `Docs/RELATORIO_NEXO_SEC006_DEPENDENCIAS.md` para refletir a publicação, a integração externa e as limitações operacionais. Não modifica dependências, aplicação, testes, CI ou configurações de produção. Será mantido em branch própria para revisão, sem novo merge automático.
+
+Não fazem parte dos commits: ZIP, patch externo, inventários de validação, logs, `.env`, credenciais, bancos, backups, virtualenvs, caches ou dados de clientes. As correções anteriores, configurações de produção, workflow e funcionalidades do NEXO permanecem preservados.
 
 ## I. Publicação no GitHub
 
-| Item | Estado deste registro pré-publicação |
+| Item | Estado confirmado |
 | --- | --- |
-| Branch | `security/sec-006-dependency-updates`, local |
-| Commit SEC-006 | Pendente de criação nesta etapa; nenhum SHA novo é declarado neste registro. |
-| Push | Pendente de execução nesta etapa. |
-| Pull Request | Pendente de abertura nesta etapa; não há URL real a declarar ainda. |
-| Título autorizado | `fix(security): NEXO-SEC-006 - atualização segura de dependências` |
-| Merge | Não executado; condicionado a todas as verificações e à ausência comprovada de deploy automático não autorizado. |
-| SHA de merge | Não existe nesta etapa. |
-| `main` | Não modificada por esta execução. |
+| Branch de implementação | `security/sec-006-dependency-updates`, publicada no repositório oficial. |
+| Commit de implementação SEC-006 | `2540ebc9bc0c02c2da545dbd03101f4dff713641` |
+| Push da implementação | Executado exclusivamente na branch de segurança, sem force push; existência remota e arquivos verificados. |
+| Pull Request da implementação | [#14](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/14), integrada (`MERGED`). |
+| Título da PR | `fix(security): NEXO-SEC-006 - atualização segura de dependências` |
+| Autor do merge conforme GitHub | `Helio965`, integração externa à execução do assistente. |
+| Data/hora do merge | 23/10/2026 às **14:22:48 em São Paulo**; `2026-10-23T17:22:48Z`. |
+| Commit de merge e `main` verificado | `415466ef2c89fb3e1fbae6dec4ce575a6688923e` |
+| Pais do merge | Base `f4fd6d31f3ff5eefea534222700623d3e1c3d989` e implementação `2540ebc9bc0c02c2da545dbd03101f4dff713641`. |
+| Branch do complemento documental | `docs/sec-006-publication-evidence`, criada localmente a partir de `origin/main` em `415466ef2c89fb3e1fbae6dec4ce575a6688923e`; publicação/PR documental serão registradas após sua criação, sem número fictício. |
 
-O proprietário autorizou expressamente commit, push, PR e acompanhamento/correção de CI. A condição de merge é diferente de uma autorização pendente: falta comprovar o comportamento efetivo do Render. Não se deve confundir a publicação da branch com integração à `main`, nem integração ao GitHub com implantação em produção.
+**O assistente não executou o merge da PR #14.** Diante da confirmação de Auto-Deploy ativado, a decisão desta execução era manter a integração bloqueada. Durante o acompanhamento da CI, a API GitHub confirmou que `Helio965` havia integrado a PR externamente. Nenhum novo merge, reversão ou alteração de configuração foi realizado para interferir nessa ação.
+
+A API confirmou os três pins esperados em `requirements.txt` da `main`: Flask 3.1.3, Werkzeug 3.1.9 e Flask-SocketIO 5.6.1. A árvore do merge corresponde à árvore da implementação publicada. Portanto, a integração do código ao GitHub foi confirmada; não se trata apenas de atualização da branch de segurança. O relatório disponível na `main` veio do commit inicial e ainda descrevia a etapa pré-publicação; este complemento registra a evidência posterior em uma branch documental separada.
 
 ## J. Render e Supabase
 
-Nenhum deploy manual, alteração de configuração Render, acesso a dados Supabase, migração de produção ou modificação de credencial foi realizado por esta execução. A versão efetivamente implantada em produção não foi validada: o painel Render não foi acessado por integração autorizada disponível nesta sessão.
+Nenhum deploy **manual**, alteração de configuração Render, acesso a dados Supabase, migração de produção ou modificação de credencial foi realizado pelo assistente nesta execução. A versão efetivamente implantada em produção não foi validada: o painel Render não foi acessado diretamente por ferramenta desta sessão.
 
-`render.yaml` declara `autoDeployTrigger: 'off'`, Python 3.12.10, um worker Gunicorn, 50 threads e `wsgi:app`. Esse arquivo não comprova a configuração efetiva do painel. Não foi encontrado workflow de deploy no repositório. As consultas GitHub a recursos administrativos/deployment/hook retornaram limitações de permissão; portanto não forneceram evidência suficiente para descartar um deploy automático no merge.
+**O proprietário confirmou nesta execução que o Auto-Deploy está ativado no Render ligado à branch `main`.** Essa informação foi fornecida pelo proprietário; não é uma alegação de leitura direta do painel pela ferramenta. A configuração efetiva informada diverge de `render.yaml`, que declara `autoDeployTrigger: 'off'`. O arquivo também declara Python 3.12.10, um worker Gunicorn, 50 threads e `wsgi:app`.
 
-**Impedimento de merge:** o risco de implantação automática não autorizada não pôde ser descartado com as informações disponíveis. Pelas seções 2 e 14 do prompt atual, a branch e a PR podem ser publicadas normalmente, mas o merge deve permanecer pendente até evidência da configuração efetiva do serviço Render. Nenhuma proteção foi desativada para superar essa limitação.
+Essa condição impedia o assistente de realizar o merge pelas seções 2 e 14 do prompt. Mesmo assim, a PR #14 foi integrada externamente pelo proprietário. **O merge externo pode ter disparado um deploy automático; o início, o resultado e a versão desse eventual deploy não foram confirmados nesta sessão.** Portanto, não se afirma ausência de toda implantação automática nem igualdade entre o código atual no GitHub e o código em produção.
+
+O acompanhamento do Render deve ser feito pelo operador com acesso ao painel, sem presumir sucesso ou falha de uma implantação. Esta execução não altera o Auto-Deploy, não inicia deploy, não reverte o merge e não acessa o banco de produção. Qualquer novo merge documental também permanece suspenso enquanto persistir o risco de implantação automática não autorizada.
 
 A compatibilidade foi verificada por metadata e ambiente Linux/Python 3.12.14, não pelo patch exato 3.12.10 ou pela topologia externa Render/Supabase. Gunicorn simulado usa um worker e 50 threads, mas bind loopback e timeout de 20 s frente a 180 s no Render. Os fluxos Socket.IO foram cobertos pelos clientes de teste da extensão e regressões; não houve teste de WebSocket no serviço Render real. Não há migração de banco ou alteração de variável de produção necessária para esta atualização.
 
 ## K. Problemas e pendências
 
-- Publicar a branch, abrir uma única Pull Request e acompanhar os dois jobs da CI sobre o commit efetivamente enviado.
-- Obter evidência da configuração efetiva do Render antes de realizar merge; o YAML isoladamente é insuficiente.
+- A CI da implementação foi aprovada tanto na PR #14 quanto no push em `main`. Acompanhar separadamente a execução da futura PR documental, sem usá-la como substituta dessas evidências de código.
+- Revisar o complemento documental em `docs/sec-006-publication-evidence`, a publicar com PR em rascunho. Não realizar seu merge enquanto o Auto-Deploy ativado representar risco de implantação não autorizada.
+- O operador do Render precisa verificar no painel se o merge externo disparou deploy automático e qual versão está ativa. O assistente não confirmou estado de implantação nem acessou o serviço de produção.
 - Preservar a reavaliação dos sete CVEs fora do escopo, incluindo a divergência de gravidade do CVE-2026-8643. Tratar tooling de build e python-dotenv em tarefa própria.
-- A comparação local preservou os transitivos por constraints de teste externas ao repositório. O build normal não fixa todos os transitivos; a CI da publicação deverá validar a resolução efetiva.
+- A comparação local preservou os transitivos por constraints de teste externas ao repositório. O build normal não fixa todos os transitivos; a CI do GitHub não comprova a resolução efetiva do Render real.
 - Observar os novos limites padrão de formulários em eventual homologação operacional futura. Dados reais não foram usados nos testes.
 - SEC-005 e SEC-010 continuam separadas. A auditoria Python não cobre sistema operacional, CDN JavaScript ou serviços externos.
 - A documentação web Pallets retornou CONNECT 403 na pesquisa anterior; changelogs oficiais foram obtidos dos repositórios dos mantenedores pela API GitHub permitida. Não houve contorno de proxy ou alteração de permissões de rede.
 
 ## L. Resultado
 
-**CORRIGIDO COM RESSALVAS.**
+**CORRIGIDO, TESTADO E INTEGRADO AO GITHUB.** A integração foi realizada externamente pelo proprietário; esta classificação descreve a implementação e a validação no GitHub, sem constituir homologação da produção ou aval operacional do merge externo.
 
-A implementação existente foi recuperada e revalidada: 334 testes gerais, 37 PostgreSQL de tokens e 41 PostgreSQL de sessões aprovados, sem falhas, erros ou ignorados. A finalização autorizada está em andamento. Este registro pré-publicação não afirma que o commit, a PR ou a CI atual já existam. A integração à `main` permanece impedida enquanto não for possível descartar deploy automático não autorizado no Render. O estado final deverá ser classificado de acordo com as evidências efetivas de publicação e CI obtidas nesta execução.
+A implementação foi recuperada, revalidada e publicada no commit `2540ebc9bc0c02c2da545dbd03101f4dff713641`. A PR #14 foi integrada externamente por `Helio965`, produzindo `415466ef2c89fb3e1fbae6dec4ce575a6688923e` na `main`. O assistente não realizou o merge, pois o Auto-Deploy ativado já havia sido confirmado. Os três pins e a árvore integrada foram verificados diretamente no GitHub.
+
+A nova validação local aprovou 334 testes gerais, 37 PostgreSQL de tokens e 41 PostgreSQL de sessões, sem falhas, erros ou ignorados. Os dois jobs da CI da PR #14 e os dois jobs da CI do push em `main` foram aprovados, em execuções reais concluídas e confirmadas pela API. Os resultados locais não foram usados como substitutos da CI.
+
+O eventual deploy automático do Render não foi confirmado. O complemento de evidências será publicado separadamente para revisão, sem novo merge realizado por esta execução.
 
 ## M. Resumo para ChatGPT
 
 **RESUMO PARA CHATGPT: SEC-006 FINALIZADA**
 
 - Dependências: Flask 3.0.3 → 3.1.3; Werkzeug 3.0.4 → 3.1.9; Flask-SocketIO 5.4.1 → 5.6.1, esta última por incompatibilidade de sessão comprovada.
-- Arquivos: `requirements.txt`, dois novos módulos de teste e os dois relatórios em `Docs/`; cinco arquivos exclusivos da SEC-006.
-- Testes novos: suíte geral 334/334 em 69,480 s; PostgreSQL tokens 37/37 em 6,268 s; PostgreSQL sessões 41/41 em 7,991 s; zero falhas, erros ou ignorados. `pip check` passou e os três módulos foram importados da virtualenv isolada nas versões esperadas.
-- CVEs restantes: seis no pip 25.0.1 e um no python-dotenv 1.0.1, com aplicabilidade condicional e fontes na seção E; nenhuma atualização adicional foi aplicada.
-- Branch publicada: ainda pendente neste registro pré-publicação; branch local `security/sec-006-dependency-updates`, base `f4fd6d31f3ff5eefea534222700623d3e1c3d989`.
-- Pull Request e CI: pendentes de execução nesta etapa; nenhum link ou sucesso foi inventado.
-- `main`: não alterada por esta execução; merge exige todas as condições do prompt.
-- Render: nenhum deploy/configuração alterados; versão em produção não validada e autodeploy efetivo ainda não comprovado como desligado.
-- Pendências operacionais: publicar branch/PR, acompanhar CI e comprovar a configuração efetiva do Render antes de integrar.
+- Arquivos integrados: `requirements.txt`, dois novos módulos de teste e os dois relatórios em `Docs/`; cinco arquivos exclusivos da SEC-006. O complemento posterior altera apenas o relatório técnico em branch documental própria.
+- Testes locais novos: suíte geral 334/334 em 69,480 s; PostgreSQL tokens 37/37 em 6,268 s; PostgreSQL sessões 41/41 em 7,991 s; zero falhas, erros ou ignorados. `pip check` passou; os três módulos foram importados da virtualenv isolada nas versões esperadas.
+- CVEs restantes: seis no pip 25.0.1 e um no python-dotenv 1.0.1, com aplicabilidade condicional e fontes na seção E; CVE-2026-8643 possui CVSS 8,0 (alta) embora o campo textual GHSA diga média. Nenhuma atualização adicional foi aplicada.
+- Branch de implementação publicada: `security/sec-006-dependency-updates`; commit `2540ebc9bc0c02c2da545dbd03101f4dff713641`.
+- Pull Request: [#14, integrada](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/14) externamente por `Helio965` em 23/10/2026 às 14:22:48 de São Paulo. O assistente não realizou o merge.
+- GitHub Actions da PR: [39994368046](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/39994368046), ambos os jobs aprovados.
+- GitHub Actions da main: [39994575603](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/39994575603), execução concluída com ambos os jobs aprovados, assim como na PR #14.
+- `main`: merge `415466ef2c89fb3e1fbae6dec4ce575a6688923e`; os três pins esperados e a árvore da implementação foram confirmados pela API.
+- Render: proprietário confirmou Auto-Deploy ativado na integração com `main`. O merge externo pode ter disparado deploy automático; seu estado e a versão em produção não foram confirmados. Nenhum deploy manual, configuração ou dado de produção foi alterado pelo assistente.
+- Pendências operacionais: verificar eventual deploy no painel pelo operador e revisar o complemento documental em PR separada e rascunho, acompanhando sua CI sem novo merge nesta execução.
 - Próxima correção recomendada: revisar separadamente tooling de build, incluindo CVE-2026-8643, e python-dotenv conforme exposição operacional; SEC-005/SEC-010 permanecem em tarefas próprias. Não executar deploy ou migração de produção nesta SEC-006.
