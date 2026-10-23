@@ -189,7 +189,7 @@ Lista completa e versões exatas em [`requirements.txt`](requirements.txt).
 
 O MP4 (40 s, 1920×1080), a prévia GIF, a capa original em PNG e a capa otimizada em JPEG ficam em [`static/video/`](static/video/). Na seção **Demonstração** da página inicial pública, o player ([`static/js/landing-video.js`](static/js/landing-video.js)) inicia o vídeo sem som por script quando ele se aproxima da área visível e o repete continuamente, inclusive fora da tela: a rolagem controla apenas o som. Não há controles nativos de pausa, avanço, volume, velocidade, Picture-in-Picture ou download; o único controle permanente é **Expandir vídeo** (tela cheia). O áudio só toca com 100% do vídeo visível — descontando o cabeçalho fixo, o zoom por pinça e contêineres que recortem o player; na tela cheia vale a área da tela — e é silenciado quando cerca de 1 px sai da área visível ou quando a aba fica oculta. Se o navegador exigir interação para liberar áudio, aparece o botão temporário **Ativar som da demonstração**, que some após a autorização. Não há links públicos de download; isso não impede recuperar o MP4 estático por ferramentas do navegador. Cada reprodução transfere cerca de 12 MB do Render e o player sem pausa não atende à WCAG 2.2 (critério 2.2.2): medições, limitações (iPhone, segundo plano) e alternativas estão em [`Docs/VALIDACAO_VIDEO_RENDER.md`](Docs/VALIDACAO_VIDEO_RENDER.md). A capa JPEG otimizada foi preservada.
 
-O código-fonte do vídeo está em [`tools/nexo-motion/`](tools/nexo-motion/) (React, TypeScript e Remotion), isolado da aplicação Flask. Essa pasta não participa do build nem do runtime no Render: o serviço continua com `pip install -r requirements.txt` e Gunicorn, sem Node.js, Remotion ou FFmpeg. Para editar o vídeo, em uma máquina local com Node.js 22+, npm, Python 3, FFmpeg e Chromium, renderize novamente a partir da raiz do repositório:
+O código-fonte do vídeo está em [`tools/nexo-motion/`](tools/nexo-motion/) (React, TypeScript e Remotion), isolado da aplicação Flask. Essa pasta não participa do build nem do runtime no Render: o build Python versionado usa o instalador verificado de dependências, e o start usa Gunicorn, sem Node.js, Remotion ou FFmpeg. Para editar o vídeo, em uma máquina local com Node.js 22+, npm, Python 3, FFmpeg e Chromium, renderize novamente a partir da raiz do repositório:
 
 ```bash
 cd tools/nexo-motion
@@ -238,8 +238,10 @@ source .venv/bin/activate
 ### 4. Instalar as dependências
 
 ```bash
-pip install -r requirements.txt
+python -I tools/install_dependencies.py --requirements requirements.txt
 ```
+
+O script confere o SHA256 do wheel oficial do pip 26.2.2, executa essa cópia corrigida e confirma sua versão antes dos requisitos. Usa PyPI oficial com TLS ativo; não lê `.env`, não repassa segredos da aplicação aos instaladores e ignora configurações/índices pip herdados. Para testes, use `--requirements requirements-dev.txt` no mesmo ambiente virtual. O Python deve ser 3.12. Falha de hash ou versão interrompe a instalação.
 
 ### 5. Configurar as variáveis de ambiente
 
