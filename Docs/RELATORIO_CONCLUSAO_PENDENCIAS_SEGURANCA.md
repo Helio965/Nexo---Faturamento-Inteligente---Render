@@ -212,19 +212,21 @@ integrações/volume/configurações reais de produção. Nenhum teste ignorado 
 convertido em aprovação; a execução ampliada habilitou os 12 casos previamente
 ignorados. PostgreSQL explícito fica fora do discovery SQLite e é job obrigatório.
 
-## GitHub e sequência de revisão
+## GitHub e estado de integração
 
 | Etapa | Branch | Commit | Pull Request | Status |
 | --- | --- | --- | --- | --- |
 | Homologação SEC-002/e-mails/logs | security/sec-002-homologacao | b728fe05284803e3e7999364a78a0fc3c78bde4f | [#10](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/10) | MERGED externamente na main, merge d6f0a9e |
 | SEC-003 | security/sec-003-session-revocation | c9b1f312659bc1c83387499b1d930d6c339ddd79 | [#11](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/11) | MERGED externamente na branch #10, merge 178f61a; alcançou main |
 | CI/proteção/publicação | infra/nexo-security-ci | bb8578818cedf7da5bfc48a8c4469fc7143e1e8b + c128763 documental | [#12](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/12) | MERGED externamente na branch #11, merge 745e735; alcançou main |
+| Atualização do estado integrado | docs/security-integration-evidence | 7a5988583c902312ff50ca2ace6061c7e7167abe + registro documental desta PR | [#13](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/13) | Rascunho aberto, base main; somente documentação |
 
 As três PRs foram abertas pelo Codex em rascunho e posteriormente integradas
 externamente: #12 → branch #11, #11 → branch #10, #10 → main. Não há retarget
 pendente para essas PRs já incorporadas. O Codex não fez merge, push direto na
 main, force push ou exclusão de branch. Mecanismos existentes de PDF/tokens,
 schema, configurações de produção e funcionalidades comerciais foram preservados.
+A PR #13 registra essa conferência posterior e preserva as evidências históricas.
 
 ## Prontidão e intervenções pendentes
 
