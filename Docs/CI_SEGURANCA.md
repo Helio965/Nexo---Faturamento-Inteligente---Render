@@ -106,8 +106,12 @@ Primeira execução real confirmada:
 [39705086856](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/39705086856),
 PR #12, head `bb8578818cedf7da5bfc48a8c4469fc7143e1e8b`: ambos os checks
 concluíram com sucesso. PostgreSQL levou 76 s e SQLite/browser 135 s. O relatório
-de conclusão registra os detalhes. O workflow permanece em PR; disponibilizá-lo
-na main/futuras PRs exige revisão e integração autorizada.
+de conclusão registra os detalhes. Após a pausa, os merges externos das PRs
+#12/#11/#10 incorporaram o workflow à main. A execução de push
+[39705823783](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/39705823783)
+no SHA `d6f0a9e20ccf0879919a10e0e6223c8290f5a8c2` também terminou com sucesso:
+ambos os jobs e todas as etapas de teste aprovados. Isso comprova a operação
+na main integrada; não configura proteção de branch nem autoriza deploy.
 
 Nesta sessão, a API confirmou jobs/etapas aprovados, mas baixar os logs retornou
 403 Forbidden. A origem desse 403 não foi comprovada por cabeçalhos; nenhum
