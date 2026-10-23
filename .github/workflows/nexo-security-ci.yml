@@ -86,3 +86,7 @@ jobs:
         run: python -B -m unittest tests.postgresql_auth_tokens -v
       - name: Sessoes e corridas de notificacao no PostgreSQL real
         run: python -B -m unittest tests.postgresql_session_revocation -v
+      - name: Restauracao de empresas e concorrencia no PostgreSQL real
+        run: python -B -m unittest tests.postgresql_company_restore_security -v
+      - name: Migracao SEC-004 com dados anteriores no PostgreSQL real
+        run: python -B -m unittest tests.postgresql_company_restore_migration -v

@@ -167,6 +167,14 @@ def create_app(config_name: str = None) -> Flask:
         if request.endpoint == "static":
             return
         autenticado = current_user.is_authenticated
+        valida = False
+        if autenticado and not getattr(g, "falha_banco_autenticacao", False):
+            try:
+                valida = sessao_valida(current_user)
+            except SQLAlchemyError as erro:
+                db.session.rollback()
+                g.falha_banco_autenticacao = True
+                app.logger.warning("Autorizacao indisponivel (%s).", type(erro).__name__)
         if getattr(g, "falha_banco_autenticacao", False):
             logout_user()
             session.clear()
@@ -178,7 +186,7 @@ def create_app(config_name: str = None) -> Flask:
         if autenticado:
             # BOOT_ID, conta ativa e fingerprint da credencial são conferidos
             # juntos. Cookie legado sem fingerprint também exige novo login.
-            if not sessao_valida(current_user):
+            if not valida:
                 logout_user()
                 session.clear()
         elif "_user_id" in session:

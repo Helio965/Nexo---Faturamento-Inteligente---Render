@@ -18,7 +18,7 @@ Os nomes estáveis dos checks são:
 | Check | Verificações |
 | --- | --- |
 | `security-sqlite-browser` | Suíte completa, incluindo autenticação, tokens, SEC-003, segurança PDF, configuração e regressões; 11 cenários de navegador Chromium; backup/restore PostgreSQL descartável. |
-| `security-postgresql` | Tokens, consumo único, concorrência, erros transacionais e revogação de sessões/notificações em PostgreSQL real. |
+| `security-postgresql` | Tokens, consumo único, concorrência, erros transacionais, revogação de sessões/notificações, restauração segura de empresas e migração SEC-004 em PostgreSQL real. |
 
 Ambos usam Ubuntu 24.04, Python 3.12 e as dependências declaradas em
 `requirements-dev.txt`. Playwright 1.56.0 é exclusivamente de desenvolvimento.
@@ -78,6 +78,8 @@ export NEXO_TEST_POSTGRES_BIN=/caminho/absoluto/postgresql/bin
 NEXO_TEST_BROWSER=1 python -B -m unittest discover -s tests -t . -v
 python -B -m unittest tests.postgresql_auth_tokens -v
 python -B -m unittest tests.postgresql_session_revocation -v
+python -B -m unittest tests.postgresql_company_restore_security -v
+python -B -m unittest tests.postgresql_company_restore_migration -v
 ```
 
 Instalar os binários PostgreSQL e `pdftotext` conforme o sistema local. Em Linux,
