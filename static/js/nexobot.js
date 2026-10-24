@@ -1,11 +1,16 @@
-/* NEXO — NexoBot (widget do portal do cliente)
+/* NEXO — NexoBot (widget do portal do cliente), versão 2.0
  * ------------------------------------------------------------------
- * - Texto do bot e do usuário é sempre inserido como texto (createTextNode):
+ * - Todo texto do bot e do usuário é inserido como TEXTO (createTextNode):
  *   só **negrito** e quebras de linha recebem marcação, montada via DOM.
+ * - Respostas estruturadas chegam como `blocos` (cabeçalho, texto, passos,
+ *   seção, exemplo, aviso) e `sugestoes` (chips que apenas enviam uma
+ *   mensagem). Tipos desconhecidos são ignorados; nada vira HTML.
  * - Ações vindas da API só são aceitas se o destino e a URL coincidirem
  *   exatamente com o catálogo renderizado pelo servidor e forem da mesma origem.
- * - O contexto da conversa fica apenas na memória desta aba (identificadores do
- *   catálogo) e é revalidado pelo servidor a cada mensagem.
+ * - O contexto da conversa fica apenas na memória desta aba (identificadores
+ *   do catálogo e da base de conhecimento) e é revalidado pelo servidor.
+ * - Mobile-first: painel em tela cheia abaixo de 640px, ajustado ao teclado
+ *   virtual via visualViewport; textarea com altura automática; Enter envia.
  */
 (function () {
   'use strict';
@@ -23,8 +28,24 @@
   if (!launcher || !panel || !msgs || !form || !input || !enviarBtn) return;
 
   var TEMPO_LIMITE_MS = 20000;
+  var ALTURA_MAXIMA_INPUT = 132; /* ~5 linhas */
   var ACOES = { navegar: true, sugerir_navegacao: true };
+  var TIPOS_BLOCO = { cabecalho: true, texto: true, passos: true, secao: true, exemplo: true, aviso: true };
   var CHAVES_CONTEXTO = ['ultimo_destino', 'destino_anterior', 'oferta'];
+  var ASSUNTO_VALIDO = /^nexo(\.[a-z0-9_]+){2,}$/;
+  var SAUDACAO = 'Olá! Sou o NexoBot, seu assistente do NEXO. Posso explicar como a plataforma funciona, ' +
+                 'orientar sobre o envio de relatórios e ajudar você a encontrar as funcionalidades do portal. ' +
+                 'Sobre o que você quer saber?';
+  var SUGESTOES_INICIAIS = [
+    { rotulo: 'Como funciona o NEXO?', mensagem: 'Como o NEXO funciona?' },
+    { rotulo: 'Enviar relatórios', mensagem: 'Enviar relatórios' },
+    { rotulo: 'Entender meus indicadores', mensagem: 'Entender meus indicadores' },
+    { rotulo: 'Ver minhas análises', mensagem: 'Ver minhas análises' },
+    { rotulo: 'Preciso de ajuda', mensagem: 'Preciso de ajuda' }
+  ];
+  var telaPequena = window.matchMedia ? window.matchMedia('(max-width: 639.98px)') : { matches: false };
+  var movimentoReduzido = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
+
   var endpoint = raiz.getAttribute('data-endpoint') || '';
   var destinos = {};
   try {
@@ -41,29 +62,99 @@
       contexto = {}, requisicao = null;
 
   /* ---------- renderização segura ---------- */
-  function preencher(bubble, texto) {
-    String(texto == null ? '' : texto).split('\n').forEach(function (linha, i) {
-      if (i) bubble.appendChild(document.createElement('br'));
+  function texto(valor) { return typeof valor === 'string' ? valor : ''; }
+  function preencher(alvo, conteudo) {
+    /* Parágrafos: linhas separadas por <br>; **negrito** vira <strong>. Nada mais é interpretado. */
+    String(conteudo == null ? '' : conteudo).split('\n').forEach(function (linha, i) {
+      if (i) alvo.appendChild(document.createElement('br'));
       var destaque = /\*\*(.+?)\*\*/g, inicio = 0, trecho;
       while ((trecho = destaque.exec(linha)) !== null) {
-        bubble.appendChild(document.createTextNode(linha.slice(inicio, trecho.index)));
+        alvo.appendChild(document.createTextNode(linha.slice(inicio, trecho.index)));
         var forte = document.createElement('strong');
         forte.textContent = trecho[1];
-        bubble.appendChild(forte);
+        alvo.appendChild(forte);
         inicio = destaque.lastIndex;
       }
-      bubble.appendChild(document.createTextNode(linha.slice(inicio)));
+      alvo.appendChild(document.createTextNode(linha.slice(inicio)));
     });
   }
-  function rolar() { msgs.scrollTop = msgs.scrollHeight; }
-  function add(texto, quem, extraClasse) {
+  function criarBloco(bloco) {
+    if (!bloco || typeof bloco !== 'object' || !TIPOS_BLOCO[bloco.tipo]) return null;
+    var el;
+    if (bloco.tipo === 'cabecalho') {
+      el = document.createElement('div');
+      el.className = 'nb-cabecalho';
+      el.textContent = texto(bloco.texto);
+    } else if (bloco.tipo === 'texto') {
+      el = document.createElement('p');
+      el.className = 'nb-p';
+      preencher(el, texto(bloco.texto));
+    } else if (bloco.tipo === 'passos') {
+      if (!Array.isArray(bloco.itens)) return null;
+      el = document.createElement('div');
+      el.className = 'nb-passos';
+      if (bloco.titulo) {
+        var titulo = document.createElement('div');
+        titulo.className = 'nb-rotulo';
+        titulo.textContent = texto(bloco.titulo);
+        el.appendChild(titulo);
+      }
+      var lista = document.createElement('ol');
+      bloco.itens.slice(0, 30).forEach(function (item) {
+        if (typeof item !== 'string') return;
+        var li = document.createElement('li');
+        preencher(li, item);
+        lista.appendChild(li);
+      });
+      el.appendChild(lista);
+    } else if (bloco.tipo === 'secao' || bloco.tipo === 'exemplo') {
+      el = document.createElement('div');
+      el.className = bloco.tipo === 'secao' ? 'nb-secao' : 'nb-exemplo';
+      var rotulo = document.createElement('div');
+      rotulo.className = 'nb-rotulo';
+      rotulo.textContent = texto(bloco.titulo) || (bloco.tipo === 'exemplo' ? 'Exemplo (hipotético)' : '');
+      var corpo = document.createElement('p');
+      corpo.className = 'nb-p';
+      preencher(corpo, texto(bloco.texto));
+      if (rotulo.textContent) el.appendChild(rotulo);
+      el.appendChild(corpo);
+    } else if (bloco.tipo === 'aviso') {
+      el = document.createElement('div');
+      el.className = 'nb-aviso';
+      el.setAttribute('role', 'note');
+      var icone = document.createElement('i');
+      icone.className = 'bi bi-info-circle';
+      icone.setAttribute('aria-hidden', 'true');
+      var textoAviso = document.createElement('span');
+      preencher(textoAviso, texto(bloco.texto));
+      el.appendChild(icone);
+      el.appendChild(textoAviso);
+    }
+    return el;
+  }
+  function revelar(el) {
+    /* Mensagens longas: mostra o início; curtas: rola até o fim. */
+    var alto = el.offsetHeight > msgs.clientHeight * 0.8;
+    if (alto) msgs.scrollTop = Math.max(0, el.offsetTop - 8);
+    else msgs.scrollTop = msgs.scrollHeight;
+  }
+  function add(conteudo, quem, extraClasse) {
     var el = document.createElement('div'), bubble = document.createElement('div');
     el.className = 'nb-msg nb-' + quem + (extraClasse ? ' ' + extraClasse : '');
     bubble.className = 'nb-bubble';
-    preencher(bubble, texto);
+    var blocos = conteudo && typeof conteudo === 'object' && Array.isArray(conteudo.blocos)
+      ? conteudo.blocos.slice(0, 30).map(criarBloco).filter(Boolean) : [];
+    if (blocos.length) {
+      blocos.forEach(function (b) { bubble.appendChild(b); });
+    } else {
+      var p = document.createElement('p');
+      p.className = 'nb-p';
+      preencher(p, typeof conteudo === 'string' ? conteudo : texto(conteudo && conteudo.resposta));
+      bubble.appendChild(p);
+    }
     el.appendChild(bubble);
     msgs.appendChild(el);
-    rolar();
+    revelar(el);
     return el;
   }
   function digitando() {
@@ -80,10 +171,37 @@
     bubble.appendChild(leitor);
     el.appendChild(bubble);
     msgs.appendChild(el);
-    rolar();
+    msgs.scrollTop = msgs.scrollHeight;
     return el;
   }
-  function anunciar(texto) { if (status) status.textContent = texto; }
+  function anunciar(mensagem) { if (status) status.textContent = mensagem; }
+
+  /* ---------- sugestões (chips): só enviam uma mensagem ---------- */
+  function chips(el, lista, classe) {
+    var validas = (Array.isArray(lista) ? lista : []).filter(function (s) {
+      return s && typeof s === 'object' && typeof s.rotulo === 'string' && s.rotulo.trim() &&
+        typeof s.mensagem === 'string' && s.mensagem.trim();
+    }).slice(0, 6);
+    if (!validas.length) return;
+    var grupo = document.createElement('div');
+    grupo.className = 'nb-chips' + (classe ? ' ' + classe : '');
+    grupo.setAttribute('role', 'group');
+    grupo.setAttribute('aria-label', 'Sugestões de perguntas');
+    validas.forEach(function (s) {
+      var botao = document.createElement('button');
+      botao.type = 'button';
+      botao.className = 'nb-chip';
+      botao.textContent = s.rotulo.slice(0, 60);
+      var mensagem = s.mensagem.slice(0, 200);
+      botao.addEventListener('click', function () {
+        if (pendente || redirecionando) return;
+        grupo.querySelectorAll('.nb-chip').forEach(function (c) { c.classList.add('is-usada'); });
+        enviar(mensagem);
+      });
+      grupo.appendChild(botao);
+    });
+    el.querySelector('.nb-bubble').appendChild(grupo);
+  }
 
   /* ---------- catálogo e navegação ---------- */
   function urlPermitida(destino, url) {
@@ -103,7 +221,7 @@
     return null;
   }
   function travarBotoes(travar) {
-    msgs.querySelectorAll('.nb-navigation, .nb-opcao').forEach(function (b) { b.disabled = travar; });
+    msgs.querySelectorAll('.nb-navigation, .nb-opcao, .nb-chip').forEach(function (b) { b.disabled = travar; });
   }
   /* Devolve true somente quando a navegação foi iniciada. */
   function navegar(destino, url) {
@@ -126,7 +244,11 @@
     botao.type = 'button';
     botao.className = classe;
     botao.disabled = pendente || redirecionando;
-    botao.textContent = rotulo;
+    var icone = document.createElement('i');
+    icone.className = 'bi bi-arrow-right-short';
+    icone.setAttribute('aria-hidden', 'true');
+    botao.appendChild(document.createTextNode(rotulo));
+    botao.appendChild(icone);
     botao.addEventListener('click', function () {
       if (!pendente) navegar(destino, url);
     });
@@ -137,7 +259,6 @@
       ? dados.rotulo_botao.slice(0, 80) : 'Ir para a página';
     el.querySelector('.nb-bubble').appendChild(
       botaoNavegacao('nb-navigation', rotulo, dados.destino, dados.url));
-    rolar();
   }
   function mostrarOpcoes(el, opcoes) {
     var validas = opcoes.filter(function (o) {
@@ -153,10 +274,9 @@
       grupo.appendChild(botaoNavegacao('nb-opcao', o.rotulo_botao.slice(0, 80), o.destino, o.url));
     });
     el.querySelector('.nb-bubble').appendChild(grupo);
-    rolar();
   }
 
-  /* ---------- contexto (somente chaves do catálogo) ---------- */
+  /* ---------- contexto (somente identificadores conhecidos) ---------- */
   function chaveValida(valor) {
     return typeof valor === 'string' && Object.prototype.hasOwnProperty.call(destinos, valor) ? valor : null;
   }
@@ -176,24 +296,76 @@
         }
       }
     }
+    if (typeof novo.assunto === 'string' && novo.assunto.length <= 80 && ASSUNTO_VALIDO.test(novo.assunto)) {
+      contexto.assunto = novo.assunto;
+      var nivel = novo.nivel;
+      if (typeof nivel === 'number' && nivel >= 0 && nivel <= 4 && Math.floor(nivel) === nivel) {
+        contexto.nivel = nivel;
+      }
+    }
   }
 
-  /* ---------- painel ---------- */
+  /* ---------- campo de mensagem ---------- */
+  function ajustarAltura() {
+    input.style.height = 'auto';
+    var altura = Math.min(input.scrollHeight, ALTURA_MAXIMA_INPUT);
+    input.style.height = altura + 'px';
+    input.style.overflowY = input.scrollHeight > ALTURA_MAXIMA_INPUT ? 'auto' : 'hidden';
+  }
+  function atualizarBotao() {
+    enviarBtn.disabled = pendente || redirecionando || !input.value.trim();
+  }
+  input.addEventListener('input', function () { ajustarAltura(); atualizarBotao(); });
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
+      e.preventDefault();
+      if (typeof form.requestSubmit === 'function') form.requestSubmit();
+      else form.dispatchEvent(new Event('submit', { cancelable: true }));
+    }
+  });
+
+  /* ---------- painel e teclado virtual ---------- */
+  function ajustarViewport() {
+    /* Em tela pequena o painel ocupa a área visível; com o teclado aberto, a
+       área visível encolhe e o campo de mensagem continua acessível. */
+    if (panel.hidden || !telaPequena.matches || !window.visualViewport) {
+      panel.style.height = '';
+      panel.style.top = '';
+      return;
+    }
+    var vv = window.visualViewport;
+    panel.style.height = Math.round(vv.height) + 'px';
+    panel.style.top = Math.round(vv.offsetTop) + 'px';
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', ajustarViewport);
+    window.visualViewport.addEventListener('scroll', ajustarViewport);
+  }
+  window.addEventListener('resize', ajustarViewport);
+
   function abrir() {
     panel.hidden = false;
+    raiz.classList.add('is-open');
     launcher.classList.add('is-open');
     launcher.setAttribute('aria-expanded', 'true');
     if (!saudou) {
-      add('Olá! Sou o NexoBot. Posso tirar dúvidas sobre o portal e abrir páginas como ' +
-          'Enviar Relatórios, Histórico e Suporte. Como posso ajudar?', 'bot');
+      var el = add(SAUDACAO, 'bot');
+      chips(el, SUGESTOES_INICIAIS, 'nb-chips-inicial');
       saudou = true;
     }
-    input.focus();
+    ajustarViewport();
+    ajustarAltura();
+    atualizarBotao();
+    input.focus({ preventScroll: true });
   }
   function fechar(devolverFoco) {
     panel.hidden = true;
+    raiz.classList.remove('is-open');
     launcher.classList.remove('is-open');
     launcher.setAttribute('aria-expanded', 'false');
+    panel.style.height = '';
+    panel.style.top = '';
     if (devolverFoco !== false) launcher.focus();
   }
   launcher.addEventListener('click', function () { panel.hidden ? abrir() : fechar(); });
@@ -205,13 +377,14 @@
   window.addEventListener('pageshow', function () {
     redirecionando = false;
     travarBotoes(pendente);
+    atualizarBotao();
   });
 
   function definirOcupado(ocupado) {
     pendente = ocupado;
-    enviarBtn.disabled = ocupado;
     form.setAttribute('aria-busy', ocupado ? 'true' : 'false');
     travarBotoes(ocupado || redirecionando);
+    atualizarBotao();
   }
 
   function erroDeSessao() {
@@ -220,14 +393,15 @@
     return erro;
   }
 
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
-    var texto = input.value.trim();
-    if (!texto || pendente || redirecionando) return;
-    texto = texto.slice(0, 1000);
+  /* ---------- envio ---------- */
+  function enviar(mensagemBruta) {
+    var conteudo = String(mensagemBruta == null ? '' : mensagemBruta).trim();
+    if (!conteudo || pendente || redirecionando) return;
+    conteudo = conteudo.slice(0, 1000);
     definirOcupado(true);
-    add(texto, 'user');
+    add(conteudo, 'user');
     input.value = '';
+    ajustarAltura();
     var indicador = digitando();
     anunciar('Mensagem enviada. Aguardando resposta.');
     var csrf = document.querySelector('meta[name="csrf-token"]');
@@ -248,7 +422,7 @@
         'Accept': 'application/json',
         'X-CSRFToken': csrf ? csrf.getAttribute('content') : ''
       },
-      body: JSON.stringify({ mensagem: texto, contexto: contexto, pagina_atual: paginaAtual() })
+      body: JSON.stringify({ mensagem: conteudo, contexto: contexto, pagina_atual: paginaAtual() })
     }).then(function (r) {
       if (r.redirected || r.status === 401 || r.status === 403) throw erroDeSessao();
       var tipo = r.headers.get('content-type') || '';
@@ -282,35 +456,48 @@
         navegar(d.destino, d.url);
         return;
       }
-      var el = add(d.resposta || 'Desculpe, não consegui responder. Tente de novo.', 'bot');
+      var el = add(d.resposta.trim() ? d : 'Desculpe, não consegui responder. Tente de novo.', 'bot');
       if (d.acao === 'sugerir_navegacao') sugerir(el, d);
       if (Array.isArray(d.opcoes)) mostrarOpcoes(el, d.opcoes);
+      if (Array.isArray(d.sugestoes)) chips(el, d.sugestoes);
+      revelar(el);
       anunciar('Nova resposta do NexoBot.');
     }).catch(function (erro) {
       indicador.remove();
       if (redirecionando) return;
       contexto = {};
       if (erro && erro.autenticacao) {
-        msgs.querySelectorAll('.nb-navigation, .nb-opcao').forEach(function (b) { b.remove(); });
+        msgs.querySelectorAll('.nb-navigation, .nb-opcao, .nb-chip').forEach(function (b) { b.remove(); });
         add('Sua sessão expirou ou não permite usar o NexoBot. Atualize a página para entrar novamente.',
             'bot', 'nb-erro');
         return;
       }
       if (!input.value) {
-        input.value = texto;  // permite reenviar sem digitar de novo
+        input.value = conteudo;  // permite reenviar sem digitar de novo
+        ajustarAltura();
       }
       var mensagem;
       if (esgotado) mensagem = 'A resposta demorou mais que o esperado. Tente enviar novamente.';
       else if (erro && erro.status === 429) mensagem = erro.mensagem || 'Muitas mensagens em pouco tempo. Aguarde um minuto.';
       else if (erro && erro.status && erro.status < 500 && erro.mensagem) mensagem = erro.mensagem;
       else mensagem = 'Não consegui responder agora. Tente novamente ou abra um chamado em “Suporte”.';
-      add(mensagem, 'bot', 'nb-erro');
+      var el = add(mensagem, 'bot', 'nb-erro');
+      if (!(erro && erro.status === 429)) {
+        chips(el, [{ rotulo: 'Tentar novamente', mensagem: conteudo }]);
+      }
     }).finally(function () {
       window.clearTimeout(temporizador);
       indicador.remove();
       requisicao = null;
       definirOcupado(false);
-      if (!redirecionando && !panel.hidden) input.focus();
+      if (!redirecionando && !panel.hidden) input.focus({ preventScroll: true });
     });
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    enviar(input.value);
   });
+
+  if (movimentoReduzido.matches) raiz.classList.add('nb-sem-movimento');
 })();

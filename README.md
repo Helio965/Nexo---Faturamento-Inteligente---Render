@@ -90,7 +90,7 @@ Para o detalhamento completo da arquitetura (incluindo diagrama Mermaid do fluxo
 
 **Tempo real e suporte**
 - Notificações via WebSocket (Socket.IO) em sala exclusiva por usuário — sininho da navbar, sem broadcast aberto.
-- **NexoBot Advanced:** assistente de navegação e suporte que entende português do Brasil sem depender de IA externa — normalização (acentos, abreviações, erros de digitação), intenções por evidências (ordem × pergunta × negação × comando citado × operação proibida), contexto curto de conversa ("me leva pra lá", "a anterior", "sim"), busca BM25 no Guia (CMS `guia_topico`) e navegação apenas por catálogo fechado de páginas do cliente. Redação opcional via Hugging Face, sempre validada. Detalhes em [`Docs/NEXOBOT_ADVANCED.md`](Docs/NEXOBOT_ADVANCED.md).
+- **NexoBot Advanced 2.0:** manual interativo do NEXO e assistente de navegação, em português do Brasil e sem depender de IA externa — base de conhecimento versionada (`nexobot/saber/`, 172 registros verificados no código, com resumo, explicação, passo a passo e aprofundamento), perguntas amplas ("o que é o NEXO?", "como funciona?"), aprofundamento por contexto ("explique melhor", "me dê um exemplo", "e depois?"), comparações, roteiros guiados, busca BM25F no Guia (CMS `guia_topico`, que tem prioridade), higiene de conteúdo de teste, respostas em blocos estruturados e navegação apenas por catálogo fechado de páginas do cliente. Redação opcional via Hugging Face, sempre validada. Detalhes em [`Docs/NEXOBOT_ADVANCED.md`](Docs/NEXOBOT_ADVANCED.md).
 - Central de chamados de suporte (Admin ↔ Cliente).
 
 **Segurança (hardened)**
@@ -144,7 +144,8 @@ nexo_mvp/
 ├── insights.py                # Semáforos executivos 5W2H
 ├── ai_devolutiva.py            # Devolutiva por IA (Claude) + fallback determinístico
 ├── suporte_bot.py              # Fachada do NexoBot (interface estável)
-├── nexobot/                    # NexoBot Advanced: normalização, intenções, contexto, Guia, decisão
+├── nexobot/                    # NexoBot Advanced 2.0: normalização, intenções, contexto, Guia, decisão
+│   └── saber/                  #   base de conhecimento versionada sobre o NEXO (14 assuntos)
 ├── pdf_export.py               # Exportação executiva em PDF (ReportLab)
 ├── realtime.py                 # Salas Socket.IO por usuário
 ├── notifications.py / emails.py # Disparo de notificações/e-mails (dispatch-after-commit)
@@ -294,6 +295,13 @@ Para popular a base de conhecimento do NexoBot/Guia (use `NEXO_DB_DIRECT=1` se e
 
 ```bash
 python seed_guia.py
+```
+
+Para listar, sem alterar nada, os tópicos do Guia com sinais de conteúdo de teste (prefixo `ZZTEST`, HTML na categoria etc.) e revisá-los pelo CMS:
+
+```bash
+python tools/auditar_guia.py          # tabela legível
+python tools/auditar_guia.py --json   # para anexar a um chamado
 ```
 
 *(Opcional)* para criar um cliente de demonstração com o fluxo de primeiro acesso já armado:

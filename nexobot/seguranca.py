@@ -131,7 +131,7 @@ def validar_saida_modelo(texto, fontes: str, limite: int = 1200) -> str | None:
     return texto
 
 
-def texto_resposta(texto: str, limite: int = 2400) -> str:
+def texto_resposta(texto: str, limite: int = 6000) -> str:
     """Saneia o texto devolvido ao widget (que já o exibe como texto puro)."""
     texto = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", str(texto or ""))
     if len(texto) > limite:

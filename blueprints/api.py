@@ -5,8 +5,13 @@ Endpoints leves consumidos via Fetch pelo front-end. Hoje: o NexoBot.
 
 Contrato de POST /api/suporte-bot (detalhes em Docs/NEXOBOT_ADVANCED.md):
   entrada: {"mensagem": str, "contexto"?: {...}, "ultimo_destino"?: str, "pagina_atual"?: str}
-  saída:   {"resposta", "fonte", "acao", "destino", ["url", "rotulo_botao", "opcoes"],
-            "contexto", "meta"}
+  saída:   {"resposta", "blocos", "sugestoes", "fonte", "acao", "destino",
+            ["url", "rotulo_botao", "opcoes"], "contexto", "meta"}
+  - "blocos": resposta estruturada (cabecalho, texto, passos, secao, exemplo, aviso),
+    renderizada pelo widget sem HTML; "resposta" é o mesmo conteúdo em texto puro.
+  - "sugestoes": chips [{rotulo, mensagem}] que apenas enviam uma nova mensagem.
+  - "contexto": inclui "assunto" (id da base de conhecimento) e "nivel" (0–4) para
+    aprofundar sem repetir ("explique melhor", "me dê um exemplo", "e depois?").
 """
 
 import logging

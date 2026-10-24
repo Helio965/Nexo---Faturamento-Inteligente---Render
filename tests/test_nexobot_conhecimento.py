@@ -50,12 +50,15 @@ class RecuperacaoTests(unittest.TestCase):
             ("como extraio as planilhas do meu erp", "Como exportar os relatórios do meu sistema PDV?"),
             ("como faço upload", "Como fazer o upload dos relatórios?"),
             ("Quais extensões de arquivo vocês aceitam?", "Quais formatos de arquivo são aceitos?"),
-            ("posso mandar xlsx?", "Quais formatos de arquivo são aceitos?"),
+            # A base interna também cobre formatos e envio; qualquer um dos dois responde.
+            ("posso mandar xlsx?", ("Quais formatos de arquivo são aceitos?",
+                                    "Como envio os relatórios de Vendas e Compras?")),
         ):
             with self.subTest(pergunta=pergunta):
                 r = buscar(self.base, pergunta)
                 self.assertIsNotNone(r.trecho, pergunta)
-                self.assertEqual(r.trecho.pergunta, titulo)
+                esperados = titulo if isinstance(titulo, tuple) else (titulo,)
+                self.assertIn(r.trecho.pergunta, esperados)
 
     def test_erros_de_digitacao_na_pergunta(self):
         r = buscar(self.base, "como exporto do pvd os relatorios")
@@ -98,14 +101,21 @@ class RecuperacaoTests(unittest.TestCase):
     def test_guia_tem_prioridade_e_fato_entra_quando_mais_especifico(self):
         self.assertEqual(buscar(self.base, "como recupero minha senha").trecho.origem, "guia")
         r = buscar(self.base, "Por que preciso mandar compras e vendas?")
-        self.assertEqual((r.trecho.origem, r.trecho.chave), ("portal", "compras_e_vendas"))
+        self.assertEqual((r.trecho.origem, r.trecho.chave), ("portal", "nexo.uploads.por_que_dois"))
 
-    def test_base_vazia_usa_apenas_fatos(self):
+    def test_guia_sobre_o_mesmo_assunto_sobrepoe_a_base_interna(self):
+        # Um tópico do administrador com título equivalente vale mais que o registro interno.
+        for pergunta in ("como tiro o relatorio do pdv", "como extraio as planilhas do meu erp"):
+            with self.subTest(pergunta=pergunta):
+                self.assertEqual(buscar(self.base, pergunta).trecho.origem, "guia")
+
+    def test_base_vazia_usa_apenas_a_base_interna(self):
         base = base_de([])
         self.assertTrue(base.vazia)
         r = buscar(base, "O que é a curva ABC?")
-        self.assertEqual(r.trecho.origem, "portal")
-        self.assertIsNone(buscar(base, "como exportar do pdv").trecho)
+        self.assertEqual((r.trecho.origem, r.trecho.chave), ("portal", "nexo.indicadores.curva_abc"))
+        r = buscar(base, "como exportar do pdv")
+        self.assertEqual((r.trecho.origem, r.trecho.chave), ("portal", "nexo.uploads.exportar_pdv"))
 
     def test_destino_do_topico_vem_somente_do_catalogo(self):
         base = base_de([("Geral", "Acesse https://evil.example/admin para resolver",

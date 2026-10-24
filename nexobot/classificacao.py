@@ -16,7 +16,7 @@ O resultado (`Interpretacao`) não executa nem autoriza nada.
 from dataclasses import dataclass, field
 import re
 
-from . import seguranca
+from . import saber, seguranca
 from .contexto import Contexto
 from .lexico import VERBOS_OPERACAO as _OP_VERBOS
 from .intencoes import Evidencia, Intencao, Interpretacao
@@ -68,7 +68,8 @@ _INFORMATIVA = re.compile(
     r"\b(?:como|onde|cade|qual|quais|quando|quanto|quantos|quantas|por que|para que|o que|"
     r"explique|explica|explicar|ensine|ensina|ensinar|me diga|me diz|me fala|me conta|sabe|"
     r"saberia|duvida|existe|existem|significa|significado|funciona|funcionam|serve|servem|"
-    r"posso|podemos|devo|quero saber|queria saber|gostaria de saber|preciso saber|diferenca)\b"
+    r"posso|podemos|devo|quero saber|queria saber|gostaria de saber|preciso saber|diferenca|entender|"
+    r"entenda|compreender|quero entender|queria entender|preciso entender)\b"
     r"|^porque\b"
     r"|\b(?:tem|ha|teria) (?:uma |um |alguma |algum )?(?:pagina|area|tela|lugar|local|aba|secao|"
     r"opcao|jeito|forma|parte|menu|botao|link|como (?:eu|ver|saber|consultar|recuperar))\b"
@@ -83,7 +84,8 @@ _NEGACAO_COGNITIVA = re.compile(
 )
 _PROBLEMA = re.compile(
     r"\b(?:erro|errado|errada|problema|travou|trava|bugou|bug|falhou|falha|parou|nao carrega|"
-    r"nao abre|nao entra|esqueci|perdi|bloqueado|bloqueada|expirou|expirado|invalido|invalida)\b"
+    r"nao abre|nao entra|esqueci|perdi|bloqueado|bloqueada|expirou|expirado|invalido|invalida|"
+    r"desativad[oa]|suspens[oa]|cancelad[oa]|inativ[oa]|sumiu|sumiram|desapareceu|desapareceram)\b"
 )
 _TAREFA_PESSOAL = re.compile(
     r"\b(?:quero|queria|gostaria de|gostaria|preciso|precisava|desejo|vou|tenho que|tentando|tentei|"
@@ -150,6 +152,19 @@ _DADOS = re.compile(
     r"rentabilidade|prejuizo|resultado financeiro|estoque atual)\b"
 )
 _DEFINICAO = re.compile(r"\b(?:significa|significado|quer dizer|definicao|conceito|o que eh|calculad[oa]|como eh)\b")
+# "O NEXO calcula lucro?": pergunta sobre o produto, não pedido de valores.
+_PRODUTO_CALCULA = re.compile(
+    r"\b(?:o |a )?(?:nexo|sistema|portal|plataforma|ferramenta|voces|voce|vc) (?:calcula|calculam|mostra|mostram|"
+    r"informa|informam|gera|geram|fornece|fornecem|apresenta|apresentam|exibe|exibem|tem|possui|da|entrega|"
+    r"entregam|mede|medem|considera|trabalha com|usa|utiliza)\b"
+)
+# Pedido de ACESSO à administração (recusa) — perguntas sobre ela vão ao conhecimento.
+_ACESSO_ADMIN = re.compile(
+    r"\b(?:acess\w*|entrar|entro|entra|entrei|entre (?:na|no|em|nas|nos|la)|abr\w*|lev\w*|direcion\w*|redirecion\w*|"
+    r"naveg\w*|mostr\w*|ir|va|vai|logar|login|senha|credencia\w*|permiss\w*|liber\w*|"
+    r"(?:virar|tornar|ser|quero ser) (?:um |uma |o |a )?(?:admin|administrador\w*|superusuario)|"
+    r"me (?:da|de|coloca|coloque|torne|torna|poe|ponha))\b"
+)
 _SAUDACAO = re.compile(
     r"^(?:oi|ola|e ai|bom dia|boa tarde|boa noite|boas|opa|fala|tudo bem|tudo bom|como vai|"
     r"como voce esta|tudo certo|eae)\b"
@@ -224,7 +239,8 @@ que para posso pode consigo vou devo ficaria
 """.split())
 _VERBOS_SEPARADORES = re.compile(
     rf"^(?:{_OP_VERBOS}|abra|abre|abrir|acesse|acessa|acessar|me|va|vai|volte|volta|quero|queria|"
-    r"preciso|gostaria|pode|poderia|consegue|como|onde|qual|quais|depois|entao|nao)\b"
+    r"preciso|gostaria|pode|poderia|consegue|como|onde|qual|quais|quando|quanto|o que|por que|para que|"
+    r"existe|posso|tem como|da para|depois|entao|nao)\b"
 )
 _CONECTIVOS = frozenset({"e", "mas", "ou", "porem", "depois", "entao", "tambem"})
 _CORTE_ESCOPO = re.compile(
@@ -253,6 +269,91 @@ _VERBO_ACAO = re.compile(rf"\b(?:{_OP_VERBOS}|abr\w*|acess\w*|lev\w*|direcion\w*
                          r"mostr\w*|naveg\w*|volt\w*)\b")
 
 
+# ---------------------------------------------------------------------------
+# Perguntas amplas sobre o produto, aprofundamento de um assunto e comparações.
+# ---------------------------------------------------------------------------
+_SUJEITO_PRODUTO = (r"(?:o |a |esse |essa |este |esta |um |uma |do |da |desse |dessa |deste |desta |no |na |"
+                    r"sobre o |sobre a )?(?:nexo|sistema|plataforma|portal|servico|ferramenta|faturamento inteligente|"
+                    r"site|app|aplicativo|isso aqui|isso|isto|aqui|tudo isso)(?! (?:de|do|da|dos|das) \w)")
+_PRODUTO = (
+    (re.compile(rf"\bo que (?:eh|e|seria|significa) {_SUJEITO_PRODUTO}\b"), "nexo.visao_geral.o_que_e"),
+    (re.compile(r"\b(?:quem (?:eh|e|sao) (?:voces|a nexo|o nexo)|o que voces fazem|o que a nexo faz|"
+                r"me (?:fala|fale|conta|conte) (?:sobre|do|da) (?:o )?nexo|me explica o nexo|explique o nexo|"
+                r"explica o nexo|me explique o nexo|o que (?:eh|e) (?:o )?faturamento inteligente)\b"),
+     "nexo.visao_geral.o_que_e"),
+    (re.compile(rf"\b(?:para|pra) que (?:serve|servem|existe) {_SUJEITO_PRODUTO}\b"
+                r"|\bqual (?:eh |e )?(?:o |a )?(?:objetivo|finalidade|funcao|utilidade|proposito) (?:d[oa] |dess[ae] |da |do )?"
+                r"(?:nexo|sistema|plataforma|portal|isso|ferramenta)\b"
+                rf"|\b(?:que|qual) problema {_SUJEITO_PRODUTO} resolve\b"
+                rf"|\bcomo {_SUJEITO_PRODUTO} (?:me )?ajuda\b|\bcomo isso (?:me )?ajuda\b"
+                r"|\bpor que usar o nexo\b|\bvale a pena usar o nexo\b|\bo que (?:eu )?ganho com o nexo\b"),
+     "nexo.visao_geral.para_que_serve"),
+    (re.compile(r"\b(?:quais|que) (?:sao )?(?:as )?(?:funcionalidades|recursos|funcoes|servicos|modulos)\b"
+                r"|\bo que (?:da|dah|tem) (?:para|pra) fazer\b"
+                r"|\bo que (?:posso|consigo|eu posso|eu consigo) fazer (?:no|aqui|nesse|neste|nessa|nesta|com)\b"
+                r"|\bo que (?:o |a )?(?:sistema|portal|plataforma|nexo) (?:faz|oferece|tem|permite|disponibiliza)\b"
+                r"|\bo que (?:tem|existe|encontro|vejo|acho) (?:no|neste|nesse|nessa|nesta) (?:portal|sistema|plataforma)\b"
+                r"|\bo que (?:eu )?faco aqui\b|\b(?:quais|que) (?:servicos|recursos) voces oferecem\b"),
+     "nexo.visao_geral.funcionalidades"),
+    (re.compile(r"\bcomo (?:eu )?(?:comeco|comecar|inicio|iniciar) (?:a )?(?:usar|utilizar|mexer)?\b"
+                r"|\bpor onde (?:eu )?comeco\b|\bprimeiros passos\b|\b(?:sou|estou) nov[oa]\b|\bnunca usei\b"
+                r"|\bo que (?:eu )?faco primeiro\b|\bcomo dar os primeiros passos\b|\bprimeira vez (?:aqui|no portal|no nexo)\b"),
+     "nexo.primeiros_passos.roteiro"),
+    (re.compile(rf"\bcomo {_SUJEITO_PRODUTO} funciona\b|\bcomo funciona {_SUJEITO_PRODUTO}\b"
+                r"|\b(?:como (?:eh|e) )?o funcionamento\b|\bfuncionamento (?:do|da|completo|geral|inteiro|todo)\b"
+                r"|\b(?:quais|como) (?:sao )?(?:as )?etapas\b|\bqual (?:eh |e )?(?:o )?(?:fluxo|processo) (?:do|da|dessa|desse)\b"
+                r"|\bcomo (?:eh|e) o processo\b|\bcomo (?:minha|a minha) empresa (?:usa|utiliza|vai usar|pode usar)\b"
+                r"|\bcomo (?:eu )?(?:uso|utilizo|usar|utilizar) (?:o |a )?(?:nexo|sistema|plataforma|portal)\b"
+                r"|\b(?:entender|conhecer|saber|explica|explique|explicar) (?:todo o |o |melhor o |sobre o |como funciona o )?"
+                r"(?:funcionamento|nexo|sistema|plataforma)\b"),
+     "nexo.visao_geral.funcionamento"),
+)
+_COMO_FUNCIONA_SOLTO = re.compile(r"^(?:e |mas |entao |ok |ta |certo )*como (?:isso |isto |ele |ela )?funciona(?: isso| isto)?\s*[?!.]*$")
+_APROFUNDAR = (
+    ("exemplo", re.compile(r"\b(?:exemplo|exemplos|exemplifica|exemplifique|me mostra um caso|como seria na pratica)\b")),
+    ("passos", re.compile(r"\b(?:passo a passo|na pratica|como (?:eu )?(?:faco|fazer|faz) (?:isso|isto|esse|essa|isso na pratica)|"
+                          r"como faco|como fazer|quais (?:sao )?os passos|me ensina|como proceder|como executo|como eu uso isso)\b")),
+    ("resumir", re.compile(r"\b(?:resum\w*|mais curto|menos texto|simplifica|de forma simples|em poucas palavras|em uma frase|"
+                           r"versao curta|so o essencial)\b")),
+    ("nao_entendi", re.compile(r"\b(?:nao entendi|nao compreendi|nao ficou claro|ficou confuso|confuso|nao entendo|"
+                               r"pode explicar de novo|explica de novo|de outra forma|de outro jeito|nao captei|nao saquei)\b")),
+    ("proximo", re.compile(r"^(?:e |ok |certo |entendi |beleza |ta |esta |show |legal |otimo |perfeito )*(?:e )?"
+                           r"(?:depois|e depois|e agora|e ai|proximo passo|qual (?:eh |e )?(?:o )?proximo passo|o que mais|"
+                           r"o que vem depois|e na sequencia|continua|continue|prossiga|segue|e entao|o que vem agora|"
+                           r"qual o proximo|proxima etapa|proximo)\s*[?!.]*$")),
+    ("onde", re.compile(r"\b(?:onde (?:fica|faco|vejo|encontro|acho|esta|eh|e) (?:isso|isto|essa|esse|essa parte|"
+                        r"essa pagina|essa funcionalidade|essa opcao|essa tela)?|me (?:mostra|mostre) onde (?:fica|esta|faco|vejo)|"
+                        r"em que (?:pagina|tela|lugar) (?:fica|faco|vejo) isso)\s*[?!.]*$")),
+    ("explicar", re.compile(r"\b(?:explique melhor|explica melhor|explique mais|explica mais|me explica melhor|mais detalhes|"
+                            r"detalhe mais|detalha|aprofund\w*|me conta mais|fala mais|quero saber mais|me diga mais|conte mais|"
+                            r"pode detalhar|como assim|elabora|desenvolve|explica isso|explique isso|me explica isso|"
+                            r"explica direito|explique melhor isso)\b"
+                            r"|^(?:e |mas )?(?:por que|porque|por qual motivo)\s*[?!.]*$")),
+)
+_COMPARA = re.compile(r"\b(?:diferenca|diferencas|diferente|diferentes|diferem|diferenciar|comparar|comparacao|comparativo|"
+                      r"versus|vs|distingu\w*|distincao)\b|\b(?:qual|quais) (?:a |as )?(?:relacao|relacoes) entre\b"
+                      r"|\bo que (?:muda|difere) (?:entre|de)\b")
+_DEFINICAO_INICIAL = re.compile(r"^(?:\w+ ){0,2}(?:o que (?:eh|e|sao|significa)|qual (?:eh |e )?o significado)\b")
+
+
+def pergunta_sobre_o_produto(canonico: str) -> str | None:
+    """Id do registro da visão geral quando a pergunta é ampla sobre o NEXO."""
+    for padrao, registro_id in _PRODUTO:
+        if padrao.search(canonico):
+            return registro_id
+    return None
+
+
+def pedido_de_aprofundamento(canonico: str) -> str | None:
+    """Rótulo do pedido ("exemplo", "passos", "proximo"...) quando há um assunto em foco."""
+    if _COMO_FUNCIONA_SOLTO.match(canonico):
+        return "explicar"
+    for rotulo, padrao in _APROFUNDAR:
+        if padrao.search(canonico):
+            return rotulo
+    return None
+
+
 @dataclass
 class Oracao:
     tokens: tuple
@@ -267,6 +368,8 @@ class Oracao:
     anterior: bool = False                            # alvo é "a anterior"
     lugar_generico: bool = False                      # "me leve para o portal"
     operacao: str | None = None
+    operacao_imperativa: bool = False                 # veio de um verbo solto no início da oração
+    separador: str = ""                               # pontuação/conectivo que a separou da anterior
     meta: bool = False
 
     def __post_init__(self):
@@ -278,23 +381,25 @@ class Oracao:
 # ---------------------------------------------------------------------------
 def segmentar(normalizado: TextoNormalizado) -> list[Oracao]:
     oracoes, atual, citados_atual = [], [], []
+    separador = [""]
 
-    def fechar(pergunta=False):
+    def fechar(pergunta=False, proximo=""):
         if atual:
             citada = sum(citados_atual) > len(atual) / 2
-            oracoes.append(Oracao(tuple(atual), citada, pergunta))
+            oracoes.append(Oracao(tuple(atual), citada, pergunta, separador=separador[0]))
         atual.clear()
         citados_atual.clear()
+        separador[0] = proximo
 
     tokens = normalizado.tokens
     for i, token in enumerate(tokens):
         if token in PONTUACAO:
-            fechar(pergunta=token == "?")
+            fechar(pergunta=token == "?", proximo=token)
             continue
         if (token in _CONECTIVOS and atual and i + 1 < len(tokens)
                 and i not in normalizado.citados
                 and _VERBOS_SEPARADORES.match(" ".join(tokens[i + 1:i + 3]))):
-            fechar()
+            fechar(proximo=token)
             continue
         atual.append(token)
         citados_atual.append(i in normalizado.citados)
@@ -361,14 +466,36 @@ def _alvo_do_comando(escopo: str, oracao: Oracao) -> None:
                                  and p not in _PALAVRAS_CONTEXTO) or tuple(palavras)
 
 
-def _operacao(texto: str, nucleo: str) -> str | None:
-    """Pedido para o bot executar algo. Devolve o verbo da operação."""
+def _operacao(texto: str, nucleo: str) -> tuple[str | None, bool]:
+    """Pedido para o bot executar algo: (verbo da operação, veio de imperativo solto)."""
     for padrao, alvo in ((_OP_DELEGADA, texto), (_OP_POLIDO, texto),
                          (_OP_DESEJO_DESTRUTIVO, texto), (_OP_IMPERATIVO, nucleo)):
         m = padrao.search(alvo)
         if m:
-            return m.group(0).split()[-1]
-    return None
+            return m.group(0).split()[-1], padrao is _OP_IMPERATIVO
+    return None, False
+
+
+def fundir_fragmentos(oracoes: list) -> list:
+    """Verbo de operação solto após vírgula/"ou"/"e" dentro de uma pergunta.
+
+    "Como a equipe publica ou despublica uma análise?" e "Posso pedir ao NexoBot
+    para criar, excluir, publicar ou alterar algo?" são perguntas sobre essas
+    operações, não ordens ao bot: o fragmento volta para a oração interrogativa
+    anterior, que é analisada de novo por inteiro.
+    """
+    resultado = []
+    for o in oracoes:
+        anterior = resultado[-1] if resultado else None
+        if (anterior is not None and anterior.tipo == "pergunta" and o.tipo == "operacao"
+                and o.operacao_imperativa and o.separador in (",", "ou", "e") and not anterior.citada):
+            conectivo = (o.separador,) if o.separador in ("ou", "e") else ()
+            fundida = Oracao(anterior.tokens + conectivo + o.tokens, anterior.citada,
+                             anterior.pergunta or o.pergunta, separador=anterior.separador)
+            resultado[-1] = analisar_oracao(fundida)
+            continue
+        resultado.append(o)
+    return resultado
 
 
 def analisar_oracao(oracao: Oracao) -> Oracao:
@@ -388,7 +515,10 @@ def analisar_oracao(oracao: Oracao) -> Oracao:
         return oracao
 
     # Pedido de valores ("me mostra o faturamento") não é ordem de navegação.
-    if _DADOS.search(texto) and not _DEFINICAO.search(texto) and not _NEGACAO.search(texto):
+    # Comparar termos ou perguntar o que o NEXO calcula é dúvida, não pedido de dados.
+    pede_dados = bool(_DADOS.search(texto)) and not _DEFINICAO.search(texto) and not _COMPARA.search(texto) \
+        and not _PRODUTO_CALCULA.search(texto)
+    if pede_dados and not _NEGACAO.search(texto):
         oracao.tipo = "dados"
         return oracao
 
@@ -414,8 +544,9 @@ def analisar_oracao(oracao: Oracao) -> Oracao:
             comando = (inicio + desejo.start(), inicio + desejo.end(), _DESEJO_OBJETO)
 
     informativa = _INFORMATIVA.search(texto)
-    if comando and comando[2] is _DESEJO_NAV:
-        # "Quero abrir um chamado" descreve a tarefa de criar um chamado.
+    if comando and comando[2] in (_DESEJO_NAV, _POLIDO_NAV):
+        # "Quero abrir um chamado" / "pode abrir um chamado por mim?": trata-se do
+        # chamado em si (tarefa ou dúvida), não da página Suporte.
         resto = texto[comando[1]:]
         if texto[comando[0]:comando[1]].endswith(("abrir", "abra")) and _CHAMADO_OBJETO.match(resto):
             comando = None
@@ -430,7 +561,7 @@ def analisar_oracao(oracao: Oracao) -> Oracao:
         oracao.meta = True
 
     # Operações: o bot nunca executa; desejos de autoatendimento são orientados.
-    op = _operacao(texto, nucleo)
+    op, imperativa = _operacao(texto, nucleo)
     if op and (_MOVIMENTO.match(nucleo) or (op in ("mandar", "manda", "mande")
                                             and _MANDAR_PARA.search(texto))):
         op = None  # "manda para o upload" / "pode me mandar para lá" é navegação
@@ -444,12 +575,13 @@ def analisar_oracao(oracao: Oracao) -> Oracao:
     if op and informativa and informativa.start() < texto.find(op) and not _OP_DELEGADA.search(texto):
         op = None  # "como excluo uma análise?" é uma dúvida
     if not op and tarefa and _AUTOMACAO.search(texto):
-        op = tarefa.group(0).split()[-1]
+        op, imperativa = tarefa.group(0).split()[-1], False
     if tarefa and informativa and informativa.start() < tarefa.start():
         tarefa = None  # "por que preciso mandar compras?" é uma pergunta
     if op:
         oracao.tipo = "operacao"
         oracao.operacao = op
+        oracao.operacao_imperativa = imperativa
         return oracao
 
     negada = _NEGACAO.search(texto)
@@ -478,10 +610,10 @@ def analisar_oracao(oracao: Oracao) -> Oracao:
             _alvo_do_comando(texto[comando[1]:], oracao)
         return oracao
 
-    if _DADOS.search(texto) and not _DEFINICAO.search(texto):
+    if pede_dados:
         oracao.tipo = "dados"
         return oracao
-    if _HUMANO.search(texto):
+    if _HUMANO.search(texto) and not _COMPARA.search(texto):
         oracao.tipo = "humano"
         return oracao
     if tarefa and not relato:
@@ -556,7 +688,10 @@ def classificar(normalizado: TextoNormalizado, contexto: Contexto | None = None)
     if seguranca.contem_url(bruto):
         ev.append(Evidencia(Intencao.ACESSO_RESTRITO, 3.0, "url_ou_caminho"))
         return _resultado(Intencao.ACESSO_RESTRITO, 0.99, ev, motivo="url")
-    if seguranca.menciona_admin(canonico):
+    if seguranca.menciona_admin(canonico) and (_ACESSO_ADMIN.search(canonico)
+                                              or not _INFORMATIVA.search(canonico)):
+        # Pedido de acesso/navegação à administração: recusa. Perguntas sobre o
+        # que a equipe faz ("o que é a lixeira?") seguem para a base de conhecimento.
         ev.append(Evidencia(Intencao.ACESSO_RESTRITO, 3.0, "area_administrativa"))
         return _resultado(Intencao.ACESSO_RESTRITO, 0.97, ev, motivo="admin")
     if seguranca.tentativa_injecao(canonico, bruto):
@@ -567,7 +702,7 @@ def classificar(normalizado: TextoNormalizado, contexto: Contexto | None = None)
         return _resultado(Intencao.CONSULTA_DADOS, 0.95, ev, motivo="outra_empresa")
 
     oracoes = [analisar_oracao(o) for o in segmentar(normalizado)]
-    oracoes = [o for o in oracoes if o.tokens]
+    oracoes = fundir_fragmentos([o for o in oracoes if o.tokens])
     saudacao = bool(oracoes) and bool(_SAUDACAO.match(" ".join(_sem_abertura(oracoes[0].tokens))
                                                      or oracoes[0].texto))
     # Cumprimentos ("oi", "tudo bem?") e vocativos não são o assunto da mensagem.
@@ -607,6 +742,13 @@ def classificar(normalizado: TextoNormalizado, contexto: Contexto | None = None)
     if any(o.tipo == "dados" for o in oracoes):
         return _resultado(Intencao.CONSULTA_DADOS, 0.9, ev, destino="dashboard",
                           forca_destino=FRACA, consulta=canonico, motivo="valores", **base)
+
+    # 4b) Aprofundar o assunto em foco ("explique melhor", "exemplo", "e depois?").
+    if contexto.registro is not None and not destinos_mencionados:
+        pedido = pedido_de_aprofundamento(canonico)
+        if pedido:
+            return _resultado(Intencao.APROFUNDAR, 0.85, ev, consulta=canonico, motivo=pedido,
+                              detalhes={"assunto": contexto.assunto}, **base)
 
     comandos = [o for o in oracoes if o.tipo == "comando"]
     negadas = [o for o in oracoes if o.tipo == "negacao"]
@@ -658,6 +800,27 @@ def classificar(normalizado: TextoNormalizado, contexto: Contexto | None = None)
     if any(o.tipo == "humano" for o in oracoes):
         return _resultado(Intencao.SUPORTE_HUMANO, 0.9, ev, destino="suporte", forca_destino=FORTE,
                           consulta=canonico, motivo="pedido_humano", **base)
+
+    # 9b) Comparações entre termos do NEXO ("diferença entre faturamento e pressão de estoque").
+    # "O que é o histórico comparativo?" define um nome: fica para a busca.
+    comparacao = _COMPARA.search(canonico)
+    if comparacao and not (_DEFINICAO_INICIAL.match(canonico)
+                           and comparacao.group(0).startswith("compara")):
+        pares = saber.termos_citados(canonico)
+        ids = list(dict.fromkeys(rid for _, rid in pares))
+        if ids:
+            return _resultado(Intencao.COMPARACAO, 0.85, ev, consulta=canonico, motivo="comparacao",
+                              detalhes={"pares": pares}, **base)
+
+    # 9c) Perguntas amplas sobre o produto ("o que é o NEXO?", "como funciona?").
+    if not any(f >= FORTE for f in destinos_mencionados.values()):
+        if _COMO_FUNCIONA_SOLTO.match(canonico):
+            return _resultado(Intencao.SOBRE_O_NEXO, 0.8, ev, consulta=canonico, motivo="funcionamento",
+                              detalhes={"registro": "nexo.visao_geral.funcionamento"}, **base)
+        registro_id = pergunta_sobre_o_produto(canonico)
+        if registro_id:
+            return _resultado(Intencao.SOBRE_O_NEXO, 0.9, ev, consulta=canonico, motivo="sobre_o_produto",
+                              detalhes={"registro": registro_id}, **base)
 
     # 10) Perguntas, tarefas pessoais e tópicos: orientação (nunca navegação automática).
     informativas = [o for o in substantivas if o.tipo in ("pergunta", "tarefa", "topico")]
