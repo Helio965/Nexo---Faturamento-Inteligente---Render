@@ -1,3 +1,100 @@
+/* COM-001: navegação e estrutura de avaliações independem do CDN de gráficos. */
+(function () {
+  'use strict';
+  document.documentElement.classList.add('landing-enhanced');
+  var toggle = document.getElementById('landing-menu-toggle');
+  var navigation = document.getElementById('landing-navigation');
+  if (toggle && navigation) {
+    var mobile = window.matchMedia('(max-width: 992px)');
+    function setMenu(open) {
+      toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      navigation.hidden = mobile.matches && !open;
+    }
+    function syncMenu() {
+      toggle.hidden = !mobile.matches;
+      setMenu(false);
+    }
+    toggle.addEventListener('click', function () {
+      setMenu(toggle.getAttribute('aria-expanded') !== 'true');
+    });
+    navigation.addEventListener('click', function (event) {
+      if (event.target.closest('a')) setMenu(false);
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && toggle.getAttribute('aria-expanded') === 'true') {
+        setMenu(false);
+        toggle.focus();
+      }
+    });
+    document.addEventListener('click', function (event) {
+      var header = toggle.closest('.nexo-header');
+      if (header && !header.contains(event.target)) setMenu(false);
+    });
+    if (mobile.addEventListener) mobile.addEventListener('change', syncMenu);
+    else if (mobile.addListener) mobile.addListener(syncMenu);
+    syncMenu();
+  }
+
+  function initReviews(root) {
+    if (!root) return;
+    if (root.nexoReviews) return root.nexoReviews.refresh();
+    var previous = root.querySelector('[data-review-prev]');
+    var next = root.querySelector('[data-review-next]');
+    var indicators = root.querySelector('[data-review-indicators]');
+    var status = root.querySelector('[data-review-status]');
+    var empty = root.querySelector('[data-review-empty]');
+    var controls = root.querySelector('.review-controls');
+    var slides = [], index = 0;
+    function show(selected) {
+      if (!slides.length) return;
+      index = (selected + slides.length) % slides.length;
+      slides.forEach(function (slide, position) {
+        slide.hidden = position !== index;
+        slide.setAttribute('role', 'group');
+        slide.setAttribute('aria-roledescription', 'depoimento');
+        slide.setAttribute('aria-label', (position + 1) + ' de ' + slides.length);
+      });
+      if (indicators) Array.prototype.forEach.call(indicators.children, function (dot, position) {
+        dot.setAttribute('aria-current', position === index ? 'true' : 'false');
+      });
+      if (status) status.textContent = 'Depoimento ' + (index + 1) + ' de ' + slides.length;
+    }
+    function refresh() {
+      slides = Array.prototype.slice.call(root.querySelectorAll('[data-review-slide]'));
+      index = Math.min(index, Math.max(0, slides.length - 1));
+      if (empty) empty.hidden = slides.length > 0;
+      [previous, next].forEach(function (button) {
+        if (!button) return;
+        button.hidden = slides.length < 2;
+        button.disabled = slides.length < 2;
+      });
+      if (controls) controls.hidden = slides.length < 2;
+      if (indicators) {
+        indicators.replaceChildren();
+        slides.forEach(function (_, position) {
+          var dot = document.createElement('button');
+          dot.type = 'button';
+          dot.className = 'review-dot';
+          dot.textContent = String(position + 1);
+          dot.setAttribute('aria-label', 'Ir para depoimento ' + (position + 1));
+          dot.addEventListener('click', function () { show(position); });
+          indicators.appendChild(dot);
+        });
+        indicators.hidden = slides.length < 2;
+      }
+      if (slides.length) show(index);
+      else if (status) status.textContent = '';
+    }
+    if (previous) previous.addEventListener('click', function () { show(index - 1); });
+    if (next) next.addEventListener('click', function () { show(index + 1); });
+    root.nexoReviews = { refresh: refresh };
+    refresh();
+    return root.nexoReviews;
+  }
+  window.NexoLanding = { initReviews: initReviews };
+  document.querySelectorAll('[data-review-carousel]').forEach(initReviews);
+})();
+
 /* ============================================================
    NEXO — Landing Page · JS de mockups Plotly
    ============================================================
@@ -16,7 +113,26 @@
    ============================================================ */
 
 (function () {
-  if (typeof Plotly === 'undefined') return;
+  var rendered = false;
+  function startCharts() {
+  if (rendered || typeof window.Plotly === 'undefined') return;
+  rendered = true;
+
+  function drawChart(el, data, layout, config) {
+    function fallback() {
+      el.replaceChildren();
+      el.removeAttribute('data-chart-ready');
+      var note = document.querySelector('[data-chart-fallback-for="' + el.id + '"]');
+      if (note) note.hidden = false;
+    }
+    try {
+      Promise.resolve(window.Plotly.newPlot(el, data, layout, config)).then(function () {
+        el.setAttribute('data-chart-ready', 'true');
+        var note = document.querySelector('[data-chart-fallback-for="' + el.id + '"]');
+        if (note) note.hidden = true;
+      }, fallback);
+    } catch (error) { fallback(); }
+  }
 
   /* ---- Paleta NEXO (mesma do nexo.css) ---- */
   var NEXO = {
@@ -69,7 +185,7 @@
     var values = [156300, 142800];
     var cores  = [NEXO.amber, NEXO.info];
 
-    Plotly.newPlot(el, [{
+    drawChart(el, [{
       type: 'bar',
       x: labels,
       y: values,
@@ -101,7 +217,7 @@
     var compras  = [138400, 124900, 149600, 152300, 156300];
     var vendas   = [132100, 119800, 138200, 141600, 142800];
 
-    Plotly.newPlot(el, [
+    drawChart(el, [
       {
         type: 'scatter', mode: 'lines+markers',
         name: 'Compras',
@@ -146,7 +262,7 @@
     ];
     var valores = [28450, 24800, 19200, 16500, 12700];
 
-    Plotly.newPlot(el, [{
+    drawChart(el, [{
       type: 'bar',
       orientation: 'h',
       x: valores,
@@ -158,9 +274,32 @@
       hovertemplate: '<b>%{y}</b><br>R$ %{x:,.0f}<extra></extra>'
     }], baseLayout({
       height: 220,
-      margin: { l: 170, r: 24, t: 14, b: 34 },
+      margin: { l: window.innerWidth <= 640 ? 110 : 170, r: 20, t: 14, b: 34 },
       xaxis: { gridcolor: NEXO.grid, tickprefix: 'R$ ', tickformat: ',.0f', fixedrange: true, automargin: true },
-      yaxis: { autorange: 'reversed', tickfont: { size: 10.5, color: NEXO.textMut }, fixedrange: true, automargin: true }
+      yaxis: { autorange: 'reversed', tickfont: { size: 11, color: NEXO.textMut }, fixedrange: true, automargin: true, tickvals: produtos, ticktext: window.innerWidth <= 640 ? ['Massa corrida 18L', 'Tinta acrílica 18L', 'Esmalte 3,6L', 'Látex 18L', 'Selador 18L'] : produtos }
     }), Object.assign({}, baseConfig, { staticPlot: false }));
   })();
+  var resizeQueued = false;
+  window.addEventListener('resize', function () {
+    if (resizeQueued) return;
+    resizeQueued = true;
+    window.requestAnimationFrame(function () {
+      resizeQueued = false;
+      var chart = document.getElementById('demo-chart-top');
+      if (!chart || !chart.hasAttribute('data-chart-ready')) return;
+      var compact = window.innerWidth <= 640;
+      var names = ['Massa Corrida Premium PVA 18L', 'Tinta Acrílica Fosca 18L',
+        'Esmalte Sintético Brilhante 3,6L', 'Tinta Látex Branca 18L', 'Selador Acrílico 18L'];
+      try {
+        Promise.resolve(window.Plotly.relayout(chart, {
+          'margin.l': compact ? 110 : 170,
+          'yaxis.ticktext': compact ? ['Massa corrida 18L', 'Tinta acrílica 18L', 'Esmalte 3,6L', 'Látex 18L', 'Selador 18L'] : names
+        })).catch(function () {});
+      } catch (error) { /* A tabela acessível permanece disponível. */ }
+    });
+  });
+  }
+  var loader = document.getElementById('nexo-plotly');
+  if (typeof window.Plotly !== 'undefined') startCharts();
+  else if (loader) loader.addEventListener('load', startCharts, { once: true });
 })();

@@ -5,7 +5,8 @@
  *  - Reprodução contínua em loop, iniciada por script (play() MUDO) quando o vídeo
  *    se aproxima da área visível. O atributo `autoplay` NÃO é usado: no Chrome e no
  *    Safari ele faz o próprio navegador pausar o vídeo mudo fora da tela.
- *  - Este script nunca chama pause(). A rolagem controla somente o SOM.
+ *  - A rolagem controla somente o SOM. COM-001 adiciona pausa explícita e
+ *    preferência por movimento reduzido, preservando a máquina de estados.
  *  - Som apenas com 100% da área do vídeo visível: viewport visual (zoom/pinça),
  *    cabeçalho fixo, contêineres com recorte e aba visível. Em tela cheia vale a
  *    área da tela cheia.
@@ -26,6 +27,9 @@
   var fullscreenButton = document.getElementById('nexo-demo-fullscreen');
   var errorPanel = document.getElementById('nexo-demo-error');
   var retryButton = document.getElementById('nexo-demo-retry');
+  var pauseButton = document.getElementById('nexo-demo-pause');
+  var muteButton = document.getElementById('nexo-demo-mute');
+  var reducedMotion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : { matches: false };
   var header = document.querySelector('.nexo-header');
   var sources = video.getElementsByTagName('source');
 
@@ -44,7 +48,10 @@
    * Saídas: video.muted (somente via setMuted), botões e atributos data-* do quadro.
    */
   var state = {
-    playback: 'idle',
+    playback: reducedMotion.matches ? 'needs-gesture' : 'idle',
+    manualPaused: false,
+    userMuted: false,
+    userStarted: false,
     audio: 'unknown',
     fullyVisible: false,
     fullscreen: false,
@@ -80,7 +87,8 @@
 
   function applyAudio() {
     var granted = state.audio === 'allowed' || state.audio === 'confirming';
-    var audible = granted && state.fullyVisible && state.pageVisible && state.playback === 'playing';
+    var audible = granted && state.fullyVisible && state.pageVisible && state.playback === 'playing' &&
+      !state.userMuted && !state.manualPaused;
     setMuted(!audible);
   }
 
@@ -228,8 +236,16 @@
     commit();
   }
 
-  function startPlayback() {
-    if (state.playback === 'error') return;
+  function startPlayback(userInitiated) {
+    if (userInitiated) {
+      state.userStarted = true;
+      state.manualPaused = false;
+    }
+    if (state.playback === 'error' || state.manualPaused) return;
+    if (reducedMotion.matches && !state.userStarted) {
+      setPlayback('needs-gesture');
+      return;
+    }
     // Nunca começa audível sem confirmação do navegador.
     if (!(state.audio === 'allowed' && state.fullyVisible)) setMuted(true);
     var promise;
@@ -244,6 +260,7 @@
   }
 
   function onPlayResolved() {
+    if (state.manualPaused) return;
     autoFailures = 0;
     if (!video.paused && state.playback !== 'playing') setPlayback('playing');
   }
@@ -269,6 +286,7 @@
   // rolagem e nunca em resposta imediata ao evento pause, para não brigar com controles
   // do sistema operacional).
   function resumeIfInterrupted() {
+    if (state.manualPaused || (reducedMotion.matches && !state.userStarted)) return;
     if (state.playback === 'interrupted' && document.visibilityState !== 'hidden') startPlayback();
   }
 
@@ -279,11 +297,17 @@
   }
 
   function onPlaying() {
+    if (state.manualPaused) {
+      video.pause();
+      setPlayback('paused');
+      return;
+    }
     autoFailures = 0;
     if (state.playback !== 'error') setPlayback('playing');
   }
 
   function onPause() {
+    if (state.manualPaused) { setPlayback('paused'); return; }
     if (state.playback === 'error' || video.ended) return;
     var justUnmuted = state.audio === 'allowed' && !video.muted &&
       now() - lastUnmuteAt < REFUSAL_WINDOW_MS && verifiedUnmuteAt !== lastUnmuteAt;
@@ -331,7 +355,10 @@
       return;
     }
     // Mudança externa (ex.: controles nativos da tela cheia do iPhone).
-    if (nativeFullscreen()) state.audio = video.muted ? 'needs-gesture' : 'allowed';
+    if (nativeFullscreen()) {
+      state.userMuted = video.muted;
+      state.audio = video.muted ? 'needs-gesture' : 'allowed';
+    }
     commit();
   }
 
@@ -344,7 +371,7 @@
   }
 
   function maybeProbe() {
-    if (!state.fullyVisible || state.playback !== 'playing') return;
+    if (!state.fullyVisible || state.playback !== 'playing' || state.userMuted || state.manualPaused) return;
     if (state.audio === 'unknown') {
       probeAudio();
     } else if (state.audio === 'needs-gesture' && probeActivation === false && hasActivation() === true) {
@@ -415,9 +442,11 @@
 
   // Gesto do usuário no botão temporário: reproduzir (bloqueio) ou ativar som.
   function onActionClick() {
+    state.userStarted = true;
+    state.userMuted = false;
     if (state.playback === 'needs-gesture' || state.playback === 'interrupted' || state.playback === 'idle') {
       autoFailures = 0;
-      startPlayback();  // dentro do gesto o navegador libera a reprodução muda
+      startPlayback(true);  // dentro do gesto o navegador libera a reprodução muda
       return;
     }
     updateInputs();
@@ -511,7 +540,7 @@
     setAttr(frame, 'data-fullscreen', state.fullscreen ? 'true' : 'false');
 
     var showPlay = state.playback === 'needs-gesture';
-    var showSound = !showPlay && state.playback === 'playing' && state.audio === 'needs-gesture' &&
+    var showSound = !showPlay && !state.userMuted && state.playback === 'playing' && state.audio === 'needs-gesture' &&
       state.fullyVisible;
     if (actionButton) {
       var label = showPlay ? LABEL_PLAY : LABEL_SOUND;
@@ -523,6 +552,24 @@
       }
       setHidden(actionButton, hide);
     }
+    if (pauseButton) {
+      var paused = state.manualPaused || state.playback === 'paused';
+      var pauseLabel = paused ? 'Retomar demonstração' : 'Pausar demonstração';
+      pauseButton.textContent = paused ? 'Retomar' : 'Pausar';
+      setAttr(pauseButton, 'aria-label', pauseLabel);
+      setAttr(pauseButton, 'title', pauseLabel);
+      setHidden(pauseButton, state.playback === 'error' || state.playback === 'idle' || showPlay);
+    }
+    if (muteButton) {
+      var muteLabel = state.userMuted ? 'Ativar som da demonstração' : 'Silenciar demonstração';
+      muteButton.textContent = state.userMuted ? 'Ativar som' : 'Silenciar';
+      setAttr(muteButton, 'aria-label', muteLabel);
+      setAttr(muteButton, 'title', muteLabel);
+      setHidden(muteButton, state.playback !== 'playing' ||
+        (state.audio !== 'allowed' && !state.userMuted));
+    }
+    setAttr(frame, 'data-user-paused', state.manualPaused ? 'true' : 'false');
+    setAttr(frame, 'data-user-muted', state.userMuted ? 'true' : 'false');
     setHidden(errorPanel, state.playback !== 'error');
     if (fullscreenButton) {
       setHidden(fullscreenButton, !fullscreenMode || state.playback === 'error');
@@ -558,12 +605,45 @@
 
   if (actionButton) actionButton.addEventListener('click', onActionClick);
   if (fullscreenButton) fullscreenButton.addEventListener('click', onFullscreenClick);
+  if (pauseButton) pauseButton.addEventListener('click', function () {
+    if (state.manualPaused || video.paused) {
+      startPlayback(true);
+    } else {
+      state.manualPaused = true;
+      setMuted(true);
+      video.pause();
+      setPlayback('paused');
+    }
+  });
+  if (muteButton) muteButton.addEventListener('click', function () {
+    if (!state.userMuted) {
+      state.userMuted = true;
+      commit();
+      return;
+    }
+    state.userMuted = false;
+    updateInputs();
+    if (state.fullyVisible && !state.manualPaused) {
+      state.audio = 'needs-gesture';
+      onActionClick();
+    } else commit();
+  });
+  function onMotionPreference() {
+    if (reducedMotion.matches && !state.userStarted && !video.paused) {
+      state.manualPaused = true;
+      setMuted(true);
+      video.pause();
+      setPlayback('paused');
+    }
+  }
+  if (reducedMotion.addEventListener) reducedMotion.addEventListener('change', onMotionPreference);
+  else if (reducedMotion.addListener) reducedMotion.addListener(onMotionPreference);
   if (retryButton) {
     retryButton.addEventListener('click', function () {
       autoFailures = 0;
       state.playback = 'idle';
       try { video.load(); } catch (e) { /* sem efeito */ }
-      startPlayback();
+      startPlayback(true);
     });
   }
 
