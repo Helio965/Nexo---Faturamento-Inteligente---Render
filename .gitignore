@@ -80,6 +80,28 @@ pgpass.conf
 pg_service.conf
 .pg_service.conf
 *.zip
+# Demais formatos do pg_dump fora de backups/: plain, tar, diretório (toc.dat)
+# e custom com outra extensão. Sem *.sql global: schema_nexo_mvp_v4.sql é versionado.
+dumps/
+dump/
+dump.sql
+*.sql.*
+*.custom
+*.tar
+*.tar.*
+*.tgz
+*.dat
+*.dat.*
+# Chaves e credenciais locais
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+credentials.json
+secrets/
+private/
 
 # === Sistema operacional ===
 Thumbs.db
