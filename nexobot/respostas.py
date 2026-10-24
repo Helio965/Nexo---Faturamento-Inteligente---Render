@@ -55,8 +55,15 @@ def b_secao(titulo: str, texto: str) -> dict:
     return {"tipo": "secao", "titulo": titulo, "texto": texto}
 
 
+_PREFIXO_EXEMPLO = re.compile(r"^\s*exemplo\s+hipot[ée]tico\s*[:\-–—]\s*", re.IGNORECASE)
+
+
 def b_exemplo(texto: str) -> dict:
-    return {"tipo": "exemplo", "titulo": "Exemplo (hipotético)", "texto": texto}
+    """Bloco de exemplo; o rótulo já diz que é hipotético, então o prefixo do texto é removido."""
+    corpo = _PREFIXO_EXEMPLO.sub("", texto or "")
+    if corpo and corpo != texto:
+        corpo = corpo[0].upper() + corpo[1:]
+    return {"tipo": "exemplo", "titulo": "Exemplo (hipotético)", "texto": corpo or texto}
 
 
 def b_aviso(texto: str) -> dict:
