@@ -229,6 +229,10 @@ além do log normal. O código de saída original é preservado. YAML/bash foram
 validados; ensaio efêmero do wrapper confirmou exit 0 em sucesso e exit 1 com
 annotation em falha sintética. Esse ensaio não integra o total dos 666 testes.
 Não foram alteradas dependências Python nem a lógica dos testes de segurança.
+A linha original do comando de descoberta foi preservada literalmente, como
+exigido pela SEC-006B; o redirecionamento envolve um grupo shell. Após a correção,
+os **15 testes** de `tests.test_supply_chain_install` passaram novamente. Eles já
+integram a suíte geral e não são somados novamente ao total de 666.
 
 ## P. Arquivos modificados
 
@@ -301,6 +305,16 @@ O componente público está preparado para integração futura com DTO restrito.
   exige nova execução completa; o resultado por commit e os links definitivos dos
   dois jobs são registrados na descrição da PR e na entrega final desta execução.
   Não reutilizar um resultado anterior como se comprovasse outro commit.
+- [Execução 40117121496](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/40117121496),
+  commit `fa140d7b6f699e849017afbe17a4f81c02c22e45`: PostgreSQL aprovado
+  (1 min 44 s), job com navegador falhou (4 min 44 s). As novas annotations
+  permitiram identificar o erro preciso: o teste
+  `test_both_ci_jobs_use_shared_installer_before_preserved_test_commands`
+  exige que o comando original apareça em uma linha exata do workflow. O
+  redirecionamento tinha sido colocado nessa linha; foi movido para um grupo
+  shell, preservando literalmente o comando e seu exit status. O teste de
+  segurança não foi alterado. A suíte específica de instalação passou (15/15)
+  e uma nova execução completa é obrigatória para o commit corretivo.
 - Nenhum merge, auto-merge ou deploy foi executado. A integração e a publicação
   em produção dependem de autorização posterior.
 

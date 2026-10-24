@@ -64,7 +64,9 @@ jobs:
           NEXO_TEST_BROWSER: "1"
         run: |
           test_status=0
-          python -B -m unittest discover -s tests -t . -v > "$RUNNER_TEMP/nexo-tests.log" 2>&1 || test_status=$?
+          {
+          python -B -m unittest discover -s tests -t . -v
+          } > "$RUNNER_TEMP/nexo-tests.log" 2>&1 || test_status=$?
           cat "$RUNNER_TEMP/nexo-tests.log"
           if [ "$test_status" -ne 0 ]; then
             python - <<'PY'
