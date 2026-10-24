@@ -18,12 +18,17 @@ REFERÊNCIAS PERSISTIDAS (ex.: upload_relatorio.caminho_arquivo):
 """
 
 import os
+import stat
+from contextlib import contextmanager
 import mimetypes
 import tempfile
 import threading
 from pathlib import Path
 
 from flask import current_app, url_for
+from sqlalchemy import func, select
+
+from etl_inputs import ETLInputError
 
 from extensions import db
 from models import ArquivoArmazenado
@@ -85,6 +90,83 @@ def resolver(caminho_arquivo: str) -> str:
         nome = os.path.basename(caminho.replace("\\", "/"))
         caminho = os.path.join(current_app.config["UPLOAD_FOLDER"], nome)
     return caminho
+
+
+
+@contextmanager
+def materializar_para_etl(referencia: str, max_bytes: int):
+    """Cópia exclusiva e limitada para ETL; nunca remove fonte ou cache comum.
+
+    O tamanho real do BYTEA é verificado no servidor e novamente no SELECT que
+    carrega os bytes. O campo tamanho e o cache compartilhado não são autoridade.
+    Referências legadas mantêm a resolução anterior, mas são copiadas com limite
+    para arquivo próprio, regular e privado, removido ao sair do contexto.
+    """
+    if type(max_bytes) is not int or max_bytes <= 0:
+        raise ETLInputError("invalid_limits", "Configuração de processamento inválida.")
+    if not isinstance(referencia, str) or not referencia:
+        raise ETLInputError("storage_unavailable", "Arquivo armazenado indisponível. Reenvie o relatório.")
+    extension = Path(referencia).suffix.lower()
+    if extension not in {".csv", ".xlsx"}:
+        raise ETLInputError("unsupported_format", "Formato armazenado não suportado. Reenvie em CSV ou XLSX.")
+    payload = None
+    source_fd = None
+    try:
+        if referencia.startswith(PREFIXO_DB):
+            chave = _chave(referencia)
+            actual_length = func.length(ArquivoArmazenado.conteudo)
+            with db.session.no_autoflush:
+                size = db.session.scalar(select(actual_length).where(ArquivoArmazenado.chave == chave))
+                if size is None:
+                    raise ETLInputError("storage_unavailable", "Arquivo armazenado indisponível. Reenvie o relatório.")
+                if size > max_bytes:
+                    raise ETLInputError("file_size", "Arquivo armazenado acima do tamanho permitido para processamento.")
+                payload = db.session.scalar(select(ArquivoArmazenado.conteudo).where(
+                    ArquivoArmazenado.chave == chave, actual_length <= max_bytes,
+                ))
+            # A segunda condição também protege alterações concorrentes do blob.
+            if payload is None:
+                raise ETLInputError("storage_unavailable", "Arquivo armazenado indisponível. Reenvie o relatório.")
+            if not payload:
+                raise ETLInputError("empty_file", "Arquivo armazenado vazio. Reenvie o relatório.")
+            if len(payload) > max_bytes:
+                raise ETLInputError("file_size", "Arquivo armazenado acima do tamanho permitido para processamento.")
+        else:
+            # NONBLOCK permite recusar FIFO/dispositivo antes de qualquer leitura.
+            source_fd = os.open(resolver(referencia), os.O_RDONLY | getattr(os, "O_NONBLOCK", 0))
+            info = os.fstat(source_fd)
+            if not stat.S_ISREG(info.st_mode):
+                raise ETLInputError("storage_unavailable", "Arquivo armazenado indisponível. Reenvie o relatório.")
+            if info.st_size > max_bytes:
+                raise ETLInputError("file_size", "Arquivo armazenado acima do tamanho permitido para processamento.")
+        with tempfile.TemporaryDirectory(prefix="nexo-etl-materialized-") as directory:
+            destination = Path(directory) / ("arquivo" + extension)
+            with destination.open("wb") as output:
+                destination.chmod(0o600)
+                if payload is not None:
+                    output.write(payload)
+                else:
+                    total = 0
+                    with os.fdopen(source_fd, "rb") as source:
+                        source_fd = None
+                        while True:
+                            chunk = source.read(min(64 * 1024, max_bytes + 1 - total))
+                            if not chunk:
+                                break
+                            total += len(chunk)
+                            if total > max_bytes:
+                                raise ETLInputError("file_size", "Arquivo armazenado acima do tamanho permitido para processamento.")
+                            output.write(chunk)
+                    if total == 0:
+                        raise ETLInputError("empty_file", "Arquivo armazenado vazio. Reenvie o relatório.")
+            # Não reter o BYTEA enquanto o processo isolado calcula os KPIs.
+            payload = None
+            yield str(destination)
+    except OSError:
+        raise ETLInputError("storage_unavailable", "Não foi possível preparar o arquivo armazenado. Reenvie o relatório.") from None
+    finally:
+        if source_fd is not None:
+            os.close(source_fd)
 
 
 def _materializar(chave: str) -> str:

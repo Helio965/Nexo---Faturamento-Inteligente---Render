@@ -2,6 +2,7 @@ import os
 import hashlib
 import secrets
 from io import BytesIO
+from contextlib import ExitStack
 from datetime import datetime, timezone
 from functools import wraps
 
@@ -16,7 +17,10 @@ from models import (
     Analise, UploadRelatorio, Empresa, Plano, Segmento, Usuario, RelatorioAnalise,
     ChamadoSuporte, MensagemSuporte, GuiaTopico, ProdutoCurvaABC, Notificacao,
 )
-from etl_processor import processar_arquivos_analise
+from etl_processor import processar_arquivos_analise, ResultadoETL
+from etl_inputs import ETLInputError
+from etl_limits import get_limits
+from etl_uploads import ler_upload_validado, limitar_upload, limitar_processamento
 from notifications import notificar_clientes_empresa
 from emails import email_analise_publicada, email_ticket_resolvido, email_boas_vindas
 from sqlalchemy.exc import IntegrityError, DataError, SQLAlchemyError
@@ -628,33 +632,25 @@ def _resolver_caminho(upload: UploadRelatorio) -> str:
 # protegidas por CSRF (token no form) e restritas a ADMIN (@admin_required).
 @admin_bp.route("/analise/<int:id_analise>/upload", methods=["GET", "POST"])
 @admin_required
+@limitar_upload
 def analise_upload(id_analise):
-    """
-    GET  → exibe a página de upload + status dos uploads + KPIs (se existirem).
-    POST → salva um arquivo (VENDAS ou COMPRAS):
-        - valida extensão (config.ALLOWED_EXTENSIONS);
-        - calcula SHA-256 e tamanho;
-        - substitui o upload anterior do mesmo tipo (UNIQUE id_analise+tipo_relatorio);
-        - cria UploadRelatorio status_processamento='PENDENTE';
-        - transição AGUARDANDO_RELATORIO → RELATORIO_RECEBIDO se os 2 uploads existirem.
-    Nunca dispara o ETL aqui — isso é responsabilidade da rota /processar.
-    """
-    analise = db.session.get(Analise, id_analise)
-    if not analise:
-        flash("Análise não encontrada.", "danger")
-        return redirect(url_for("admin.dashboard"))
+    """Upload limitado/prevalidado; a mesma trava do processamento serializa troca."""
+    try:
+        analise = db.session.get(Analise, id_analise)
+        if not analise:
+            flash("Análise não encontrada.", "danger")
+            return redirect(url_for("admin.dashboard"))
+        if request.method != "POST":
+            return render_template("admin/upload.html", analise=analise)
 
-    if request.method == "POST":
         tipo = (request.form.get("tipo_relatorio") or "").strip().upper()
         if tipo not in ("VENDAS", "COMPRAS"):
             flash("Tipo de relatório inválido (esperado VENDAS ou COMPRAS).", "danger")
             return redirect(url_for("admin.analise_upload", id_analise=id_analise))
-
         arquivo = request.files.get("arquivo")
         if not arquivo or not arquivo.filename:
             flash("Selecione um arquivo para enviar.", "warning")
             return redirect(url_for("admin.analise_upload", id_analise=id_analise))
-
         nome_seguro = secure_filename(arquivo.filename)
         ext = os.path.splitext(nome_seguro)[1].lower().lstrip(".")
         if ext not in current_app.config["ALLOWED_EXTENSIONS"]:
@@ -663,50 +659,56 @@ def analise_upload(id_analise):
                 "danger",
             )
             return redirect(url_for("admin.analise_upload", id_analise=id_analise))
-
-        conteudo = arquivo.read()
-        if not conteudo:
-            flash("Arquivo vazio — nada foi salvo.", "warning")
-            return redirect(url_for("admin.analise_upload", id_analise=id_analise))
-        sha = hashlib.sha256(conteudo).hexdigest()
-
+        # Nenhum efeito persistente antes da leitura limitada e do preflight.
+        conteudo, sha = ler_upload_validado(arquivo, ext)
+        analise = db.session.get(Analise, id_analise, with_for_update=True, populate_existing=True)
+        if analise is None:
+            db.session.rollback()
+            flash("Análise não encontrada.", "danger")
+            return redirect(url_for("admin.dashboard"))
         nome_final = f"analise_{id_analise}_{tipo}_{sha[:8]}.{ext}"
-
-        # UNIQUE(id_analise, tipo_relatorio) — re-upload substitui o anterior.
-        # ATENÇÃO: só removemos o arquivo físico antigo se a referência NOVA for
-        # diferente, senão um re-upload idêntico (mesmo SHA → mesmo nome) apagaria
-        # o arquivo recém-gravado.
         existente = _buscar_upload(id_analise, tipo)
-        # Grava o novo via camada de storage (ponto único — ver storage.py).
         caminho_final = storage.salvar(conteudo, nome_final)
+        legado_substituido = None
         if existente and existente.caminho_arquivo and existente.caminho_arquivo != caminho_final:
-            storage.remover(existente.caminho_arquivo)
+            # Não remover uma referência ainda usada por outra análise.
+            compartilhado = db.session.scalar(select(func.count()).select_from(UploadRelatorio).where(
+                UploadRelatorio.caminho_arquivo == existente.caminho_arquivo,
+                UploadRelatorio.id_upload != existente.id_upload,
+            ))
+            if not compartilhado:
+                if existente.caminho_arquivo.startswith(storage.PREFIXO_DB):
+                    storage.remover(existente.caminho_arquivo)
+                else:
+                    # O arquivo legado só pode sair depois do commit válido.
+                    legado_substituido = existente.caminho_arquivo
         if existente:
             db.session.delete(existente)
             db.session.flush()
-
         db.session.add(UploadRelatorio(
-            id_analise=id_analise,
-            id_usuario_admin=current_user.id_usuario,
-            tipo_relatorio=tipo,
-            nome_arquivo_original=nome_seguro,
-            caminho_arquivo=caminho_final,
-            extensao_arquivo=ext.upper(),
-            tamanho_arquivo=len(conteudo),
-            hash_arquivo=sha,
+            id_analise=id_analise, id_usuario_admin=current_user.id_usuario,
+            tipo_relatorio=tipo, nome_arquivo_original=nome_seguro,
+            caminho_arquivo=caminho_final, extensao_arquivo=ext.upper(),
+            tamanho_arquivo=len(conteudo), hash_arquivo=sha,
             status_processamento="PENDENTE",
         ))
-
-        # Transição: se com este upload os 2 tipos existem e a análise está AGUARDANDO -> RELATORIO_RECEBIDO.
         outro = _buscar_upload(id_analise, "COMPRAS" if tipo == "VENDAS" else "VENDAS")
         if outro and analise.status_analise == "AGUARDANDO_RELATORIO":
             analise.status_analise = "RELATORIO_RECEBIDO"
-
         db.session.commit()
+        if legado_substituido:
+            storage.remover(legado_substituido)
         flash(f"Relatório de {tipo} enviado com sucesso.", "success")
         return redirect(url_for("admin.analise_upload", id_analise=id_analise))
-
-    return render_template("admin/upload.html", analise=analise)
+    except ETLInputError as erro:
+        db.session.rollback()
+        flash(erro.safe_message, "danger")
+        return redirect(url_for("admin.analise_upload", id_analise=id_analise))
+    except SQLAlchemyError as erro:
+        db.session.rollback()
+        current_app.logger.warning("Upload administrativo indisponível (%s).", type(erro).__name__)
+        flash("Não foi possível salvar o relatório. Tente novamente.", "danger")
+        return redirect(url_for("admin.analise_upload", id_analise=id_analise))
 
 
 @admin_bp.route("/analise/<int:id_analise>/relatorio", methods=["GET", "POST"])
@@ -879,74 +881,81 @@ def analise_relatorio(id_analise):
 
 @admin_bp.route("/analise/<int:id_analise>/processar", methods=["POST"])
 @admin_required
+@limitar_processamento
 def processar_analise(id_analise):
-    # Lock pessimista na linha (SELECT ... FOR UPDATE no Postgres; no-op no SQLite):
-    # serializa cliques/abas concorrentes na MESMA análise, evitando duas execuções
-    # simultâneas do ETL gravando indicadores/Curva ABC em paralelo (race condition).
-    analise = db.session.get(Analise, id_analise, with_for_update=True)
-    if not analise:
-        flash("Análise não encontrada.", "danger")
-        return redirect(url_for("admin.dashboard"))
-
-    # 1/2. Confirma no banco que existem AMBOS os uploads (VENDAS e COMPRAS).
-    upload_vendas = _buscar_upload(id_analise, "VENDAS")
-    upload_compras = _buscar_upload(id_analise, "COMPRAS")
-    if not upload_vendas or not upload_compras:
-        flash("Ambos os relatórios (VENDAS e COMPRAS) precisam ser enviados antes de processar.", "warning")
-        return redirect(url_for("admin.dashboard"))
-
-    # 3/4. ADMIN clicou "Processar agora": entra em EM_ANALISE e dispara o ETL.
-    #      SEM commit intermediário: o commit encerraria a transação e soltaria o
-    #      lock FOR UPDATE antes do ETL, deixando um segundo clique rodar em paralelo.
-    #      Status + KPIs são gravados juntos no commit final (ou revertidos no erro).
-    analise.status_analise = "EM_ANALISE"
-
-    caminho_vendas = _resolver_caminho(upload_vendas)
-    caminho_compras = _resolver_caminho(upload_compras)
-
-    agora = datetime.now(timezone.utc)
-    resultado = processar_arquivos_analise(caminho_vendas, caminho_compras, id_analise, db.session)
-
-    if resultado.sucesso:
-        # 5/6. Sucesso: marca uploads como PROCESSADO e MANTÉM EM_ANALISE.
-        #      CONCLUIDO ocorre só na publicação da devolutiva estratégica.
-        upload_vendas.status_processamento = "PROCESSADO"
-        upload_vendas.data_processamento = agora
-        upload_vendas.mensagem_erro = None
-        upload_compras.status_processamento = "PROCESSADO"
-        upload_compras.data_processamento = agora
-        upload_compras.mensagem_erro = None
-        db.session.commit()
-
-        # Dispatch-after-commit: notifica o cliente só após o ETL ter sido
-        # persistido com sucesso (sininho); nunca derruba o resultado.
-        ref = f"{analise.mes_referencia:02d}/{analise.ano_referencia}"
-        try:
-            notificar_clientes_empresa(
-                analise.id_empresa,
-                f"Recebemos e processamos seus relatórios de {ref}. Sua devolutiva está em preparação.",
-                url_for("cliente.dashboard"),
-            )
-            db.session.commit()
-        except Exception as e:  # noqa: BLE001
+    """Preserva o lock da análise até confirmar todo o resultado, inclusive erro."""
+    try:
+        analise = db.session.get(Analise, id_analise, with_for_update=True, populate_existing=True)
+        if not analise:
             db.session.rollback()
-            current_app.logger.warning("Falha ao notificar processamento da análise %s: %s", id_analise, type(e).__name__)
-        return render_template("admin/processar_resultado.html", analise=analise, resultado=resultado)
+            flash("Análise não encontrada.", "danger")
+            return redirect(url_for("admin.dashboard"))
+        upload_vendas = _buscar_upload(id_analise, "VENDAS")
+        upload_compras = _buscar_upload(id_analise, "COMPRAS")
+        if not upload_vendas or not upload_compras:
+            db.session.rollback()
+            flash("Ambos os relatórios (VENDAS e COMPRAS) precisam ser enviados antes de processar.", "warning")
+            return redirect(url_for("admin.dashboard"))
 
-    # 7. Erro: descarta qualquer escrita parcial, marca uploads como ERRO e
-    #    devolve a análise para RELATORIO_RECEBIDO (permite re-upload e novo processamento).
-    db.session.rollback()
-    analise = db.session.get(Analise, id_analise)
-    upload_vendas = _buscar_upload(id_analise, "VENDAS")
-    upload_compras = _buscar_upload(id_analise, "COMPRAS")
-    analise.status_analise = "RELATORIO_RECEBIDO"
-    for up in (upload_vendas, upload_compras):
-        if up:
-            up.status_processamento = "ERRO"
-            up.mensagem_erro = resultado.mensagem
-    db.session.commit()
-    flash(f"Falha no processamento: {resultado.mensagem}", "danger")
-    return redirect(url_for("admin.dashboard"))
+        # Sem commit/rollback intermediário: uploads usam o mesmo lock e não
+        # podem substituir os arquivos sobre os quais estes KPIs são calculados.
+        analise.status_analise = "EM_ANALISE"
+        agora = datetime.now(timezone.utc)
+        try:
+            limits = get_limits()
+            with ExitStack() as materiais:
+                caminho_vendas = materiais.enter_context(storage.materializar_para_etl(
+                    upload_vendas.caminho_arquivo, limits.max_file_bytes,
+                ))
+                caminho_compras = materiais.enter_context(storage.materializar_para_etl(
+                    upload_compras.caminho_arquivo, limits.max_file_bytes,
+                ))
+                resultado = processar_arquivos_analise(
+                    caminho_vendas, caminho_compras, id_analise, db.session,
+                )
+        except ETLInputError as erro:
+            resultado = ResultadoETL(False, erro.safe_message, {}, {}, [])
+        except ValueError:
+            resultado = ResultadoETL(False, "Configuração de processamento inválida.", {}, {}, [])
+        if not db.session.is_active:
+            # Uma falha SQL não tratada por SAVEPOINT exige rollback completo.
+            # Nunca readquirir e marcar uploads que outro pedido pode substituir.
+            raise SQLAlchemyError("Transação de processamento indisponível.")
+        if resultado.sucesso:
+            for upload in (upload_vendas, upload_compras):
+                upload.status_processamento = "PROCESSADO"
+                upload.data_processamento = agora
+                upload.mensagem_erro = None
+        else:
+            # O orquestrador reverte apenas seu SAVEPOINT; o lock externo segue
+            # mantido e os indicadores/Curva ABC anteriores permanecem intactos.
+            analise.status_analise = "RELATORIO_RECEBIDO"
+            for upload in (upload_vendas, upload_compras):
+                upload.status_processamento = "ERRO"
+                upload.mensagem_erro = resultado.mensagem
+        db.session.commit()
+    except SQLAlchemyError as erro:
+        db.session.rollback()
+        current_app.logger.warning("Processamento indisponível (%s).", type(erro).__name__)
+        flash("Não foi possível confirmar o processamento. Tente novamente.", "danger")
+        return redirect(url_for("admin.dashboard"))
+
+    if not resultado.sucesso:
+        flash(f"Falha no processamento: {resultado.mensagem}", "danger")
+        return redirect(url_for("admin.dashboard"))
+    # Apenas sucesso já confirmado pode gerar notificações de processamento.
+    ref = f"{analise.mes_referencia:02d}/{analise.ano_referencia}"
+    try:
+        notificar_clientes_empresa(
+            analise.id_empresa,
+            f"Recebemos e processamos seus relatórios de {ref}. Sua devolutiva está em preparação.",
+            url_for("cliente.dashboard"),
+        )
+        db.session.commit()
+    except Exception as erro:
+        db.session.rollback()
+        current_app.logger.warning("Falha ao notificar processamento da análise %s: %s", id_analise, type(erro).__name__)
+    return render_template("admin/processar_resultado.html", analise=analise, resultado=resultado)
 
 
 @admin_bp.route("/analise/deletar/<int:id_analise>", methods=["POST"])

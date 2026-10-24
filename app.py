@@ -68,6 +68,10 @@ def create_app(config_name: str = None) -> Flask:
 
     app = Flask(__name__, instance_relative_config=True)
     app.config.from_object(config_by_name[config_name])
+    # Politica finita validada antes de inicializar banco/servidor.
+    from etl_limits import ETLLimits
+    from dataclasses import asdict
+    app.config["ETL_LIMITS"] = asdict(ETLLimits.from_mapping(app.config.get("ETL_LIMITS", {})))
 
     if config_name == "production":
         secret_key = app.config.get("SECRET_KEY")

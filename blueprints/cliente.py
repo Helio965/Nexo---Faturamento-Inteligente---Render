@@ -30,7 +30,10 @@ from flask import (
 )
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
-from sqlalchemy import select
+from sqlalchemy import select, func
+from sqlalchemy.exc import SQLAlchemyError
+from etl_inputs import ETLInputError
+from etl_uploads import ler_upload_validado, limitar_upload
 
 from extensions import db
 from models import (
@@ -303,112 +306,95 @@ def _buscar_upload(id_analise: int, tipo: str):
 
 @cliente_bp.route("/upload", methods=["GET", "POST"])
 @cliente_required
+@limitar_upload
 def upload():
-    """
-    GET  → lista as análises abertas da empresa (aguardando relatório) e o status
-           de cada anexo (Vendas/Compras).
-    POST → o cliente anexa um arquivo (VENDAS ou COMPRAS) a uma análise sua:
-        - valida que a análise é da empresa do cliente e aceita upload;
-        - valida extensão (ALLOWED_EXTENSIONS); calcula SHA-256 e tamanho;
-        - substitui o anexo anterior do mesmo tipo (UNIQUE id_analise+tipo);
-        - cria UploadRelatorio com id_usuario_admin=NULL (aguardando validação);
-        - transição AGUARDANDO_RELATORIO → RELATORIO_RECEBIDO quando os 2 existem.
-    NUNCA dispara o ETL — a homologação é exclusiva do consultor (admin).
-    """
-    empresa = current_user.empresa
-
-    analises_abertas = db.session.execute(
-        select(Analise)
-        .where(Analise.id_empresa == empresa.id_empresa)
-        .where(Analise.status_analise.in_(STATUS_ACEITA_UPLOAD))
-        .order_by(Analise.data_criacao.desc())
-    ).scalars().all()
-
-    if request.method == "POST":
+    """Preflight limitado e substituição serializada, sem executar ETL comercial."""
+    try:
+        empresa = current_user.empresa
+        analises_abertas = db.session.execute(
+            select(Analise).where(Analise.id_empresa == empresa.id_empresa)
+            .where(Analise.status_analise.in_(STATUS_ACEITA_UPLOAD))
+            .order_by(Analise.data_criacao.desc())
+        ).scalars().all()
+        if request.method != "POST":
+            return render_template("cliente/upload.html", empresa=empresa, analises=analises_abertas)
         try:
             id_analise = int(request.form.get("id_analise", ""))
         except ValueError:
             flash("Selecione uma análise válida.", "danger")
             return redirect(url_for("cliente.upload"))
-
         analise = db.session.get(Analise, id_analise)
-        # Guard: a análise tem que existir, ser DA EMPRESA do cliente e aceitar upload.
-        if (
-            analise is None
-            or analise.id_empresa != empresa.id_empresa
-            or analise.status_analise not in STATUS_ACEITA_UPLOAD
-        ):
+        if (analise is None or analise.id_empresa != empresa.id_empresa
+                or analise.status_analise not in STATUS_ACEITA_UPLOAD):
             abort(404)
-
         tipo = (request.form.get("tipo_relatorio") or "").strip().upper()
         if tipo not in ("VENDAS", "COMPRAS"):
             flash("Tipo de relatório inválido (esperado VENDAS ou COMPRAS).", "danger")
             return redirect(url_for("cliente.upload"))
-
         arquivo = request.files.get("arquivo")
         if not arquivo or not arquivo.filename:
             flash("Selecione um arquivo para enviar.", "warning")
             return redirect(url_for("cliente.upload"))
-
         nome_seguro = secure_filename(arquivo.filename)
         ext = os.path.splitext(nome_seguro)[1].lower().lstrip(".")
         if ext not in current_app.config["ALLOWED_EXTENSIONS"]:
             flash(
-                f"Extensão .{ext} não suportada. Aceitos: "
-                f"{sorted(current_app.config['ALLOWED_EXTENSIONS'])}.", "danger",
+                f"Extensão .{ext} não suportada. Aceitos: {sorted(current_app.config['ALLOWED_EXTENSIONS'])}.", "danger",
             )
             return redirect(url_for("cliente.upload"))
-
-        conteudo = arquivo.read()
-        if not conteudo:
-            flash("Arquivo vazio — nada foi salvo.", "warning")
-            return redirect(url_for("cliente.upload"))
-        sha = hashlib.sha256(conteudo).hexdigest()
-
+        conteudo, sha = ler_upload_validado(arquivo, ext)
+        # Refresh obrigatório: estado/vínculo podem mudar durante a validação.
+        analise = db.session.get(Analise, id_analise, with_for_update=True, populate_existing=True)
+        if (analise is None or analise.id_empresa != empresa.id_empresa
+                or analise.status_analise not in STATUS_ACEITA_UPLOAD):
+            db.session.rollback()
+            abort(404)
         nome_final = f"analise_{id_analise}_{tipo}_{sha[:8]}.{ext}"
-
-        # UNIQUE(id_analise, tipo) — re-upload substitui o anterior (mesmo cuidado
-        # do fluxo admin: só remove o arquivo físico antigo se a referência mudou).
         existente = _buscar_upload(id_analise, tipo)
-        # Grava via camada de storage (ponto único — ver storage.py).
         caminho_final = storage.salvar(conteudo, nome_final)
+        legado_substituido = None
         if existente and existente.caminho_arquivo and existente.caminho_arquivo != caminho_final:
-            storage.remover(existente.caminho_arquivo)
+            compartilhado = db.session.scalar(select(func.count()).select_from(UploadRelatorio).where(
+                UploadRelatorio.caminho_arquivo == existente.caminho_arquivo,
+                UploadRelatorio.id_upload != existente.id_upload,
+            ))
+            if not compartilhado:
+                if existente.caminho_arquivo.startswith(storage.PREFIXO_DB):
+                    storage.remover(existente.caminho_arquivo)
+                else:
+                    legado_substituido = existente.caminho_arquivo
         if existente:
             db.session.delete(existente)
             db.session.flush()
-
         db.session.add(UploadRelatorio(
-            id_analise=id_analise,
-            id_usuario_admin=None,  # enviado pelo cliente → aguardando validação
-            tipo_relatorio=tipo,
-            nome_arquivo_original=nome_seguro,
-            caminho_arquivo=caminho_final,
-            extensao_arquivo=ext.upper(),
-            tamanho_arquivo=len(conteudo),
-            hash_arquivo=sha,
+            id_analise=id_analise, id_usuario_admin=None,
+            tipo_relatorio=tipo, nome_arquivo_original=nome_seguro,
+            caminho_arquivo=caminho_final, extensao_arquivo=ext.upper(),
+            tamanho_arquivo=len(conteudo), hash_arquivo=sha,
             status_processamento="PENDENTE",
         ))
-
         outro = _buscar_upload(id_analise, "COMPRAS" if tipo == "VENDAS" else "VENDAS")
         if outro and analise.status_analise == "AGUARDANDO_RELATORIO":
             analise.status_analise = "RELATORIO_RECEBIDO"
-
-        # Gatilho: avisa o consultor que há planilha nova aguardando homologação.
         nome_emp = empresa.nome_fantasia or empresa.razao_social
         notificar_admins(
             f"Nova planilha de {tipo.capitalize()} enviada por {nome_emp} aguardando homologação.",
             url_for("admin.analise_upload", id_analise=id_analise),
         )
-
         db.session.commit()
-        flash(
-            f"Relatório de {tipo} enviado. A equipe NEXO fará a validação e o "
-            "processamento.", "success",
-        )
+        if legado_substituido:
+            storage.remover(legado_substituido)
+        flash(f"Relatório de {tipo} enviado. A equipe NEXO fará a validação e o processamento.", "success")
         return redirect(url_for("cliente.upload"))
-
-    return render_template("cliente/upload.html", empresa=empresa, analises=analises_abertas)
+    except ETLInputError as erro:
+        db.session.rollback()
+        flash(erro.safe_message, "danger")
+        return redirect(url_for("cliente.upload"))
+    except SQLAlchemyError as erro:
+        db.session.rollback()
+        current_app.logger.warning("Upload do cliente indisponível (%s).", type(erro).__name__)
+        flash("Não foi possível salvar o relatório. Tente novamente.", "danger")
+        return redirect(url_for("cliente.upload"))
 
 
 # =====================================================================

@@ -90,3 +90,5 @@ jobs:
         run: python -B -m unittest tests.postgresql_company_restore_security -v
       - name: Migracao SEC-004 com dados anteriores no PostgreSQL real
         run: python -B -m unittest tests.postgresql_company_restore_migration -v
+      - name: ETL, limites, atomicidade e uploads concorrentes no PostgreSQL real
+        run: python -B -m unittest tests.postgresql_etl_resource_security -v
