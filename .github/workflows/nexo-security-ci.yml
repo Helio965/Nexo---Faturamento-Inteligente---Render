@@ -52,12 +52,37 @@ jobs:
           echo "NEXO_TEST_POSTGRES_BIN=$pg_bin" >> "$GITHUB_ENV"
       - name: Instalador verificado e dependencias de teste
         run: python -I tools/install_dependencies.py --requirements requirements-dev.txt
-      - name: Chromium de teste
-        run: python -m playwright install --with-deps chromium
+      - name: Navegador de teste com suporte ao MP4 H.264 e AAC
+        run: |
+          python -m playwright install-deps chromium
+          chrome_bin="$(command -v google-chrome)"
+          test -x "$chrome_bin"
+          echo "NEXO_TEST_CHROMIUM=$chrome_bin" >> "$GITHUB_ENV"
+          "$chrome_bin" --version
       - name: Suite completa, navegador e ensaio de backup
         env:
           NEXO_TEST_BROWSER: "1"
-        run: python -B -m unittest discover -s tests -t . -v
+        run: |
+          test_status=0
+          {
+          python -B -m unittest discover -s tests -t . -v
+          } > "$RUNNER_TEMP/nexo-tests.log" 2>&1 || test_status=$?
+          cat "$RUNNER_TEMP/nexo-tests.log"
+          if [ "$test_status" -ne 0 ]; then
+            python - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+          log = (Path(os.environ["RUNNER_TEMP"]) / "nexo-tests.log").read_text(errors="replace")
+          blocks = re.findall(r"^(?:FAIL|ERROR): .*?(?=^={10,}\s*$|^-{10,}\nRan |\Z)", log, re.M | re.S)
+          for block in blocks[:10]:
+              message = block[:6000].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+              print("::error title=Falha unittest::" + message)
+          if not blocks:
+              print("::error title=Falha unittest::A suíte terminou com erro; consultar o log do job.")
+          PY
+          fi
+          exit "$test_status"
 
   postgresql-security:
     name: security-postgresql
