@@ -1,9 +1,9 @@
 # NEXO-COM-001 — Landing comercial
 
 Registro de implementação e validação local em 24/10/2026 (America/Sao_Paulo).
-O estado remoto definitivo da PR e dos jobs acompanha a descrição da PR e a
-entrega desta execução. Este documento é um snapshot anterior à publicação,
-não comprova implantação nem disponibilidade comercial dos canais pendentes.
+A implementação foi publicada na PR #21, em rascunho. O resultado da CI é
+registrado por commit na seção S; consultar a PR para o estado mais recente.
+Este registro não comprova implantação nem disponibilidade dos canais pendentes.
 
 ## A. Diagnóstico da landing anterior
 
@@ -83,7 +83,8 @@ estimado parado e a referência à Curva ABC. O box de transparência foi substi
 por nota discreta: a pressão é uma estimativa, não estoque físico, lucro ou margem.
 Não foram alterados cálculos nem os três conjuntos de dados demonstrativos.
 
-Os três gráficos têm tabelas textuais consultáveis e aviso caso a biblioteca
+Os três gráficos têm alternativas textuais consultáveis (descrição dos dois
+valores no hero e tabelas nos outros dois) e aviso caso a biblioteca
 esteja indisponível. A mesma versão 2.35.2 do Plotly utilizada pelo portal é
 carregada via jsDelivr de forma assíncrona. O carregamento/falha não impede menu,
 carrossel ou player. O aviso só some após renderização bem-sucedida do gráfico.
@@ -217,9 +218,17 @@ uploads/ETL, primeiro acesso, CSRF/rate limiting, dashboards, notificações,
 NexoBot Advanced, dependências e inicialização Flask/Gunicorn. Foram executados
 também `node --check` nos dois scripts e `git diff --check`.
 
-O workflow `nexo-security-ci.yml` já executa a descoberta completa com navegador e
-os módulos PostgreSQL obrigatórios. Os novos módulos entram automaticamente na
-CI, sem desativar verificações ou modificar dependências/workflow.
+O workflow `nexo-security-ci.yml` mantém a descoberta completa e os módulos
+PostgreSQL obrigatórios. Foi necessário selecionar o Google Chrome pré-instalado
+no runner para os testes do MP4 H.264/AAC, conforme limitação do Chromium 141
+já registrada em `VALIDACAO_VIDEO_RENDER.md`. Playwright instala as dependências
+de sistema; nenhum teste é ignorado e nenhuma mídia é substituída.
+
+Falhas do unittest também geram annotations com nome e traceback escapado/limitado,
+além do log normal. O código de saída original é preservado. YAML/bash foram
+validados; ensaio efêmero do wrapper confirmou exit 0 em sucesso e exit 1 com
+annotation em falha sintética. Esse ensaio não integra o total dos 666 testes.
+Não foram alteradas dependências Python nem a lógica dos testes de segurança.
 
 ## P. Arquivos modificados
 
@@ -231,11 +240,12 @@ CI, sem desativar verificações ou modificar dependências/workflow.
 | `static/js/landing-video.js` | Extensões mínimas de pausa, mudo e movimento reduzido |
 | `templates/como_aderir.html` | Orientação de acesso sem contatos provisórios/checkout fictício |
 | `templates/cliente/dashboard.html` | Troca dos contatos "preencher depois" pelo suporte existente |
+| `.github/workflows/nexo-security-ci.yml` | Navegador compatível com o MP4 e annotations de falha, preservando a suíte e seu exit status |
 | `tests/test_landing_commercial.py` | 20 testes HTTP/DOM/Chromium |
 | `tests/test_landing_video_commercial.py` | 7 testes do player e mídia real |
 | `Docs/PLANO_ACAO_COMERCIAL_LANDING_NEXO.md` | Seis seções do plano e matriz de rastreabilidade |
 | `Docs/PENDENCIAS_NEXO_COM002_AVALIACOES.md` | Requisitos futuros de avaliação, consentimento e moderação |
-| `Docs/RELATORIO_NEXO_COM001_LANDING_COMERCIAL.md` | Este relatório técnico |
+| `Docs/RELATORIO_NEXO_COM001_LANDING_COMERCIAL.md` | Este relatório técnico e evidências de publicação |
 
 ## Q. Pendências e validação comercial
 
@@ -276,19 +286,29 @@ O componente público está preparado para integração futura com DTO restrito.
 - Base atualizada antes da publicação: `c919b1d17e6cbf4bf9dac09e29cefca67d908d06`.
   A PR #19 integrou somente o documento de baseline por ação externa; esta branch
   foi avançada por fast-forward, preservando esse documento e as alterações locais.
-- Branch exclusiva: `feature/com-001-landing-page-comercial`.
-- Título previsto: `feat(landing): NEXO-COM-001 - reestruturação comercial`.
-- Este snapshot foi escrito antes do commit/push/abertura; não inventa número,
-  URL ou resultado de CI. A descrição e a entrega final da PR registrarão o hash,
-  link real e os resultados reais de `security-sqlite-browser` e
-  `security-postgresql` após a publicação.
-- Publicação autorizada somente nesta branch e PR em rascunho, sem merge ou
-  auto-merge. A integração e o deploy dependem de autorização posterior.
+- Branch publicada: `feature/com-001-landing-page-comercial`.
+- Commit de implementação: `9396c71a63ace0fb27096cd3d0621f47ad8bdb9b`.
+- PR real: [#21 — NEXO-COM-001](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/21),
+  criada em rascunho, aberta e sem auto-merge na verificação desta atualização.
+- [Execução inicial 40116109112](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/40116109112):
+  `security-postgresql` aprovado (1 min 57 s), `security-sqlite-browser` falhou
+  (7 min 43 s). A API confirmou esses resultados, mas o armazenamento redirecionado
+  dos logs foi bloqueado pelo proxy. A annotation original trouxe somente exit 1;
+  não foi possível obter os tracebacks dessa primeira execução.
+- A incompatibilidade do Chromium Playwright com H.264/AAC já documentada motivou
+  a seleção do Chrome do runner e a publicação de diagnósticos nas annotations.
+  Não atribuir todas as falhas iniciais a codecs sem seus tracebacks. A correção
+  exige nova execução completa; o resultado por commit e os links definitivos dos
+  dois jobs são registrados na descrição da PR e na entrega final desta execução.
+  Não reutilizar um resultado anterior como se comprovasse outro commit.
+- Nenhum merge, auto-merge ou deploy foi executado. A integração e a publicação
+  em produção dependem de autorização posterior.
 
 ## T. Riscos, limites e próxima etapa
 
-**Implementação local validada; conteúdo oficial e publicação remota são estados
-separados.** O estado final deve ser consultado na PR e na entrega desta execução.
+**Implementação local validada e PR publicada; conteúdo oficial e aprovação da
+CI são estados separados.** O resultado remoto mais recente deve ser consultado
+na PR e na entrega desta execução.
 Não classificar esta documentação como comprovação de disponibilidade em produção.
 
 Bootstrap, Plotly e fontes continuam com dependências CDN existentes. O novo
