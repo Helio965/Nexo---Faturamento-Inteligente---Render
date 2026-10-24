@@ -15,6 +15,15 @@
     </div>
 </div>
 
+{% set ativos_suspeitos = topicos | selectattr('ativo') | selectattr('id', 'in', suspeitos) | list %}
+{% if ativos_suspeitos %}
+<div class="nota-pressao mb-4" style="background:var(--warning-bg);border-color:rgba(245,158,11,0.3);">
+    <i class="bi bi-exclamation-triangle"></i>
+    <span><strong>{{ ativos_suspeitos | length }} tópico(s) ativo(s) com sinais de conteúdo de teste.</strong>
+    O NexoBot não os apresenta como assuntos do portal e reduz a prioridade deles nas respostas, mas eles continuam visíveis no Guia do cliente. Revise e desative (ou exclua) os tópicos marcados abaixo.</span>
+</div>
+{% endif %}
+
 {% if total == 0 %}
 <div class="nexo-card">
     <div class="empty-state">
@@ -35,7 +44,8 @@
                     <td><span class="cat-badge">{{ t.categoria }}</span></td>
                     <td class="t-strong">{{ t.pergunta }}</td>
                     <td>{% if t.imagem_url %}<i class="bi bi-image text-purple" title="Possui imagem"></i>{% else %}<span class="t-dim">—</span>{% endif %}</td>
-                    <td>{% if t.ativo %}<span class="nexo-badge b-green"><span class="dot"></span>Ativo</span>{% else %}<span class="nexo-badge b-muted">Inativo</span>{% endif %}</td>
+                    <td>{% if t.ativo %}<span class="nexo-badge b-green"><span class="dot"></span>Ativo</span>{% else %}<span class="nexo-badge b-muted">Inativo</span>{% endif %}
+                        {% if t.id in suspeitos %}<span class="nexo-badge b-amber" title="{{ suspeitos[t.id] }}"><span class="dot"></span>Possível teste</span>{% endif %}</td>
                     <td class="t-mut t-mono">{{ (t.data_atualizacao or t.data_criacao).strftime('%d/%m/%Y') }}</td>
                     <td class="text-end">
                         <a href="{{ url_for('admin.guia_editar', id=t.id) }}" class="btn-ghost btn-sm-x"><i class="bi bi-pencil"></i> Editar</a>

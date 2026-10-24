@@ -19,7 +19,7 @@ ENDPOINTS = {
     "dashboard": "cliente.dashboard", "upload": "cliente.upload", "historico": "cliente.historico",
     "guia": "cliente.guia", "suporte": "cliente.tickets",
 }
-CHAVES_CONTEXTO = {"ultimo_destino", "destino_anterior", "opcoes", "modo_opcoes", "oferta"}
+CHAVES_CONTEXTO = {"ultimo_destino", "destino_anterior", "opcoes", "modo_opcoes", "oferta", "assunto", "nivel"}
 
 
 class NexoBotApiBase(DeployTestCase):

@@ -453,21 +453,27 @@
                 aria-label="Abrir NexoBot — assistente do portal" aria-controls="nexobotPanel"
                 aria-expanded="false" aria-haspopup="dialog">
             <i class="bi bi-robot" aria-hidden="true"></i>
+            <span class="nexobot-launcher-label" aria-hidden="true">NexoBot</span>
         </button>
         <div class="nexobot-panel" id="nexobotPanel" role="dialog" aria-modal="false"
-             aria-labelledby="nexobotTitulo" hidden>
-            <div class="nexobot-head">
-                <span class="nexobot-title" id="nexobotTitulo"><span class="nexobot-avatar" aria-hidden="true"><i class="bi bi-robot"></i></span> NexoBot <small>assistente do portal</small></span>
+             aria-labelledby="nexobotTitulo" aria-describedby="nexobotSubtitulo" hidden>
+            <header class="nexobot-head">
+                <span class="nexobot-avatar" aria-hidden="true"><i class="bi bi-robot"></i></span>
+                <div class="nexobot-head-text">
+                    <span class="nexobot-title" id="nexobotTitulo">NexoBot</span>
+                    <span class="nexobot-subtitle" id="nexobotSubtitulo">Assistente do portal NEXO · responde com a base de conhecimento do portal</span>
+                </div>
                 <button class="nexobot-close" id="nexobotClose" type="button" aria-label="Fechar o NexoBot"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
-            </div>
+            </header>
             <div class="nexobot-msgs" id="nexobotMsgs" role="log" aria-live="polite" aria-relevant="additions" tabindex="0" aria-label="Conversa com o NexoBot"></div>
             <p class="visually-hidden" id="nexobotStatus" role="status" aria-live="polite"></p>
             <form class="nexobot-form" id="nexobotForm" novalidate>
                 <label class="visually-hidden" for="nexobotInput">Mensagem para o NexoBot</label>
-                <input type="text" id="nexobotInput" placeholder="Pergunte sobre o portal…" autocomplete="off"
-                       maxlength="1000" enterkeyhint="send" spellcheck="true">
-                <button type="submit" id="nexobotEnviar" aria-label="Enviar mensagem"><i class="bi bi-send" aria-hidden="true"></i></button>
+                <textarea id="nexobotInput" class="nexobot-input" rows="1" placeholder="Pergunte sobre o NEXO ou sobre o portal…"
+                          maxlength="1000" enterkeyhint="send" autocomplete="off" autocapitalize="sentences" spellcheck="true"></textarea>
+                <button type="submit" id="nexobotEnviar" class="nexobot-send" aria-label="Enviar mensagem" disabled><i class="bi bi-send-fill" aria-hidden="true"></i></button>
             </form>
+            <p class="nexobot-hint" id="nexobotHint" aria-hidden="true">Enter envia · Shift+Enter quebra a linha</p>
         </div>
     </div>
     <script src="{{ url_for('static', filename='js/nexobot.js') }}" defer></script>

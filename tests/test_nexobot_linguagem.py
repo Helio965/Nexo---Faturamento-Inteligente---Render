@@ -209,7 +209,8 @@ class ContextoTests(unittest.TestCase):
         self.assertEqual(novo["destino_anterior"], "upload")
         self.assertEqual(novo["oferta"], "historico")
         self.assertEqual(c.avancar(), {"ultimo_destino": None, "destino_anterior": None,
-                                       "opcoes": [], "modo_opcoes": None, "oferta": None})
+                                       "opcoes": [], "modo_opcoes": None, "oferta": None,
+                                       "assunto": None, "nivel": 0})
         self.assertIsNone(c.manter()["oferta"])
 
     def test_confirmacao_exige_oferta_imediata(self):

@@ -1169,7 +1169,12 @@ def guia():
     topicos = db.session.execute(
         select(GuiaTopico).order_by(GuiaTopico.categoria, GuiaTopico.id)
     ).scalars().all()
-    return render_template("admin/guia.html", topicos=topicos, total=len(topicos))
+    # Tópicos com sinais de conteúdo de teste (ver nexobot/higiene.py): apenas
+    # sinalizados para revisão; a desativação/exclusão continua manual, pelo CMS.
+    from nexobot.higiene import motivo_teste
+    suspeitos = {t.id: motivo for t in topicos
+                 if (motivo := motivo_teste(t.categoria, t.pergunta, t.resposta))}
+    return render_template("admin/guia.html", topicos=topicos, total=len(topicos), suspeitos=suspeitos)
 
 
 @admin_bp.route("/guia/novo", methods=["GET", "POST"])
