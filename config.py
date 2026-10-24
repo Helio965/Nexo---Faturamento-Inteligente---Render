@@ -12,6 +12,8 @@ from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 from dotenv import load_dotenv
+from dataclasses import asdict
+from etl_limits import limits_from_environment
 
 # Diretório raiz do projeto (pasta que contém app.py)
 BASE_DIR = Path(__file__).resolve().parent
@@ -171,6 +173,9 @@ class Config:
     # Formatos REALMENTE suportados pelo ETL. .xls fica de fora porque não há
     # dependência (xlrd) nem caminho de leitura — não anunciamos o que não lemos.
     ALLOWED_EXTENSIONS = {"csv", "xlsx"}
+
+    # SEC-005: limites finitos; valores invalidos impedem inicializacao.
+    ETL_LIMITS = asdict(limits_from_environment())
 
     # === IA (Claude / Anthropic) — geração automatizada da devolutiva ===
     # Sem a chave, o motor cai no fallback determinístico local (não quebra).

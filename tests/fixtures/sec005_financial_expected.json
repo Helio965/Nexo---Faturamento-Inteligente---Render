@@ -1,0 +1,3692 @@
+{
+  "source_commit": "ff148796d9b579418b3782d472eb44fb0025fe6f",
+  "source_sha256": "ceaed906a577e980519ad5a7906a8be92b5b838fd48bbdbda10c0c6218b2c7f6",
+  "financial": {
+    "c1_hemorragia_nf": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 160.0,
+        "total_comprado": 1200.0,
+        "saldo_estimado_compras_vendas": 1040.0,
+        "produto_mais_vendido_nome": "Arroz sintético",
+        "produto_mais_vendido_quantidade": 5.0,
+        "produto_maior_faturamento_nome": "Feijão sintético",
+        "produto_maior_faturamento_valor": 50.0,
+        "produto_maior_saldo_parado_nome": null,
+        "saldo_estimado_parado": null,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Arroz sintético",
+              "faturamento": 100.0,
+              "quantidade": 5.0,
+              "perc_individual": 62.5,
+              "perc_acumulado": 62.5,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Feijão sintético",
+              "faturamento": 50.0,
+              "quantidade": 2.0,
+              "perc_individual": 31.25,
+              "perc_acumulado": 93.75,
+              "classe": "B"
+            },
+            {
+              "posicao": 3,
+              "nome": "Óleo sintético",
+              "faturamento": 10.0,
+              "quantidade": 1.0,
+              "perc_individual": 6.25,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 100.0,
+              "perc_faturamento": 62.5
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 1,
+              "faturamento": 50.0,
+              "perc_faturamento": 31.25
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 10.0,
+              "perc_faturamento": 6.25
+            }
+          ]
+        },
+        "periodo_base_inicio": "2026-01-01",
+        "periodo_base_fim": "2026-01-31"
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "codigo",
+          "produto",
+          "quantidade",
+          "valor_venda",
+          "estoque",
+          "valor_custo"
+        ],
+        "colunas_compras": [
+          "fornecedor",
+          "data",
+          "valor_nf"
+        ],
+        "linhas_vendas": 3,
+        "linhas_compras": 2,
+        "produtos_estoque_pdv_negativo": 1,
+        "taxa_estoque_pdv_negativo": 0.3333333333333333,
+        "itens_venda_abaixo_custo_pdv": 1
+      },
+      "alertas": [
+        "Limitação técnica: o relatório de COMPRAS está em nível de nota fiscal (fornecedor/valor) e não traz produto + quantidade comprada. O KPI 'produto com maior saldo estimado parado' não pôde ser calculado e foi persistido como nulo (sem gerar dado enganoso).",
+        "Atenção: 1 produto(s) (33.3%) apresentam saldo de estoque NEGATIVO informado pelo PDV — possível inconsistência de registro no sistema do cliente.",
+        "Alerta de custo informado pelo PDV: 1 item(ns) tiveram valor total de venda inferior ao custo total informado pelo PDV no período. É um sinal extraído da coluna bruta de custo do PDV, NÃO um cálculo contábil de margem."
+      ]
+    },
+    "c2_refem_unitario": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 300.0,
+        "total_comprado": 1260.0,
+        "saldo_estimado_compras_vendas": 960.0,
+        "produto_mais_vendido_nome": "Arroz sintético",
+        "produto_mais_vendido_quantidade": 10.0,
+        "produto_maior_faturamento_nome": "Feijão sintético",
+        "produto_maior_faturamento_valor": 150.0,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 40.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Feijão sintético",
+              "faturamento": 150.0,
+              "quantidade": 5.0,
+              "perc_individual": 50.0,
+              "perc_acumulado": 50.0,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Arroz sintético",
+              "faturamento": 100.0,
+              "quantidade": 10.0,
+              "perc_individual": 33.33,
+              "perc_acumulado": 83.33,
+              "classe": "B"
+            },
+            {
+              "posicao": 3,
+              "nome": "Óleo sintético",
+              "faturamento": 50.0,
+              "quantidade": 2.0,
+              "perc_individual": 16.67,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 150.0,
+              "perc_faturamento": 50.0
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 1,
+              "faturamento": 100.0,
+              "perc_faturamento": 33.33
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 50.0,
+              "perc_faturamento": 16.67
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_total_compra",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "custo_unitario",
+          "valor_total_compra"
+        ],
+        "linhas_vendas": 3,
+        "linhas_compras": 3
+      },
+      "alertas": []
+    },
+    "c3_ruptura_verboso": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 1490.0,
+        "total_comprado": 140.0,
+        "saldo_estimado_compras_vendas": -1350.0,
+        "produto_mais_vendido_nome": "Arroz sintético",
+        "produto_mais_vendido_quantidade": 100.0,
+        "produto_maior_faturamento_nome": "Feijão sintético",
+        "produto_maior_faturamento_valor": 400.0,
+        "produto_maior_saldo_parado_nome": null,
+        "saldo_estimado_parado": null,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Arroz sintético",
+              "faturamento": 1000.0,
+              "quantidade": 100.0,
+              "perc_individual": 67.11,
+              "perc_acumulado": 67.11,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Feijão sintético",
+              "faturamento": 400.0,
+              "quantidade": 20.0,
+              "perc_individual": 26.85,
+              "perc_acumulado": 93.96,
+              "classe": "B"
+            },
+            {
+              "posicao": 3,
+              "nome": "Óleo sintético",
+              "faturamento": 90.0,
+              "quantidade": 3.0,
+              "perc_individual": 6.04,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 1000.0,
+              "perc_faturamento": 67.11
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 1,
+              "faturamento": 400.0,
+              "perc_faturamento": 26.85
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 90.0,
+              "perc_faturamento": 6.04
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "fornecedor",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 3,
+        "linhas_compras": 2
+      },
+      "alertas": []
+    },
+    "c4_equilibrio_abc": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 1000.0,
+        "total_comprado": 1000.0,
+        "saldo_estimado_compras_vendas": 0.0,
+        "produto_mais_vendido_nome": "Produto sintético 1",
+        "produto_mais_vendido_quantidade": 10.0,
+        "produto_maior_faturamento_nome": "Produto sintético 2",
+        "produto_maior_faturamento_valor": 100.0,
+        "produto_maior_saldo_parado_nome": "Produto sintético 1",
+        "saldo_estimado_parado": 4.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Produto sintético 1",
+              "faturamento": 800.0,
+              "quantidade": 10.0,
+              "perc_individual": 80.0,
+              "perc_acumulado": 80.0,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Produto sintético 2",
+              "faturamento": 100.0,
+              "quantidade": 9.0,
+              "perc_individual": 10.0,
+              "perc_acumulado": 90.0,
+              "classe": "B"
+            },
+            {
+              "posicao": 3,
+              "nome": "Produto sintético 3",
+              "faturamento": 50.0,
+              "quantidade": 8.0,
+              "perc_individual": 5.0,
+              "perc_acumulado": 95.0,
+              "classe": "B"
+            },
+            {
+              "posicao": 4,
+              "nome": "Produto sintético 4",
+              "faturamento": 20.0,
+              "quantidade": 7.0,
+              "perc_individual": 2.0,
+              "perc_acumulado": 97.0,
+              "classe": "C"
+            },
+            {
+              "posicao": 5,
+              "nome": "Produto sintético 5",
+              "faturamento": 15.0,
+              "quantidade": 6.0,
+              "perc_individual": 1.5,
+              "perc_acumulado": 98.5,
+              "classe": "C"
+            },
+            {
+              "posicao": 6,
+              "nome": "Produto sintético 6",
+              "faturamento": 10.0,
+              "quantidade": 5.0,
+              "perc_individual": 1.0,
+              "perc_acumulado": 99.5,
+              "classe": "C"
+            },
+            {
+              "posicao": 7,
+              "nome": "Produto sintético 7",
+              "faturamento": 4.0,
+              "quantidade": 4.0,
+              "perc_individual": 0.4,
+              "perc_acumulado": 99.9,
+              "classe": "C"
+            },
+            {
+              "posicao": 8,
+              "nome": "Produto sintético 8",
+              "faturamento": 1.0,
+              "quantidade": 3.0,
+              "perc_individual": 0.1,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 800.0,
+              "perc_faturamento": 80.0
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 2,
+              "faturamento": 150.0,
+              "perc_faturamento": 15.0
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 5,
+              "faturamento": 50.0,
+              "perc_faturamento": 5.0
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 8,
+        "linhas_compras": 8
+      },
+      "alertas": []
+    },
+    "csv_semicolon_utf8sig": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 300.0,
+        "total_comprado": 630.0,
+        "saldo_estimado_compras_vendas": 330.0,
+        "produto_mais_vendido_nome": "Arroz sintético",
+        "produto_mais_vendido_quantidade": 10.0,
+        "produto_maior_faturamento_nome": "Feijão sintético",
+        "produto_maior_faturamento_valor": 150.0,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 10.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Feijão sintético",
+              "faturamento": 150.0,
+              "quantidade": 5.0,
+              "perc_individual": 50.0,
+              "perc_acumulado": 50.0,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Arroz sintético",
+              "faturamento": 100.0,
+              "quantidade": 10.0,
+              "perc_individual": 33.33,
+              "perc_acumulado": 83.33,
+              "classe": "B"
+            },
+            {
+              "posicao": 3,
+              "nome": "Óleo sintético",
+              "faturamento": 50.0,
+              "quantidade": 2.0,
+              "perc_individual": 16.67,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 150.0,
+              "perc_faturamento": 50.0
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 1,
+              "faturamento": 100.0,
+              "perc_faturamento": 33.33
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 50.0,
+              "perc_faturamento": 16.67
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 3,
+        "linhas_compras": 3
+      },
+      "alertas": []
+    },
+    "csv_comma_latin1": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 300.0,
+        "total_comprado": 630.0,
+        "saldo_estimado_compras_vendas": 330.0,
+        "produto_mais_vendido_nome": "Arroz sintético",
+        "produto_mais_vendido_quantidade": 10.0,
+        "produto_maior_faturamento_nome": "Feijão sintético",
+        "produto_maior_faturamento_valor": 150.0,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 10.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Feijão sintético",
+              "faturamento": 150.0,
+              "quantidade": 5.0,
+              "perc_individual": 50.0,
+              "perc_acumulado": 50.0,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Arroz sintético",
+              "faturamento": 100.0,
+              "quantidade": 10.0,
+              "perc_individual": 33.33,
+              "perc_acumulado": 83.33,
+              "classe": "B"
+            },
+            {
+              "posicao": 3,
+              "nome": "Óleo sintético",
+              "faturamento": 50.0,
+              "quantidade": 2.0,
+              "perc_individual": 16.67,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 150.0,
+              "perc_faturamento": 50.0
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 1,
+              "faturamento": 100.0,
+              "perc_faturamento": 33.33
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 50.0,
+              "perc_faturamento": 16.67
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 3,
+        "linhas_compras": 3
+      },
+      "alertas": []
+    },
+    "csv_tab_cp1252": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 220.0,
+        "total_comprado": 630.0,
+        "saldo_estimado_compras_vendas": 410.0,
+        "produto_mais_vendido_nome": "Feijão sintético",
+        "produto_mais_vendido_quantidade": 5.0,
+        "produto_maior_faturamento_nome": "Óleo sintético",
+        "produto_maior_faturamento_valor": 50.0,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 20.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Feijão sintético",
+              "faturamento": 150.0,
+              "quantidade": 5.0,
+              "perc_individual": 68.18,
+              "perc_acumulado": 68.18,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Óleo sintético",
+              "faturamento": 50.0,
+              "quantidade": 2.0,
+              "perc_individual": 22.73,
+              "perc_acumulado": 90.91,
+              "classe": "B"
+            },
+            {
+              "posicao": 3,
+              "nome": "Café “sintético”",
+              "faturamento": 20.0,
+              "quantidade": 2.0,
+              "perc_individual": 9.09,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 150.0,
+              "perc_faturamento": 68.18
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 1,
+              "faturamento": 50.0,
+              "perc_faturamento": 22.73
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 20.0,
+              "perc_faturamento": 9.09
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 3,
+        "linhas_compras": 3
+      },
+      "alertas": []
+    },
+    "csv_pipe_utf8": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 300.0,
+        "total_comprado": 630.0,
+        "saldo_estimado_compras_vendas": 330.0,
+        "produto_mais_vendido_nome": "Arroz sintético",
+        "produto_mais_vendido_quantidade": 10.0,
+        "produto_maior_faturamento_nome": "Feijão sintético",
+        "produto_maior_faturamento_valor": 150.0,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 10.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Feijão sintético",
+              "faturamento": 150.0,
+              "quantidade": 5.0,
+              "perc_individual": 50.0,
+              "perc_acumulado": 50.0,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Arroz sintético",
+              "faturamento": 100.0,
+              "quantidade": 10.0,
+              "perc_individual": 33.33,
+              "perc_acumulado": 83.33,
+              "classe": "B"
+            },
+            {
+              "posicao": 3,
+              "nome": "Óleo sintético",
+              "faturamento": 50.0,
+              "quantidade": 2.0,
+              "perc_individual": 16.67,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 150.0,
+              "perc_faturamento": 50.0
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 1,
+              "faturamento": 100.0,
+              "perc_faturamento": 33.33
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 50.0,
+              "perc_faturamento": 16.67
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 3,
+        "linhas_compras": 3
+      },
+      "alertas": []
+    },
+    "csv_latin1_fallback": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 220.0,
+        "total_comprado": 630.0,
+        "saldo_estimado_compras_vendas": 410.0,
+        "produto_mais_vendido_nome": "Feijão sintético",
+        "produto_mais_vendido_quantidade": 5.0,
+        "produto_maior_faturamento_nome": "Óleo sintético",
+        "produto_maior_faturamento_valor": 50.0,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 20.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Feijão sintético",
+              "faturamento": 150.0,
+              "quantidade": 5.0,
+              "perc_individual": 68.18,
+              "perc_acumulado": 68.18,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Óleo sintético",
+              "faturamento": 50.0,
+              "quantidade": 2.0,
+              "perc_individual": 22.73,
+              "perc_acumulado": 90.91,
+              "classe": "B"
+            },
+            {
+              "posicao": 3,
+              "nome": "Produtosintético",
+              "faturamento": 20.0,
+              "quantidade": 2.0,
+              "perc_individual": 9.09,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 150.0,
+              "perc_faturamento": 68.18
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 1,
+              "faturamento": 50.0,
+              "perc_faturamento": 22.73
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 20.0,
+              "perc_faturamento": 9.09
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 3,
+        "linhas_compras": 3
+      },
+      "alertas": []
+    },
+    "csv_quoted_multiline": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 220.0,
+        "total_comprado": 630.0,
+        "saldo_estimado_compras_vendas": 410.0,
+        "produto_mais_vendido_nome": "Feijão sintético",
+        "produto_mais_vendido_quantidade": 5.0,
+        "produto_maior_faturamento_nome": "Óleo sintético",
+        "produto_maior_faturamento_valor": 50.0,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 20.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Feijão sintético",
+              "faturamento": 150.0,
+              "quantidade": 5.0,
+              "perc_individual": 68.18,
+              "perc_acumulado": 68.18,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Óleo sintético",
+              "faturamento": 50.0,
+              "quantidade": 2.0,
+              "perc_individual": 22.73,
+              "perc_acumulado": 90.91,
+              "classe": "B"
+            },
+            {
+              "posicao": 3,
+              "nome": "Produto \"sintético\"; especial\nlinha adicional",
+              "faturamento": 20.0,
+              "quantidade": 2.0,
+              "perc_individual": 9.09,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 150.0,
+              "perc_faturamento": 68.18
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 1,
+              "faturamento": 50.0,
+              "perc_faturamento": 22.73
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 20.0,
+              "perc_faturamento": 9.09
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 3,
+        "linhas_compras": 3
+      },
+      "alertas": []
+    },
+    "csv_nul_removal": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 220.0,
+        "total_comprado": 630.0,
+        "saldo_estimado_compras_vendas": 410.0,
+        "produto_mais_vendido_nome": "Feijão sintético",
+        "produto_mais_vendido_quantidade": 5.0,
+        "produto_maior_faturamento_nome": "Óleo sintético",
+        "produto_maior_faturamento_valor": 50.0,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 20.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Feijão sintético",
+              "faturamento": 150.0,
+              "quantidade": 5.0,
+              "perc_individual": 68.18,
+              "perc_acumulado": 68.18,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Óleo sintético",
+              "faturamento": 50.0,
+              "quantidade": 2.0,
+              "perc_individual": 22.73,
+              "perc_acumulado": 90.91,
+              "classe": "B"
+            },
+            {
+              "posicao": 3,
+              "nome": "Produtosintético",
+              "faturamento": 20.0,
+              "quantidade": 2.0,
+              "perc_individual": 9.09,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 150.0,
+              "perc_faturamento": 68.18
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 1,
+              "faturamento": 50.0,
+              "perc_faturamento": 22.73
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 20.0,
+              "perc_faturamento": 9.09
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 3,
+        "linhas_compras": 3
+      },
+      "alertas": []
+    },
+    "csv_late_delimiter_header": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 300.0,
+        "total_comprado": 630.0,
+        "saldo_estimado_compras_vendas": 330.0,
+        "produto_mais_vendido_nome": "Arroz sintético",
+        "produto_mais_vendido_quantidade": 10.0,
+        "produto_maior_faturamento_nome": "Feijão sintético",
+        "produto_maior_faturamento_valor": 150.0,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 10.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Feijão sintético",
+              "faturamento": 150.0,
+              "quantidade": 5.0,
+              "perc_individual": 50.0,
+              "perc_acumulado": 50.0,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Arroz sintético",
+              "faturamento": 100.0,
+              "quantidade": 10.0,
+              "perc_individual": 33.33,
+              "perc_acumulado": 83.33,
+              "classe": "B"
+            },
+            {
+              "posicao": 3,
+              "nome": "Óleo sintético",
+              "faturamento": 50.0,
+              "quantidade": 2.0,
+              "perc_individual": 16.67,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 150.0,
+              "perc_faturamento": 50.0
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 1,
+              "faturamento": 100.0,
+              "perc_faturamento": 33.33
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 50.0,
+              "perc_faturamento": 16.67
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 3,
+        "linhas_compras": 3
+      },
+      "alertas": []
+    },
+    "header_compound": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 250.0,
+        "total_comprado": 630.0,
+        "saldo_estimado_compras_vendas": 380.0,
+        "produto_mais_vendido_nome": "Arroz sintético",
+        "produto_mais_vendido_quantidade": 10.0,
+        "produto_maior_faturamento_nome": "Feijão sintético",
+        "produto_maior_faturamento_valor": 150.0,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 10.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Feijão sintético",
+              "faturamento": 150.0,
+              "quantidade": 5.0,
+              "perc_individual": 60.0,
+              "perc_acumulado": 60.0,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Arroz sintético",
+              "faturamento": 100.0,
+              "quantidade": 10.0,
+              "perc_individual": 40.0,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 150.0,
+              "perc_faturamento": 60.0
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 0,
+              "faturamento": 0.0,
+              "perc_faturamento": 0.0
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 100.0,
+              "perc_faturamento": 40.0
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 2,
+        "linhas_compras": 3
+      },
+      "alertas": []
+    },
+    "header_shifted_footer": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 250.0,
+        "total_comprado": 630.0,
+        "saldo_estimado_compras_vendas": 380.0,
+        "produto_mais_vendido_nome": "Arroz sintético",
+        "produto_mais_vendido_quantidade": 10.0,
+        "produto_maior_faturamento_nome": "Feijão sintético",
+        "produto_maior_faturamento_valor": 150.0,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 10.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Feijão sintético",
+              "faturamento": 150.0,
+              "quantidade": 5.0,
+              "perc_individual": 60.0,
+              "perc_acumulado": 60.0,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Arroz sintético",
+              "faturamento": 100.0,
+              "quantidade": 10.0,
+              "perc_individual": 40.0,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 150.0,
+              "perc_faturamento": 60.0
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 0,
+              "faturamento": 0.0,
+              "perc_faturamento": 0.0
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 100.0,
+              "perc_faturamento": 40.0
+            }
+          ]
+        },
+        "periodo_base_inicio": "2026-02-01",
+        "periodo_base_fim": "2026-02-28"
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "valor_venda",
+          "produto",
+          "quantidade",
+          "codigo"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 2,
+        "linhas_compras": 3
+      },
+      "alertas": []
+    },
+    "explicit_total_normalization_alerts": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 350.0,
+        "total_comprado": 630.0,
+        "saldo_estimado_compras_vendas": 280.0,
+        "produto_mais_vendido_nome": "Café sintético",
+        "produto_mais_vendido_quantidade": 5.0,
+        "produto_maior_faturamento_nome": "Chá sintético",
+        "produto_maior_faturamento_valor": 50.0,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 20.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Café sintético",
+              "faturamento": 300.0,
+              "quantidade": 5.0,
+              "perc_individual": 85.71,
+              "perc_acumulado": 85.71,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Chá sintético",
+              "faturamento": 50.0,
+              "quantidade": 1.0,
+              "perc_individual": 14.29,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 300.0,
+              "perc_faturamento": 85.71
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 0,
+              "faturamento": 0.0,
+              "perc_faturamento": 0.0
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 50.0,
+              "perc_faturamento": 14.29
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "codigo",
+          "produto",
+          "preco_unitario",
+          "valor_venda",
+          "quantidade",
+          "valor_custo",
+          "estoque"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 3,
+        "linhas_compras": 3,
+        "produtos_estoque_pdv_negativo": 1,
+        "taxa_estoque_pdv_negativo": 0.3333333333333333,
+        "itens_venda_abaixo_custo_pdv": 1
+      },
+      "alertas": [
+        "Atenção: 1 produto(s) (33.3%) apresentam saldo de estoque NEGATIVO informado pelo PDV — possível inconsistência de registro no sistema do cliente.",
+        "Alerta de custo informado pelo PDV: 1 item(ns) tiveram valor total de venda inferior ao custo total informado pelo PDV no período. É um sinal extraído da coluna bruta de custo do PDV, NÃO um cálculo contábil de margem."
+      ]
+    },
+    "sales_derived_mixed_money": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 2498.12,
+        "total_comprado": 630.0,
+        "saldo_estimado_compras_vendas": -1868.12,
+        "produto_mais_vendido_nome": "Produto sintético B",
+        "produto_mais_vendido_quantidade": 3.0,
+        "produto_maior_faturamento_nome": "Produto sintético A",
+        "produto_maior_faturamento_valor": 2469.12,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 20.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Produto sintético A",
+              "faturamento": 2469.12,
+              "quantidade": 2.0,
+              "perc_individual": 98.74,
+              "perc_acumulado": 98.74,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Produto sintético B",
+              "faturamento": 31.5,
+              "quantidade": 3.0,
+              "perc_individual": 1.26,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 2469.12,
+              "perc_faturamento": 98.74
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 0,
+              "faturamento": 0.0,
+              "perc_faturamento": 0.0
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 31.5,
+              "perc_faturamento": 1.26
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "preco_unitario",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 3,
+        "linhas_compras": 3
+      },
+      "alertas": []
+    },
+    "purchase_products_total_priority": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 300.0,
+        "total_comprado": 370.0,
+        "saldo_estimado_compras_vendas": 70.0,
+        "produto_mais_vendido_nome": "Arroz sintético",
+        "produto_mais_vendido_quantidade": 10.0,
+        "produto_maior_faturamento_nome": "Feijão sintético",
+        "produto_maior_faturamento_valor": 150.0,
+        "produto_maior_saldo_parado_nome": null,
+        "saldo_estimado_parado": null,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Feijão sintético",
+              "faturamento": 150.0,
+              "quantidade": 5.0,
+              "perc_individual": 50.0,
+              "perc_acumulado": 50.0,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Arroz sintético",
+              "faturamento": 100.0,
+              "quantidade": 10.0,
+              "perc_individual": 33.33,
+              "perc_acumulado": 83.33,
+              "classe": "B"
+            },
+            {
+              "posicao": 3,
+              "nome": "Óleo sintético",
+              "faturamento": 50.0,
+              "quantidade": 2.0,
+              "perc_individual": 16.67,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 150.0,
+              "perc_faturamento": 50.0
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 1,
+              "faturamento": 100.0,
+              "perc_faturamento": 33.33
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 50.0,
+              "perc_faturamento": 16.67
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "produtos_total",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "fornecedor",
+          "valor_nf",
+          "produtos_total"
+        ],
+        "linhas_vendas": 3,
+        "linhas_compras": 2
+      },
+      "alertas": [
+        "Limitação técnica: o relatório de COMPRAS está em nível de nota fiscal (fornecedor/valor) e não traz produto + quantidade comprada. O KPI 'produto com maior saldo estimado parado' não pôde ser calculado e foi persistido como nulo (sem gerar dado enganoso)."
+      ]
+    },
+    "xlsx_sheet_tie": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 50.0,
+        "total_comprado": 630.0,
+        "saldo_estimado_compras_vendas": 580.0,
+        "produto_mais_vendido_nome": "Primeiro sintético",
+        "produto_mais_vendido_quantidade": 2.0,
+        "produto_maior_faturamento_nome": "Outro sintético",
+        "produto_maior_faturamento_valor": 30.0,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 20.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Outro sintético",
+              "faturamento": 30.0,
+              "quantidade": 1.0,
+              "perc_individual": 60.0,
+              "perc_acumulado": 60.0,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Primeiro sintético",
+              "faturamento": 20.0,
+              "quantidade": 2.0,
+              "perc_individual": 40.0,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 30.0,
+              "perc_faturamento": 60.0
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 0,
+              "faturamento": 0.0,
+              "perc_faturamento": 0.0
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 20.0,
+              "perc_faturamento": 40.0
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 2,
+        "linhas_compras": 3
+      },
+      "alertas": []
+    },
+    "xlsx_formula_cached_na": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 300.0,
+        "total_comprado": 630.0,
+        "saldo_estimado_compras_vendas": 330.0,
+        "produto_mais_vendido_nome": "Arroz sintético",
+        "produto_mais_vendido_quantidade": 10.0,
+        "produto_maior_faturamento_nome": "Feijão sintético",
+        "produto_maior_faturamento_valor": 150.0,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 10.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Feijão sintético",
+              "faturamento": 150.0,
+              "quantidade": 5.0,
+              "perc_individual": 50.0,
+              "perc_acumulado": 50.0,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Arroz sintético",
+              "faturamento": 100.0,
+              "quantidade": 10.0,
+              "perc_individual": 33.33,
+              "perc_acumulado": 83.33,
+              "classe": "B"
+            },
+            {
+              "posicao": 3,
+              "nome": "Óleo sintético",
+              "faturamento": 50.0,
+              "quantidade": 2.0,
+              "perc_individual": 16.67,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 150.0,
+              "perc_faturamento": 50.0
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 1,
+              "faturamento": 100.0,
+              "perc_faturamento": 33.33
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 50.0,
+              "perc_faturamento": 16.67
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 3,
+        "linhas_compras": 3
+      },
+      "alertas": []
+    },
+    "reversed_period_dates": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 300.0,
+        "total_comprado": 630.0,
+        "saldo_estimado_compras_vendas": 330.0,
+        "produto_mais_vendido_nome": "Arroz sintético",
+        "produto_mais_vendido_quantidade": 10.0,
+        "produto_maior_faturamento_nome": "Feijão sintético",
+        "produto_maior_faturamento_valor": 150.0,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 10.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Feijão sintético",
+              "faturamento": 150.0,
+              "quantidade": 5.0,
+              "perc_individual": 50.0,
+              "perc_acumulado": 50.0,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Arroz sintético",
+              "faturamento": 100.0,
+              "quantidade": 10.0,
+              "perc_individual": 33.33,
+              "perc_acumulado": 83.33,
+              "classe": "B"
+            },
+            {
+              "posicao": 3,
+              "nome": "Óleo sintético",
+              "faturamento": 50.0,
+              "quantidade": 2.0,
+              "perc_individual": 16.67,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 150.0,
+              "perc_faturamento": 50.0
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 1,
+              "faturamento": 100.0,
+              "perc_faturamento": 33.33
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 50.0,
+              "perc_faturamento": 16.67
+            }
+          ]
+        },
+        "periodo_base_inicio": "2026-03-01",
+        "periodo_base_fim": "2026-03-31"
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 3,
+        "linhas_compras": 3
+      },
+      "alertas": []
+    },
+    "purchase_period_fallback": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 300.0,
+        "total_comprado": 630.0,
+        "saldo_estimado_compras_vendas": 330.0,
+        "produto_mais_vendido_nome": "Arroz sintético",
+        "produto_mais_vendido_quantidade": 10.0,
+        "produto_maior_faturamento_nome": "Feijão sintético",
+        "produto_maior_faturamento_valor": 150.0,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 10.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Feijão sintético",
+              "faturamento": 150.0,
+              "quantidade": 5.0,
+              "perc_individual": 50.0,
+              "perc_acumulado": 50.0,
+              "classe": "A"
+            },
+            {
+              "posicao": 2,
+              "nome": "Arroz sintético",
+              "faturamento": 100.0,
+              "quantidade": 10.0,
+              "perc_individual": 33.33,
+              "perc_acumulado": 83.33,
+              "classe": "B"
+            },
+            {
+              "posicao": 3,
+              "nome": "Óleo sintético",
+              "faturamento": 50.0,
+              "quantidade": 2.0,
+              "perc_individual": 16.67,
+              "perc_acumulado": 100.0,
+              "classe": "C"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 150.0,
+              "perc_faturamento": 50.0
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 1,
+              "faturamento": 100.0,
+              "perc_faturamento": 33.33
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 1,
+              "faturamento": 50.0,
+              "perc_faturamento": 16.67
+            }
+          ]
+        },
+        "periodo_base_inicio": "2026-04-01",
+        "periodo_base_fim": "2026-04-30"
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 3,
+        "linhas_compras": 3
+      },
+      "alertas": []
+    },
+    "one_product_rankings": {
+      "sucesso": true,
+      "mensagem": "Cálculo concluído em memória.",
+      "kpis": {
+        "faturamento_total": 60.0,
+        "total_comprado": 630.0,
+        "saldo_estimado_compras_vendas": 570.0,
+        "produto_mais_vendido_nome": "Único sintético",
+        "produto_mais_vendido_quantidade": 3.0,
+        "produto_maior_faturamento_nome": "Único sintético",
+        "produto_maior_faturamento_valor": 60.0,
+        "produto_maior_saldo_parado_nome": "Arroz sintético",
+        "saldo_estimado_parado": 20.0,
+        "curva_abc": {
+          "produtos": [
+            {
+              "posicao": 1,
+              "nome": "Único sintético",
+              "faturamento": 60.0,
+              "quantidade": 3.0,
+              "perc_individual": 100.0,
+              "perc_acumulado": 100.0,
+              "classe": "A"
+            }
+          ],
+          "resumo": [
+            {
+              "classe": "A",
+              "qtd_produtos": 1,
+              "faturamento": 60.0,
+              "perc_faturamento": 100.0
+            },
+            {
+              "classe": "B",
+              "qtd_produtos": 0,
+              "faturamento": 0.0,
+              "perc_faturamento": 0.0
+            },
+            {
+              "classe": "C",
+              "qtd_produtos": 0,
+              "faturamento": 0.0,
+              "perc_faturamento": 0.0
+            }
+          ]
+        },
+        "periodo_base_inicio": null,
+        "periodo_base_fim": null
+      },
+      "telemetria": {
+        "coluna_valor_compras": "valor_nf",
+        "colunas_vendas": [
+          "produto",
+          "quantidade",
+          "valor_venda"
+        ],
+        "colunas_compras": [
+          "produto",
+          "qtde_comprada",
+          "valor_nf"
+        ],
+        "linhas_vendas": 1,
+        "linhas_compras": 3
+      },
+      "alertas": []
+    }
+  },
+  "raw": {
+    "c1_hemorragia_nf_sales": {
+      "shape": [
+        6,
+        6
+      ],
+      "values": [
+        [
+          "Período de : 01/01/26 a 31/01/26",
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "id_produto",
+          "descricao_produto",
+          "quantidade",
+          "faturamento",
+          "estoque",
+          "total_custo"
+        ],
+        [
+          "S1",
+          "Arroz sintético",
+          "5",
+          "R$ 100,00",
+          "-1",
+          "120,00"
+        ],
+        [
+          "S2",
+          "Feijão sintético",
+          "2",
+          "50,00",
+          "3",
+          "40,00"
+        ],
+        [
+          "S3",
+          "Óleo sintético",
+          "1",
+          "10,00",
+          "1",
+          "9,00"
+        ],
+        [
+          "",
+          "TOTAL GERAL",
+          "999",
+          "999.999,99",
+          null,
+          null
+        ]
+      ]
+    },
+    "c1_hemorragia_nf_purchases": {
+      "shape": [
+        3,
+        3
+      ],
+      "values": [
+        [
+          "fornecedor",
+          "data_nf",
+          "total_compra"
+        ],
+        [
+          "Fornecedor sintético A",
+          "05/01/26",
+          "R$ 1.000,00"
+        ],
+        [
+          "Fornecedor sintético B",
+          "15/01/26",
+          "200,00"
+        ]
+      ]
+    },
+    "c2_refem_unitario_sales": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "quantidade",
+          "faturamento"
+        ],
+        [
+          "Arroz sintético",
+          "10",
+          "100,00"
+        ],
+        [
+          "Feijão sintético",
+          "5",
+          "150,00"
+        ],
+        [
+          "Óleo sintético",
+          "2",
+          "50,00"
+        ]
+      ]
+    },
+    "c2_refem_unitario_purchases": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "custo_unitario"
+        ],
+        [
+          "Arroz sintético",
+          "50",
+          "10,00"
+        ],
+        [
+          "Feijão sintético",
+          "30",
+          "20,00"
+        ],
+        [
+          "Óleo sintético",
+          "20",
+          "8,00"
+        ]
+      ]
+    },
+    "c3_ruptura_verboso_sales": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "descricao",
+          "qtde_vendida",
+          "Valor_Arrecadado_Total_Vendas"
+        ],
+        [
+          "Arroz sintético",
+          "100",
+          "1.000,00"
+        ],
+        [
+          "Feijão sintético",
+          "20",
+          "400,00"
+        ],
+        [
+          "Óleo sintético",
+          "3",
+          "90,00"
+        ]
+      ]
+    },
+    "c3_ruptura_verboso_purchases": {
+      "shape": [
+        4,
+        4
+      ],
+      "values": [
+        [
+          "descricao",
+          "fornecedor",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "Fornecedor sintético",
+          "10",
+          "100,00"
+        ],
+        [
+          "Feijão sintético",
+          "Fornecedor sintético",
+          "2",
+          "40,00"
+        ],
+        [
+          "Óleo sintético",
+          "Fornecedor sintético",
+          "0",
+          "0,00"
+        ]
+      ]
+    },
+    "c4_equilibrio_abc_sales": {
+      "shape": [
+        9,
+        5
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "quantidade",
+          "faturamento",
+          "categoria",
+          "classe"
+        ],
+        [
+          "Produto sintético 1",
+          "10",
+          "800",
+          "Sintética",
+          "Ignorar"
+        ],
+        [
+          "Produto sintético 2",
+          "9",
+          "100",
+          "Sintética",
+          "Ignorar"
+        ],
+        [
+          "Produto sintético 3",
+          "8",
+          "50",
+          "Sintética",
+          "Ignorar"
+        ],
+        [
+          "Produto sintético 4",
+          "7",
+          "20",
+          "Sintética",
+          "Ignorar"
+        ],
+        [
+          "Produto sintético 5",
+          "6",
+          "15",
+          "Sintética",
+          "Ignorar"
+        ],
+        [
+          "Produto sintético 6",
+          "5",
+          "10",
+          "Sintética",
+          "Ignorar"
+        ],
+        [
+          "Produto sintético 7",
+          "4",
+          "4",
+          "Sintética",
+          "Ignorar"
+        ],
+        [
+          "Produto sintético 8",
+          "3",
+          "1",
+          "Sintética",
+          "Ignorar"
+        ]
+      ]
+    },
+    "c4_equilibrio_abc_purchases": {
+      "shape": [
+        9,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Produto sintético 1",
+          "14",
+          "800"
+        ],
+        [
+          "Produto sintético 2",
+          "13",
+          "100"
+        ],
+        [
+          "Produto sintético 3",
+          "12",
+          "50"
+        ],
+        [
+          "Produto sintético 4",
+          "11",
+          "20"
+        ],
+        [
+          "Produto sintético 5",
+          "10",
+          "15"
+        ],
+        [
+          "Produto sintético 6",
+          "9",
+          "10"
+        ],
+        [
+          "Produto sintético 7",
+          "8",
+          "4"
+        ],
+        [
+          "Produto sintético 8",
+          "7",
+          "1"
+        ]
+      ]
+    },
+    "csv_semicolon_utf8sig_sales": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "quantidade",
+          "faturamento"
+        ],
+        [
+          "Arroz sintético",
+          "10",
+          "100,00"
+        ],
+        [
+          "Feijão sintético",
+          "5",
+          "150,00"
+        ],
+        [
+          "Óleo sintético",
+          "2",
+          "50,00"
+        ]
+      ]
+    },
+    "csv_semicolon_utf8sig_purchases": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "20",
+          "200,00"
+        ],
+        [
+          "Feijão sintético",
+          "10",
+          "250,00"
+        ],
+        [
+          "Óleo sintético",
+          "8",
+          "180,00"
+        ]
+      ]
+    },
+    "csv_comma_latin1_sales": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "quantidade",
+          "faturamento"
+        ],
+        [
+          "Arroz sintético",
+          "10",
+          "100,00"
+        ],
+        [
+          "Feijão sintético",
+          "5",
+          "150,00"
+        ],
+        [
+          "Óleo sintético",
+          "2",
+          "50,00"
+        ]
+      ]
+    },
+    "csv_comma_latin1_purchases": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "20",
+          "200,00"
+        ],
+        [
+          "Feijão sintético",
+          "10",
+          "250,00"
+        ],
+        [
+          "Óleo sintético",
+          "8",
+          "180,00"
+        ]
+      ]
+    },
+    "csv_tab_cp1252_sales": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "quantidade",
+          "faturamento"
+        ],
+        [
+          "Café “sintético”",
+          "2",
+          "20,00"
+        ],
+        [
+          "Feijão sintético",
+          "5",
+          "150,00"
+        ],
+        [
+          "Óleo sintético",
+          "2",
+          "50,00"
+        ]
+      ]
+    },
+    "csv_tab_cp1252_purchases": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "20",
+          "200,00"
+        ],
+        [
+          "Feijão sintético",
+          "10",
+          "250,00"
+        ],
+        [
+          "Óleo sintético",
+          "8",
+          "180,00"
+        ]
+      ]
+    },
+    "csv_pipe_utf8_sales": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "quantidade",
+          "faturamento"
+        ],
+        [
+          "Arroz sintético",
+          "10",
+          "100,00"
+        ],
+        [
+          "Feijão sintético",
+          "5",
+          "150,00"
+        ],
+        [
+          "Óleo sintético",
+          "2",
+          "50,00"
+        ]
+      ]
+    },
+    "csv_pipe_utf8_purchases": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "20",
+          "200,00"
+        ],
+        [
+          "Feijão sintético",
+          "10",
+          "250,00"
+        ],
+        [
+          "Óleo sintético",
+          "8",
+          "180,00"
+        ]
+      ]
+    },
+    "csv_latin1_fallback_sales": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "quantidade",
+          "faturamento"
+        ],
+        [
+          "Produtosintético",
+          "2",
+          "20,00"
+        ],
+        [
+          "Feijão sintético",
+          "5",
+          "150,00"
+        ],
+        [
+          "Óleo sintético",
+          "2",
+          "50,00"
+        ]
+      ]
+    },
+    "csv_latin1_fallback_purchases": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "20",
+          "200,00"
+        ],
+        [
+          "Feijão sintético",
+          "10",
+          "250,00"
+        ],
+        [
+          "Óleo sintético",
+          "8",
+          "180,00"
+        ]
+      ]
+    },
+    "csv_quoted_multiline_sales": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "quantidade",
+          "faturamento"
+        ],
+        [
+          "Produto \"sintético\"; especial\nlinha adicional",
+          "2",
+          "20,00"
+        ],
+        [
+          "Feijão sintético",
+          "5",
+          "150,00"
+        ],
+        [
+          "Óleo sintético",
+          "2",
+          "50,00"
+        ]
+      ]
+    },
+    "csv_quoted_multiline_purchases": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "20",
+          "200,00"
+        ],
+        [
+          "Feijão sintético",
+          "10",
+          "250,00"
+        ],
+        [
+          "Óleo sintético",
+          "8",
+          "180,00"
+        ]
+      ]
+    },
+    "csv_nul_removal_sales": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "quantidade",
+          "faturamento"
+        ],
+        [
+          "Produtosintético",
+          "2",
+          "20,00"
+        ],
+        [
+          "Feijão sintético",
+          "5",
+          "150,00"
+        ],
+        [
+          "Óleo sintético",
+          "2",
+          "50,00"
+        ]
+      ]
+    },
+    "csv_nul_removal_purchases": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "20",
+          "200,00"
+        ],
+        [
+          "Feijão sintético",
+          "10",
+          "250,00"
+        ],
+        [
+          "Óleo sintético",
+          "8",
+          "180,00"
+        ]
+      ]
+    },
+    "csv_late_delimiter_header_sales": {
+      "shape": [
+        74,
+        3
+      ],
+      "values": [
+        [
+          "Linha decorativa sintética 0",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 1",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 2",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 3",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 4",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 5",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 6",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 7",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 8",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 9",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 10",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 11",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 12",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 13",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 14",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 15",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 16",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 17",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 18",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 19",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 20",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 21",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 22",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 23",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 24",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 25",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 26",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 27",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 28",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 29",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 30",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 31",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 32",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 33",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 34",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 35",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 36",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 37",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 38",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 39",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 40",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 41",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 42",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 43",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 44",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 45",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 46",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 47",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 48",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 49",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 50",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 51",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 52",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 53",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 54",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 55",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 56",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 57",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 58",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 59",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 60",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 61",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 62",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 63",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 64",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 65",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 66",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 67",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 68",
+          null,
+          null
+        ],
+        [
+          "Linha decorativa sintética 69",
+          null,
+          null
+        ],
+        [
+          "nome_produto",
+          "quantidade",
+          "faturamento"
+        ],
+        [
+          "Arroz sintético",
+          "10",
+          "100,00"
+        ],
+        [
+          "Feijão sintético",
+          "5",
+          "150,00"
+        ],
+        [
+          "Óleo sintético",
+          "2",
+          "50,00"
+        ]
+      ]
+    },
+    "csv_late_delimiter_header_purchases": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "20",
+          "200,00"
+        ],
+        [
+          "Feijão sintético",
+          "10",
+          "250,00"
+        ],
+        [
+          "Óleo sintético",
+          "8",
+          "180,00"
+        ]
+      ]
+    },
+    "header_compound_sales": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome",
+          "quantidade",
+          "valor"
+        ],
+        [
+          "produto",
+          "vendida",
+          "total vendas"
+        ],
+        [
+          "Arroz sintético",
+          "10",
+          "100,00"
+        ],
+        [
+          "Feijão sintético",
+          "5",
+          "150,00"
+        ]
+      ]
+    },
+    "header_compound_purchases": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "20",
+          "200,00"
+        ],
+        [
+          "Feijão sintético",
+          "10",
+          "250,00"
+        ],
+        [
+          "Óleo sintético",
+          "8",
+          "180,00"
+        ]
+      ]
+    },
+    "header_shifted_footer_sales": {
+      "shape": [
+        5,
+        5
+      ],
+      "values": [
+        [
+          "Período de : 01/02/26 a 28/02/26",
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          "extra",
+          "faturamento",
+          "descricao_produto",
+          "quantidade",
+          "id_produto"
+        ],
+        [
+          "não comercial",
+          "100,00",
+          "Arroz sintético",
+          "10",
+          "S1"
+        ],
+        [
+          "não comercial",
+          "150,00",
+          "Feijão sintético",
+          "5",
+          "S2"
+        ],
+        [
+          null,
+          "999.999,99",
+          "TOTAL GERAL",
+          "999",
+          null
+        ]
+      ]
+    },
+    "header_shifted_footer_purchases": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "20",
+          "200,00"
+        ],
+        [
+          "Feijão sintético",
+          "10",
+          "250,00"
+        ],
+        [
+          "Óleo sintético",
+          "8",
+          "180,00"
+        ]
+      ]
+    },
+    "explicit_total_normalization_alerts_sales": {
+      "shape": [
+        5,
+        8
+      ],
+      "values": [
+        [
+          "id_produto",
+          "nome_produto",
+          "preco_venda",
+          "faturamento",
+          "quantidade",
+          "lucro",
+          "total_custo",
+          "estoque"
+        ],
+        [
+          "S1",
+          "Café sintético",
+          "999,00",
+          "100,00",
+          "2",
+          "99,00",
+          "120,00",
+          "-1"
+        ],
+        [
+          "S2",
+          "Cafe sintetico",
+          "999,00",
+          "200,00",
+          "3",
+          "99,00",
+          "150,00",
+          "2"
+        ],
+        [
+          "S3",
+          "Chá sintético",
+          "999,00",
+          "50,00",
+          "1",
+          "99,00",
+          "10,00",
+          "4"
+        ],
+        [
+          "",
+          "DESCONTOS",
+          "999",
+          "9999",
+          "999",
+          "999",
+          "999",
+          "999"
+        ]
+      ]
+    },
+    "explicit_total_normalization_alerts_purchases": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "20",
+          "200,00"
+        ],
+        [
+          "Feijão sintético",
+          "10",
+          "250,00"
+        ],
+        [
+          "Óleo sintético",
+          "8",
+          "180,00"
+        ]
+      ]
+    },
+    "sales_derived_mixed_money_sales": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "produto",
+          "quantidade",
+          "preco_unitario"
+        ],
+        [
+          "Produto sintético A",
+          "2",
+          "1,234.56"
+        ],
+        [
+          "Produto sintético B",
+          "3",
+          "R$ 10,50"
+        ],
+        [
+          "Produto sintético C",
+          "1",
+          "(2,50)"
+        ]
+      ]
+    },
+    "sales_derived_mixed_money_purchases": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "20",
+          "200,00"
+        ],
+        [
+          "Feijão sintético",
+          "10",
+          "250,00"
+        ],
+        [
+          "Óleo sintético",
+          "8",
+          "180,00"
+        ]
+      ]
+    },
+    "purchase_products_total_priority_sales": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "quantidade",
+          "faturamento"
+        ],
+        [
+          "Arroz sintético",
+          "10",
+          "100,00"
+        ],
+        [
+          "Feijão sintético",
+          "5",
+          "150,00"
+        ],
+        [
+          "Óleo sintético",
+          "2",
+          "50,00"
+        ]
+      ]
+    },
+    "purchase_products_total_priority_purchases": {
+      "shape": [
+        3,
+        3
+      ],
+      "values": [
+        [
+          "fornecedor",
+          "valor_nf",
+          "total_produtos"
+        ],
+        [
+          "Fornecedor sintético A",
+          "9999,00",
+          "120,00"
+        ],
+        [
+          "Fornecedor sintético B",
+          "9999,00",
+          "250,00"
+        ]
+      ]
+    },
+    "xlsx_sheet_tie_sales": {
+      "shape": [
+        3,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "quantidade",
+          "faturamento"
+        ],
+        [
+          "Primeiro sintético",
+          "2",
+          "20"
+        ],
+        [
+          "Outro sintético",
+          "1",
+          "30"
+        ]
+      ]
+    },
+    "xlsx_sheet_tie_purchases": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "20",
+          "200,00"
+        ],
+        [
+          "Feijão sintético",
+          "10",
+          "250,00"
+        ],
+        [
+          "Óleo sintético",
+          "8",
+          "180,00"
+        ]
+      ]
+    },
+    "xlsx_formula_cached_na_sales": {
+      "shape": [
+        4,
+        5
+      ],
+      "values": [
+        [
+          "produto",
+          "quantidade",
+          "faturamento",
+          "nota",
+          "sem cache"
+        ],
+        [
+          "Arroz sintético",
+          "10",
+          "100",
+          null,
+          null
+        ],
+        [
+          "Feijão sintético",
+          "5",
+          "150",
+          null,
+          null
+        ],
+        [
+          "Óleo sintético",
+          "2",
+          "50,00",
+          null,
+          null
+        ]
+      ]
+    },
+    "xlsx_formula_cached_na_purchases": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "20",
+          "200,00"
+        ],
+        [
+          "Feijão sintético",
+          "10",
+          "250,00"
+        ],
+        [
+          "Óleo sintético",
+          "8",
+          "180,00"
+        ]
+      ]
+    },
+    "reversed_period_dates_sales": {
+      "shape": [
+        5,
+        3
+      ],
+      "values": [
+        [
+          "Período de : 31/03/26 a 01/03/26",
+          null,
+          null
+        ],
+        [
+          "nome_produto",
+          "quantidade",
+          "faturamento"
+        ],
+        [
+          "Arroz sintético",
+          "10",
+          "100,00"
+        ],
+        [
+          "Feijão sintético",
+          "5",
+          "150,00"
+        ],
+        [
+          "Óleo sintético",
+          "2",
+          "50,00"
+        ]
+      ]
+    },
+    "reversed_period_dates_purchases": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "20",
+          "200,00"
+        ],
+        [
+          "Feijão sintético",
+          "10",
+          "250,00"
+        ],
+        [
+          "Óleo sintético",
+          "8",
+          "180,00"
+        ]
+      ]
+    },
+    "purchase_period_fallback_sales": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "quantidade",
+          "faturamento"
+        ],
+        [
+          "Arroz sintético",
+          "10",
+          "100,00"
+        ],
+        [
+          "Feijão sintético",
+          "5",
+          "150,00"
+        ],
+        [
+          "Óleo sintético",
+          "2",
+          "50,00"
+        ]
+      ]
+    },
+    "purchase_period_fallback_purchases": {
+      "shape": [
+        5,
+        3
+      ],
+      "values": [
+        [
+          "Período de : 01/04/26 a 30/04/26",
+          null,
+          null
+        ],
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "20",
+          "200,00"
+        ],
+        [
+          "Feijão sintético",
+          "10",
+          "250,00"
+        ],
+        [
+          "Óleo sintético",
+          "8",
+          "180,00"
+        ]
+      ]
+    },
+    "one_product_rankings_sales": {
+      "shape": [
+        2,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "quantidade",
+          "faturamento"
+        ],
+        [
+          "Único sintético",
+          "3",
+          "60,00"
+        ]
+      ]
+    },
+    "one_product_rankings_purchases": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "nome_produto",
+          "qtde_comprada",
+          "total_custo"
+        ],
+        [
+          "Arroz sintético",
+          "20",
+          "200,00"
+        ],
+        [
+          "Feijão sintético",
+          "10",
+          "250,00"
+        ],
+        [
+          "Óleo sintético",
+          "8",
+          "180,00"
+        ]
+      ]
+    },
+    "xlsx_cell_conversion": {
+      "shape": [
+        7,
+        6
+      ],
+      "values": [
+        [
+          "texto",
+          "numero",
+          "booleano",
+          "data",
+          "erro",
+          "formula"
+        ],
+        [
+          null,
+          "0",
+          "True",
+          "2026-01-02 03:04:05",
+          null,
+          null
+        ],
+        [
+          null,
+          "1234.5",
+          "False",
+          "2026-02-03 00:00:00",
+          null,
+          null
+        ],
+        [
+          null,
+          "-1",
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          null,
+          "2",
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          null,
+          "3",
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          " ",
+          "4",
+          null,
+          null,
+          null,
+          null
+        ]
+      ]
+    },
+    "xlsx_na_count_selection": {
+      "shape": [
+        2,
+        2
+      ],
+      "values": [
+        [
+          "dados sintéticos",
+          "numero"
+        ],
+        [
+          "produto",
+          "1"
+        ]
+      ]
+    },
+    "csv_empty_string_padding": {
+      "shape": [
+        4,
+        3
+      ],
+      "values": [
+        [
+          "a",
+          "b",
+          "c"
+        ],
+        [
+          "NA",
+          "",
+          "nan"
+        ],
+        [
+          "NULL",
+          "0",
+          null
+        ],
+        [
+          " fim ",
+          "1",
+          ""
+        ]
+      ]
+    }
+  }
+}

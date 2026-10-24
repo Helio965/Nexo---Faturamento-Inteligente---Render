@@ -1,0 +1,78 @@
+"""Entrypoint privado SEC-005: stdin/rede/banco não fazem parte do protocolo."""
+
+import json
+import math
+from pathlib import Path
+import sys
+
+
+def main():
+    request_path, output_path = map(Path, sys.argv[1:3])
+    if request_path.stat().st_size > 16_384:
+        return 2
+    request = json.loads(request_path.read_bytes())
+    # -I não inclui a raiz do projeto; somente esta origem fixa é adicionada.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from etl_limits import ETLLimits, using_limits
+    limits = ETLLimits.from_mapping(request["limits"])
+    # Limites são aplicados antes de importar pandas/openpyxl.
+    try:
+        import resource
+        resource.setrlimit(resource.RLIMIT_AS, (limits.memory_mb * 1024 * 1024,) * 2)
+        resource.setrlimit(resource.RLIMIT_CPU, (limits.timeout_seconds, limits.timeout_seconds + 1))
+        resource.setrlimit(resource.RLIMIT_FSIZE, (limits.max_output_bytes,) * 2)
+        resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    except (ImportError, OSError, ValueError):
+        output_path.write_text(json.dumps({"ok": False, "code": "platform", "message":
+            "A plataforma não oferece o isolamento de recursos exigido para processar arquivos."}))
+        return 2
+
+    def refuse_external(event, args):
+        if event in {"socket.connect", "socket.getaddrinfo", "subprocess.Popen", "os.system"}:
+            raise PermissionError("Operação externa não permitida no ETL isolado.")
+    sys.addaudithook(refuse_external)
+    envelope = None
+    try:
+        from etl_inputs import ETLInputError, validate_input
+        with using_limits(limits):
+            if request["operation"] == "validate" and len(request["paths"]) == 1:
+                result = validate_input(request["paths"][0], request["extension"], limits)
+            elif request["operation"] == "calculate" and len(request["paths"]) == 2:
+                from etl_processor import _calcular_kpis_local
+                calculated = _calcular_kpis_local(*request["paths"])
+                result = calculated._asdict()
+            else:
+                raise ValueError("Operação inválida.")
+        envelope = {"ok": True, "result": result}
+    except MemoryError:
+        envelope = {"ok": False, "code": "memory", "message":
+                    "Arquivo excede o orçamento de memória. Reduza ou divida o relatório."}
+    except Exception as error:
+        code = getattr(error, "code", "worker")
+        message = getattr(error, "safe_message", "Não foi possível interpretar o arquivo com segurança.")
+        if code == "data":
+            message = "Não foi possível identificar os dados essenciais. Revise as colunas de vendas e compras."
+        envelope = {"ok": False, "code": code, "message": message}
+    envelope["runtime"] = {
+        "address_space_bytes": resource.getrlimit(resource.RLIMIT_AS)[0],
+        "cpu_seconds": resource.getrlimit(resource.RLIMIT_CPU)[0],
+        "peak_rss_kib_linux": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+        "database_modules_loaded": "models" in sys.modules or "config" in sys.modules,
+    }
+    from datetime import date, datetime
+    def encode(value):
+        if isinstance(value, (date, datetime)):
+            return value.isoformat()
+        raise TypeError("Tipo de resultado inválido.")
+    try:
+        payload = json.dumps(envelope, ensure_ascii=True, allow_nan=False, default=encode).encode()
+        if len(payload) > limits.max_output_bytes:
+            payload = b'{"ok":false,"code":"output","message":"Resultado excede o orcamento permitido."}'
+        output_path.write_bytes(payload)
+    except (OSError, ValueError, TypeError, MemoryError):
+        return 2
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -48,7 +48,8 @@ from collections import namedtuple
 import pandas as pd
 from sqlalchemy import select
 
-from models import IndicadorAnalise, ProdutoCurvaABC
+from etl_inputs import ETLInputError, read_raw
+from etl_limits import get_limits
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +68,11 @@ ABC_LIMITE_A = 80.0
 ABC_LIMITE_B = 95.0
 
 
-class ETLValidationError(Exception):
-    """Erro de validação de dados/arquivo. Mensagem é segura para exibir ao admin."""
+class ETLValidationError(ETLInputError):
+    """Mantém o tipo público anterior e a identificação segura de limites."""
+
+    def __init__(self, mensagem, code="data"):
+        super().__init__(code, mensagem)
 
 
 # Encodings e separadores tentados em sequência para arquivos texto/CSV
@@ -189,96 +193,11 @@ def _trim_vazios(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def _ler_bruto(caminho_arquivo: str) -> pd.DataFrame:
-    """Lê o arquivo como matriz crua (header=None, dtype=str) e apara vazios."""
-    if not os.path.exists(caminho_arquivo):
-        raise ETLValidationError(f"Arquivo não encontrado: {caminho_arquivo}")
-
-    ext = os.path.splitext(caminho_arquivo)[1].lower()
-    nome = os.path.basename(caminho_arquivo)
-
-    if ext == ".xlsx":
-        try:
-            # Lê TODAS as abas e escolhe a com mais células preenchidas — ignora
-            # abas de capa/resumo/vazias e acha a planilha de dados de verdade.
-            abas = pd.read_excel(caminho_arquivo, dtype=str, header=None,
-                                 engine="openpyxl", sheet_name=None)
-        except Exception as e:
-            raise ETLValidationError(
-                f"Falha ao ler .xlsx '{nome}' (openpyxl). Erro: {e}"
-            )
-        melhor = max(abas.values(), key=lambda d: int(d.notna().to_numpy().sum()), default=None)
-        if melhor is None or melhor.empty:
-            raise ETLValidationError(f"O arquivo .xlsx '{nome}' não tem dados em nenhuma aba.")
-        return _trim_vazios(melhor)
-
-    if ext == ".xls":
-        try:
-            import xlrd  # noqa: F401
-        except ImportError:
-            raise ETLValidationError(
-                f"Formato .xls não suportado (dependência 'xlrd' ausente). "
-                f"Converta '{nome}' para .xlsx ou .csv."
-            )
-        try:
-            return _trim_vazios(pd.read_excel(caminho_arquivo, dtype=str, header=None, engine="xlrd"))
-        except Exception as e:
-            raise ETLValidationError(f"Falha ao ler .xls '{nome}': {e}")
-
-    # CSV/TXT/extensão desconhecida: leitura TOLERANTE A LINHAS IRREGULARES.
-    # Usamos o módulo csv (respeita aspas) e montamos o DataFrame manualmente,
-    # preenchendo linhas mais curtas com None. Assim, linhas decorativas no topo
-    # (com menos colunas que os dados) NÃO quebram o parser — o que aconteceria
-    # com pd.read_csv, que fixa o nº de colunas pela 1ª linha lida.
-    ultimo_erro = None
-
-    def _montar(texto: str):
-        """Escolhe o separador que maximiza colunas e devolve um DF retangular."""
-        # NUL (\x00) passa pelo csv.reader, mas o Postgres não grava NUL em texto:
-        # sem remover aqui, nomes de produto com NUL derrubam a persistência.
-        texto = texto.replace("\x00", "")
-        melhor_linhas, melhor_ncols = None, 0
-        for sep in SEPARADORES:
-            try:
-                linhas = list(csv.reader(io.StringIO(texto), delimiter=sep))
-            except Exception:
-                continue
-            ncols = max((len(l) for l in linhas), default=0)
-            if ncols > melhor_ncols:
-                melhor_linhas, melhor_ncols = linhas, ncols
-        if melhor_ncols <= 1:
-            return None
-        retang = [l + [None] * (melhor_ncols - len(l)) for l in melhor_linhas]
-        return _trim_vazios(pd.DataFrame(retang, dtype=object))
-
-    for enc in ENCODINGS:
-        try:
-            with open(caminho_arquivo, "r", encoding=enc, newline="") as fh:
-                texto = fh.read()
-        except (UnicodeDecodeError, OSError) as e:
-            ultimo_erro = e
-            continue
-        df = _montar(texto)
-        if df is not None:
-            return df
-
-    # Último recurso: ignora bytes inválidos.
+    """Leitura limitada; conversões e seleção de aba preservam o contrato anterior."""
     try:
-        logger.warning("Leitura de '%s' com errors='ignore' (último recurso).", nome)
-        with open(caminho_arquivo, "r", encoding="utf-8", errors="ignore", newline="") as fh:
-            df = _montar(fh.read())
-        if df is not None:
-            return df
-    except Exception as e:
-        ultimo_erro = e
-
-    raise ETLValidationError(
-        "Não foi possível ler o arquivo.\n"
-        f"  Arquivo: {nome}\n"
-        f"  Extensão: {ext or '(sem)'}\n"
-        f"  Encodings testados: {list(ENCODINGS)}\n"
-        f"  Separadores testados: {[repr(s) for s in SEPARADORES]}\n"
-        f"  Erro original: {ultimo_erro}"
-    )
+        return read_raw(caminho_arquivo, get_limits())
+    except ETLInputError as erro:
+        raise ETLValidationError(erro.safe_message, erro.code) from None
 
 
 # =====================================================================
@@ -702,6 +621,15 @@ def _classificar_curva_abc(grupo: pd.DataFrame) -> dict:
 # 7) Cálculo dos KPIs em memória (sem tocar no banco)
 # =====================================================================
 def calcular_kpis_em_memoria(caminho_vendas: str, caminho_compras: str) -> ResultadoETL:
+    """Calcula sem banco em processo próprio; limites não dependem de threads."""
+    from etl_runtime import run_calculation
+    try:
+        return run_calculation(caminho_vendas, caminho_compras, get_limits())
+    except ETLInputError as erro:
+        raise ETLValidationError(erro.safe_message, erro.code) from None
+
+
+def _calcular_kpis_local(caminho_vendas: str, caminho_compras: str) -> ResultadoETL:
     nome_v = os.path.basename(caminho_vendas)
 
     df_v = carregar_vendas(caminho_vendas)
@@ -853,6 +781,7 @@ def calcular_kpis_em_memoria(caminho_vendas: str, caminho_compras: str) -> Resul
 # 8) Persistência (somente KPIs finais) + orquestrador oficial
 # =====================================================================
 def _persistir_indicadores(db_session, id_analise: int, kpis: dict) -> None:
+    from models import IndicadorAnalise
     indicador = db_session.execute(
         select(IndicadorAnalise).where(IndicadorAnalise.id_analise == id_analise)
     ).scalar_one_or_none()
@@ -883,6 +812,7 @@ def _persistir_curva_abc(db_session, id_analise: int, kpis: dict) -> None:
     apaga as linhas anteriores desta análise e insere o ranking novo. Reflete
     o reprocessamento — cada execução do ETL substitui a Curva ABC anterior.
     """
+    from models import ProdutoCurvaABC
     # Limpa o ranking anterior desta análise (reprocessamento limpo).
     antigos = db_session.execute(
         select(ProdutoCurvaABC).where(ProdutoCurvaABC.id_analise == id_analise)
@@ -913,16 +843,20 @@ def processar_arquivos_analise(caminho_vendas: str, caminho_compras: str,
     """
     try:
         resultado = calcular_kpis_em_memoria(caminho_vendas, caminho_compras)
-        _persistir_indicadores(db_session, id_analise, resultado.kpis)
-        _persistir_curva_abc(db_session, id_analise, resultado.kpis)
+        # Somente o processo pai recebe a Session. O SAVEPOINT mantém KPIs/ABC
+        # anteriores intactos em falha, sem soltar o lock externo da análise.
+        with db_session.begin_nested():
+            _persistir_indicadores(db_session, id_analise, resultado.kpis)
+            _persistir_curva_abc(db_session, id_analise, resultado.kpis)
+            db_session.flush()
         return resultado._replace(
             mensagem="Processamento concluído. KPIs consolidados + Curva ABC persistidos."
         )
-    except ETLValidationError as e:
-        logger.warning("Validação do ETL falhou: %s", e)
-        return ResultadoETL(sucesso=False, mensagem=str(e),
+    except ETLInputError as erro:
+        logger.warning("ETL recusado (%s).", erro.code)
+        return ResultadoETL(sucesso=False, mensagem=erro.safe_message,
                             kpis={}, telemetria={}, alertas=[])
-    except Exception as e:  # noqa: BLE001
-        logger.exception("Erro inesperado no motor de ETL")
-        return ResultadoETL(sucesso=False, mensagem=f"Erro interno do ETL: {e}",
+    except Exception as erro:  # não registrar SQL, caminhos, conteúdo ou credenciais
+        logger.warning("Processamento ETL indisponível (%s).", type(erro).__name__)
+        return ResultadoETL(sucesso=False, mensagem="Não foi possível concluir o processamento com segurança. Tente novamente ou revise os arquivos.",
                             kpis={}, telemetria={}, alertas=[])
