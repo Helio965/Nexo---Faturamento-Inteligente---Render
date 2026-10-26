@@ -2,7 +2,7 @@
 
 Substituição da marca antiga (imagem com cubo, moldura e nome embutido, e monograma "N" da landing) pelo símbolo oficial do cubo roxo em PNG transparente, em todo o sistema. Atividade exclusivamente visual.
 
-**Resultado: todas as ocorrências da marca antiga foram substituídas; commits publicados e CI aprovada; merge pendente, à espera da confirmação do Auto-Deploy no Render (seção G)**
+**Resultado: todas as ocorrências da marca antiga foram substituídas; CI aprovada; integrada à `main` pelo proprietário (merge `6abc96c`, seção G). A publicação em produção não foi confirmada.**
 
 ---
 
@@ -149,9 +149,10 @@ Ambiente local: Python 3.12 com `requirements-dev.txt`, SQLite isolado com migra
 | Commit do relatório | O commit seguinte, com este relatório e as pranchas de evidência |
 | Pull Request | [Helio965/Nexo---Faturamento-Inteligente---Render#26](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/26), base `main` |
 | Estado da CI | Run `40332212093` em `b744c93`: **success** (649 testes no job com navegador; job PostgreSQL aprovado). A CI do commit do relatório aparece no PR |
-| Merge | **Pendente** |
+| Merge | **Integrado** pelo proprietário (`Helio965`) em 26/10/2026, 10:56:04 (UTC−3), commit `6abc96c591c51da55fa1a8c62e678f22e67a8672`, com árvore idêntica a `4daa89c` |
+| CI da `main` após o merge | Run `40334980562` em `6abc96c`: **success** |
 
-**Por que o merge não foi feito.** O `render.yaml` declara `autoDeployTrigger: 'off'`, mas `Docs/PREPARACAO_RENDER.md` e `Docs/RELATORIO_NEXO_SEC006_DEPENDENCIAS.md` registram que o proprietário informou Auto-Deploy **ativado** na `main`. Não há acesso ao painel do Render a partir deste ambiente para confirmar. Pela regra do pedido, os commits ficam publicados e o PR fica pronto, à espera do merge pelo responsável depois dessa confirmação. A mudança é só visual e não exige migração. Em produção, porém, continua valendo o incidente do login (HTTP 500 até a migração `e4c004a26b01` no Supabase), que é tratado à parte.
+**Por que o executor não fez o merge.** O `render.yaml` declara `autoDeployTrigger: 'off'`, mas `Docs/PREPARACAO_RENDER.md` e `Docs/RELATORIO_NEXO_SEC006_DEPENDENCIAS.md` registram que o proprietário informou Auto-Deploy **ativado** na `main`. Não há acesso ao painel do Render a partir deste ambiente para confirmar. Pela regra do pedido, os commits ficaram publicados e o PR ficou pronto. O proprietário fez o merge em seguida; se o Auto-Deploy estiver ativo, o Render pode ter publicado `6abc96c`, o que não foi verificado daqui. A mudança é só visual e não exige migração. Em produção, porém, continua valendo o incidente do login (HTTP 500 até a migração `e4c004a26b01` no Supabase), que é tratado à parte.
 
 ## H. Resultado final
 
@@ -162,4 +163,4 @@ Ambiente local: Python 3.12 com `requirements-dev.txt`, SQLite isolado com migra
 - **Preservados:** tema escuro, tons roxos, organização das telas e responsividade.
 - **Sem alteração:** autenticação, autorização, sessões, banco, migrações, modelos, regras de empresas, planos, preços, ETL, PDF, APIs, NexoBot, vídeo e fluxos administrativos.
 - **Render e Supabase:** não foram acessados nem alterados. Não houve deploy nem migração.
-- **Pendências:** confirmar o Auto-Deploy e fazer o merge do PR #26. Opcionalmente, avaliar com o proprietário um cubo maior na landing (até 44 px), favicon a partir de uma versão quadrada do cubo e a atualização do vídeo promocional com o novo símbolo, cada um como tarefa própria.
+- **Pendências:** conferir no Render se `6abc96c` foi publicado. Opcionalmente, avaliar com o proprietário um cubo maior na landing (até 44 px), favicon a partir de uma versão quadrada do cubo e a atualização do vídeo promocional com o novo símbolo, cada um como tarefa própria.

@@ -1,0 +1,29 @@
+{% extends "auth/_layout.html" %}
+
+{% block title %}Conta encerrada — NEXO{% endblock %}
+
+{% block content %}
+{# NEXO-AJ-06.3: resposta direta ao login com senha correta de empresa sem
+   vínculo contratual. Layout sem sessão, sem CSRF e sem current_user: nenhum
+   cookie de autenticação é emitido e nada do portal (dashboard, indicadores,
+   histórico, PDFs ou dados da empresa) é carregado. #}
+<div class="auth-card">
+    <div class="auth-brand">
+        <div class="auth-logo">
+            <img src="{{ url_for('static', filename='img/nexo-cubo-brilho.png') }}" alt="" width="253" height="279" decoding="async">
+        </div>
+        <p class="auth-eyebrow">NEXO <span>Faturamento Inteligente</span></p>
+        <div>
+            <h1 class="auth-title">Conta encerrada</h1>
+        </div>
+    </div>
+
+    <p class="conta-encerrada-texto">O acesso ao portal desta empresa está indisponível porque o vínculo contratual com a NEXO foi encerrado.</p>
+    <p class="conta-encerrada-texto">Para obter informações sobre sua situação contratual ou solicitar uma nova contratação, entre em contato com a equipe NEXO.</p>
+
+    <div class="d-grid gap-2">
+        <a href="{{ url_for('como_aderir') }}" class="btn-nexo auth-submit"><i class="bi bi-info-circle" aria-hidden="true"></i> Como contratar a NEXO</a>
+        <a href="{{ url_for('auth.login') }}" class="btn-ghost justify-content-center"><i class="bi bi-arrow-left" aria-hidden="true"></i> Voltar ao login</a>
+    </div>
+</div>
+{% endblock %}

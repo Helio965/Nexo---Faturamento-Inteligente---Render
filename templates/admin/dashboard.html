@@ -54,10 +54,26 @@
                 <span class="kpi-icon"><i class="bi bi-cash-coin"></i></span>
             </div>
             <div class="kpi-value"><small>R$</small> {{ m.brl(stats.receita_estimada) }}</div>
-            <div class="kpi-foot">soma dos planos das empresas ativas</div>
+            <div class="kpi-foot">valor contratado ou, sem contrato, plano de catálogo das ativas</div>
         </div>
     </div>
 </div>
+
+{# ---------------- Gestão contratual: pendências (detalhe em /admin/contratos) ---------------- #}
+{% if alertas_contratuais %}
+<div class="aviso-contrato{{ ' is-alerta' if alertas_contratuais.suspensoes_expiradas or alertas_contratuais.atencao }}" role="status">
+    <i class="bi bi-file-earmark-text" aria-hidden="true"></i>
+    <div>
+        <strong>Contratos:</strong>
+        <p>{{ alertas_contratuais.suspensoes_expiradas }} suspensão(ões) vencida(s) aguardando reconciliação ·
+           {{ alertas_contratuais.suspensoes_terminando }} terminando em breve ·
+           {{ alertas_contratuais.vencendo }} contrato(s) perto do vencimento ·
+           {{ alertas_contratuais.atencao }} pendência(s) ·
+           {{ alertas_contratuais.legado }} empresa(s) no regime legado.
+           <a href="{{ url_for('contratos.visao_geral') }}">Abrir visão contratual</a></p>
+    </div>
+</div>
+{% endif %}
 
 {# ---------------- Gráficos ---------------- #}
 <div class="row g-3 mb-4">

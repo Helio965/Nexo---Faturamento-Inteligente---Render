@@ -54,8 +54,11 @@
             <a class="nav-item {{ 'active' if request.endpoint == 'admin.dashboard' }}" href="{{ url_for('admin.dashboard') }}">
                 <i class="bi bi-grid-1x2"></i> Dashboard
             </a>
-            <a class="nav-item {{ 'active' if request.endpoint in ['admin.empresas', 'admin.empresa_nova', 'admin.empresa_editar'] }}" href="{{ url_for('admin.empresas') }}">
+            <a class="nav-item {{ 'active' if request.endpoint in ['admin.empresas', 'admin.empresa_nova', 'admin.empresa_editar'] or (request.endpoint or '').startswith('contratos.') and request.endpoint != 'contratos.visao_geral' }}" href="{{ url_for('admin.empresas') }}">
                 <i class="bi bi-buildings"></i> Empresas
+            </a>
+            <a class="nav-item {{ 'active' if request.endpoint == 'contratos.visao_geral' }}" href="{{ url_for('contratos.visao_geral') }}">
+                <i class="bi bi-file-earmark-text"></i> Contratos
             </a>
             <a class="nav-item {{ 'active' if request.endpoint == 'admin.lixeira' }}" href="{{ url_for('admin.lixeira') }}">
                 <i class="bi bi-trash"></i> Lixeira

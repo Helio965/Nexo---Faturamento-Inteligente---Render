@@ -6,7 +6,7 @@ pdftotext é opcional e usado somente para inspecionar bytes via stdin/stdout.
 """
 
 import contextlib
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 import re
 import shutil
@@ -299,6 +299,7 @@ class PDFPortalContractTests(_PDFChecks, unittest.TestCase):
         self.analise.status_analise = "CONCLUIDO"
         self.analise.curva_abc = produtos
         self.analise.relatorio.publicado = True
+        self.analise.indicador.periodo_base_inicio = self.analise.indicador.periodo_base_fim = None
         self.usuario = SimpleNamespace(
             is_authenticated=True, is_active=True, is_anonymous=False, is_cliente=True,
             empresa=SimpleNamespace(id_empresa=42),
@@ -323,6 +324,15 @@ class PDFPortalContractTests(_PDFChecks, unittest.TestCase):
             cliente, "db", SimpleNamespace(session=SimpleNamespace(get=self.db_get)),
         ))
         self.stack.enter_context(patch.object(cliente, "gerar_semaforos", return_value=self.semaforos))
+        # Política contratual simulada: regime legado, empresa ATIVA (sem banco).
+        import contract_policy
+        self.situacao = contract_policy.SituacaoContratual(
+            id_empresa=42, regime=contract_policy.REGIME_LEGADO, estado=contract_policy.ESTADO_ATIVA,
+            status_conta="ATIVA", instante=datetime(2026, 10, 26, 12, tzinfo=timezone.utc),
+        )
+        self.stack.enter_context(patch.object(
+            cliente, "obter_situacao_contratual", side_effect=lambda empresa: self.situacao,
+        ))
 
     def test_cliente_autorizado_recebe_pdf_e_nome_de_download(self):
         with self._sem_recursos():
@@ -371,6 +381,34 @@ class PDFPortalContractTests(_PDFChecks, unittest.TestCase):
                     response = self.client.get(self.path)
                 self.assertEqual(response.status_code, 404)
                 render.assert_not_called()
+
+    def test_prazo_de_exportacao_encerrado_bloqueia_antes_de_gerar(self):
+        import contract_policy
+        instante = datetime(2026, 10, 26, 12, tzinfo=timezone.utc)
+        self.situacao = contract_policy.SituacaoContratual(
+            id_empresa=42, regime=contract_policy.REGIME_CONTRATUAL, estado=contract_policy.ESTADO_SUSPENSA,
+            status_conta="SUSPENSA", instante=instante, suspensao_limite=instante + timedelta(days=60),
+            pdf_limite=instante, intervalos_pagos=((date(2026, 10, 1), date(2026, 10, 31)),),
+        )
+        with patch.object(self.cliente_module, "gerar_pdf_analise") as render, \
+                patch.object(self.cliente_module, "render_template", return_value="restrito"):
+            response = self.client.get(self.path)
+        self.assertEqual(response.status_code, 403)
+        self.assertNotEqual(response.mimetype, "application/pdf")
+        render.assert_not_called()
+
+    def test_periodo_nao_pago_bloqueia_antes_de_gerar(self):
+        import contract_policy
+        instante = datetime(2026, 10, 26, 12, tzinfo=timezone.utc)
+        self.situacao = contract_policy.SituacaoContratual(
+            id_empresa=42, regime=contract_policy.REGIME_CONTRATUAL, estado=contract_policy.ESTADO_ATIVA,
+            status_conta="ATIVA", instante=instante, intervalos_pagos=(),
+        )
+        with patch.object(self.cliente_module, "gerar_pdf_analise") as render, \
+                patch.object(self.cliente_module, "render_template", return_value="restrito"):
+            response = self.client.get(self.path)
+        self.assertEqual(response.status_code, 403)
+        render.assert_not_called()
 
     def test_erro_de_geracao_nao_expoe_detalhes_na_resposta(self):
         with patch.object(self.cliente_module, "gerar_pdf_analise",

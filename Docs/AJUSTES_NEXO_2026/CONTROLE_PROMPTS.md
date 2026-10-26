@@ -19,8 +19,9 @@ Registro do andamento dos 27 prompts de ajuste do NEXO. Cada prompt executado de
 | Etapa 0.2A (backup e migrações) | Sim (24/10/2026) | Sim, na `main` pelo PR #24 (merge `d7eb7e4`) | Sim: verificador e ensaio isolado em PostgreSQL descartável | Aprovada (PR #24 e `main`, run 40324156855) | **Pendente**: nenhum backup ou restauração do Supabase real foi executado | Não se aplica (scripts e documentos operacionais) |
 | `NEXO-AJ-00` | Sim (25/10/2026) | Sim, documentos na `main` pelo PR #24 | Não se aplica (diagnóstico) | Não se aplica | Aprovação humana pendente | Não se aplica |
 | `NEXO-AJ-06.1` | Sim (25/10/2026) | Sim, na `main` pelo PR #24 (merge `d7eb7e4`) | Sim: SQLite e PostgreSQL descartável | Aprovada (PR #24 e `main`, run 40324156855) | **Pendente** | **Não confirmada**: não se sabe se o Render publicou `d7eb7e4`; em produção ela depende ainda de o Supabase estar na revisão `e4c004a26b01` (incidente HTTP 500, `RELATORIO_CORRECAO_MIGRACAO_SUPABASE_NEXO.md`) |
-| Identidade visual com o cubo transparente (escopo da `NEXO-AJ-01`, pedido direto de 26/10/2026) | Não (feita no GitHub) | Pull Request de 26/10/2026 (ver `Docs/INTEGRACOES/RELATORIO_ATUALIZACAO_IDENTIDADE_VISUAL_NEXO.md`) | Sim: testes HTTP, navegador e capturas | Ver o PR | **Pendente** | **Não confirmada** |
-| Demais 24 prompts `NEXO-AJ` | Não | Não | — | — | — | — |
+| Identidade visual com o cubo transparente (escopo da `NEXO-AJ-01`, pedido direto de 26/10/2026) | Não (feita no GitHub) | Sim, na `main` pelo PR #26 (merge `6abc96c`) | Sim: testes HTTP, navegador e capturas | Aprovada (PR #26 e `main`, run 40334980562) | **Pendente** | **Não confirmada**: não se sabe se o Render publicou `6abc96c` |
+| Gestão contratual: `NEXO-AJ-02` (parcial), `03.1` a `03.4`, `05.1` a `05.5`, `06.2` e `06.3` (pedido direto de 26/10/2026) | Não (feita no GitHub) | **Não**: PR aberto, merge pendente de verificação do deploy automático e do banco | Sim: SQLite, PostgreSQL descartável e navegador (ver relatório) | Ver PR | **Pendente**, inclusive das convenções de prazo | **Não**: depende das migrações `e4c004a26b01` e `81287c74387a`, que não foram executadas |
+| Demais prompts `NEXO-AJ` | Não | Não | — | — | — | — |
 
 ## Fonte oficial
 
@@ -43,22 +44,22 @@ As dependências são as declaradas no mapa, na notação dele (`00` = `NEXO-AJ-
 |---|---|---|---|---|---|---|---|---|
 | 1 | `NEXO-AJ-00` | Preparação e segurança da baseline (agrupa 0.1 e 0.2) | ETAPA | Não declaradas no mapa¹ (1ª na ordem recomendada) | 1 | **EXECUTADO / AGUARDANDO REVISÃO** | `NEXO_AJ_00_BASELINE.md`; `RELATORIO_NEXO_AJ_00_PARA_CHATGPT.md`; este arquivo; ponto de reversão pré-AJ-00 em `C:\ADS\Nexo - Faturamento Inteligente\Backups_NEXO\NEXO-AJ-00_2026-10-25\` (registro abaixo) | Pendente (revisão humana) |
 | 2 | `NEXO-AJ-01` | Identidade visual: somente o símbolo NEXO (agrupa 1.1 a 1.5) | ETAPA | Não declaradas no mapa¹ | 4 | NÃO EXECUTADO | — | — |
-| 3 | `NEXO-AJ-02` | Preços dos planos (agrupa 2.1 a 2.3) | ETAPA | Não declaradas no mapa¹ | 4 | NÃO EXECUTADO | — | — |
-| 4 | `NEXO-AJ-03.1` | Modelo de dados e migrações contratuais | SUBETAPA | `00`; `07.1` | 5 | NÃO EXECUTADO | — | — |
-| 5 | `NEXO-AJ-03.2` | Cadastro e edição administrativa do contrato | SUBETAPA | `03.1` | 5 | NÃO EXECUTADO | — | — |
-| 6 | `NEXO-AJ-03.3` | Renovação contratual e vigência | SUBETAPA | `03.1`; `03.2` | 5 | NÃO EXECUTADO | — | — |
-| 7 | `NEXO-AJ-03.4` | Histórico contratual e consistência temporal | SUBETAPA | `03.3` | 5 | NÃO EXECUTADO | — | — |
+| 3 | `NEXO-AJ-02` | Preços dos planos (agrupa 2.1 a 2.3) | ETAPA | Não declaradas no mapa¹ | 4 | **EXECUTADO PARCIALMENTE / AGUARDANDO REVISÃO** (catálogo, seed, atualização auditada e receita; landing e NexoBot sem preço por decisão pendente) | PR da gestão contratual; `Docs/GESTAO_CONTRATUAL/` | Pendente (revisão humana) |
+| 4 | `NEXO-AJ-03.1` | Modelo de dados e migrações contratuais | SUBETAPA | `00`; `07.1` | 5 | **EXECUTADO / AGUARDANDO REVISÃO** (sem a `07.1`, a pedido direto do proprietário) | PR da gestão contratual; `Docs/GESTAO_CONTRATUAL/` | Pendente (revisão humana) |
+| 5 | `NEXO-AJ-03.2` | Cadastro e edição administrativa do contrato | SUBETAPA | `03.1` | 5 | **EXECUTADO / AGUARDANDO REVISÃO** (alterações só por operações auditadas, sem edição livre) | PR da gestão contratual; `Docs/GESTAO_CONTRATUAL/` | Pendente (revisão humana) |
+| 6 | `NEXO-AJ-03.3` | Renovação contratual e vigência | SUBETAPA | `03.1`; `03.2` | 5 | **EXECUTADO / AGUARDANDO REVISÃO** | PR da gestão contratual; `Docs/GESTAO_CONTRATUAL/` | Pendente (revisão humana) |
+| 7 | `NEXO-AJ-03.4` | Histórico contratual e consistência temporal | SUBETAPA | `03.3` | 5 | **EXECUTADO / AGUARDANDO REVISÃO** | PR da gestão contratual; `Docs/GESTAO_CONTRATUAL/` | Pendente (revisão humana) |
 | 8 | `NEXO-AJ-04.1` | Regra de antecedência de 7 a 14 dias | SUBETAPA | `03.3` | 6 | NÃO EXECUTADO | — | — |
 | 9 | `NEXO-AJ-04.2` | Notificações e mensagens de renovação | SUBETAPA | `04.1` | 6 | NÃO EXECUTADO | — | — |
 | 10 | `NEXO-AJ-04.3` | Verificação periódica e não duplicação | SUBETAPA | `04.2` | 6 | NÃO EXECUTADO | — | — |
-| 11 | `NEXO-AJ-05.1` | Restrições funcionais de SUSPENSA | SUBETAPA | `03.1`; `06.1` | 7 | NÃO EXECUTADO | — | — |
-| 12 | `NEXO-AJ-05.2` | Consulta ao histórico pago | SUBETAPA | `03.4`; `05.1` | 7 | NÃO EXECUTADO | — | — |
-| 13 | `NEXO-AJ-05.3` | Exportação de PDF durante 14 dias | SUBETAPA | `05.1`; `05.2` | 7 | NÃO EXECUTADO | — | — |
-| 14 | `NEXO-AJ-05.4` | Janela de até 3 meses e prorrogação | SUBETAPA | `03.2`; `05.1` | 7 | NÃO EXECUTADO | — | — |
-| 15 | `NEXO-AJ-05.5` | Interface informativa de suspensão | SUBETAPA | `05.2`; `05.3`; `05.4` | 7 | NÃO EXECUTADO | — | — |
+| 11 | `NEXO-AJ-05.1` | Restrições funcionais de SUSPENSA | SUBETAPA | `03.1`; `06.1` | 7 | **EXECUTADO / AGUARDANDO REVISÃO** (vale para empresas no regime contratual) | PR da gestão contratual; `Docs/GESTAO_CONTRATUAL/` | Pendente (revisão humana) |
+| 12 | `NEXO-AJ-05.2` | Consulta ao histórico pago | SUBETAPA | `03.4`; `05.1` | 7 | **EXECUTADO / AGUARDANDO REVISÃO** | PR da gestão contratual; `Docs/GESTAO_CONTRATUAL/` | Pendente (revisão humana) |
+| 13 | `NEXO-AJ-05.3` | Exportação de PDF durante 14 dias | SUBETAPA | `05.1`; `05.2` | 7 | **EXECUTADO / AGUARDANDO REVISÃO** (contagem proposta, pendente de homologação) | PR da gestão contratual; `Docs/GESTAO_CONTRATUAL/` | Pendente (revisão humana) |
+| 14 | `NEXO-AJ-05.4` | Janela de até 3 meses e prorrogação | SUBETAPA | `03.2`; `05.1` | 7 | **EXECUTADO / AGUARDANDO REVISÃO** (meses de calendário, proposta pendente de homologação) | PR da gestão contratual; `Docs/GESTAO_CONTRATUAL/` | Pendente (revisão humana) |
+| 15 | `NEXO-AJ-05.5` | Interface informativa de suspensão | SUBETAPA | `05.2`; `05.3`; `05.4` | 7 | **EXECUTADO / AGUARDANDO REVISÃO** | PR da gestão contratual; `Docs/GESTAO_CONTRATUAL/` | Pendente (revisão humana) |
 | 16 | `NEXO-AJ-06.1` | Correção prioritária do bloqueio CANCELADA | SUBETAPA | `00` | 2 | **EXECUTADO / AGUARDANDO REVISÃO** | `RELATORIO_NEXO_AJ_06_1_PARA_CHATGPT.md`; ponto de reversão pré-AJ-06.1 em `C:\ADS\Nexo - Faturamento Inteligente\Backups_NEXO\NEXO-AJ-06.1_2026-10-25\` (registro abaixo) | Pendente (revisão humana) |
-| 17 | `NEXO-AJ-06.2` | Transição controlada SUSPENSA para CANCELADA | SUBETAPA | `05.4`; `06.1` | 8 | NÃO EXECUTADO | — | — |
-| 18 | `NEXO-AJ-06.3` | Tela/mensagem segura para conta cancelada | SUBETAPA | `06.1` | 8 | NÃO EXECUTADO | — | — |
+| 17 | `NEXO-AJ-06.2` | Transição controlada SUSPENSA para CANCELADA | SUBETAPA | `05.4`; `06.1` | 8 | **EXECUTADO / AGUARDANDO REVISÃO** (reconciliação manual ou por comando; nenhum agendador configurado) | PR da gestão contratual; `Docs/GESTAO_CONTRATUAL/` | Pendente (revisão humana) |
+| 18 | `NEXO-AJ-06.3` | Tela/mensagem segura para conta cancelada | SUBETAPA | `06.1` | 8 | **EXECUTADO / AGUARDANDO REVISÃO** | PR da gestão contratual; `Docs/GESTAO_CONTRATUAL/` | Pendente (revisão humana) |
 | 19 | `NEXO-AJ-06.4` | Preservação de dados e acesso interno do ADMIN | SUBETAPA | `06.2`; `07.1` | 8 | NÃO EXECUTADO | — | — |
 | 20 | `NEXO-AJ-07.1` | Inventário de dados, terceiros e lacunas LGPD | SUBETAPA | `00` | 3 | NÃO EXECUTADO | — | — |
 | 21 | `NEXO-AJ-07.2` | Minutas de política, termos e cancelamento | SUBETAPA | `07.1` | 9 | NÃO EXECUTADO | — | — |
@@ -215,7 +216,17 @@ Cada `NEXO-AJ-*` deve:
 | Relatório | `Docs/AJUSTES_NEXO_2026/RELATORIO_NEXO_AJ_06_1_PARA_CHATGPT.md` |
 | Aprovação | Pendente (revisão humana) |
 
-Os outros 25 prompts ainda não têm registro de execução.
+### Gestão contratual (`NEXO-AJ-02` parcial, `03.1`–`03.4`, `05.1`–`05.5`, `06.2`, `06.3`)
+
+| Item | Registro |
+|---|---|
+| Datas | 26/10/2026, por pedido direto do proprietário ("Implementação da gestão contratual e do ciclo de vida das empresas"), fora da sequência de prompts |
+| Arquivos alterados no projeto | Ver `Docs/GESTAO_CONTRATUAL/RELATORIO_IMPLEMENTACAO_GESTAO_CONTRATUAL_PARA_CHATGPT.md`, seções B a D |
+| Testes e evidências | Ver o relatório, seção E |
+| Relatório | `Docs/GESTAO_CONTRATUAL/RELATORIO_IMPLEMENTACAO_GESTAO_CONTRATUAL_PARA_CHATGPT.md` |
+| Aprovação | Pendente (revisão humana e homologação comercial das convenções) |
+
+Os demais prompts ainda não têm registro de execução.
 
 ## Histórico deste controle
 
@@ -227,6 +238,8 @@ Os outros 25 prompts ainda não têm registro de execução.
 | 26/10/2026 | 4 | Integração ao GitHub: registrada a mudança de metodologia (sequência dos 27 prompts deixa de ser obrigatória) e a situação por ambiente. Caminhos locais com o nome do usuário do Windows foram anonimizados como `%USERPROFILE%`, e nomes de projetos sem relação, generalizados. Os status e as aprovações da tabela de índice não mudaram: a aprovação continua dependendo de revisão humana |
 | 26/10/2026 | 5 | Merge do PR #24 pelo proprietário (`d7eb7e4`, CI aprovada na `main`): coluna "Integrada ao GitHub" e CI atualizadas. A implantação em produção continua não confirmada |
 | 26/10/2026 | 6 | Identidade visual com o cubo transparente executada por pedido direto do proprietário, fora da sequência de prompts; corresponde ao escopo da `NEXO-AJ-01` (usa as artes novas em PNG transparente, não o `nexo_cubo_centralizado.png` citado no mapa). A linha da `NEXO-AJ-01` no índice não foi alterada: a aprovação continua sendo humana |
+| 26/10/2026 | 7 | Merge do PR #26 pelo proprietário (`6abc96c`, CI aprovada na `main`): situação da identidade visual atualizada. A publicação em produção continua não confirmada |
+| 26/10/2026 | 8 | Gestão contratual implementada por pedido direto do proprietário: linhas da `NEXO-AJ-02` (parcial), `03.1` a `03.4`, `05.1` a `05.5`, `06.2` e `06.3` passaram a "EXECUTADO / AGUARDANDO REVISÃO", com registro de execução e linha na situação por ambiente. As `04.x` (avisos de renovação) e a `06.4` continuam não executadas |
 
 **Buscas pelo mapa feitas na versão 1** (preservadas da primeira entrega):
 

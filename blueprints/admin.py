@@ -16,6 +16,7 @@ from extensions import db
 from models import (
     Analise, UploadRelatorio, Empresa, Plano, Segmento, Usuario, RelatorioAnalise,
     ChamadoSuporte, MensagemSuporte, GuiaTopico, ProdutoCurvaABC, Notificacao,
+    CoberturaPaga, Contrato, EventoContratual, RegimeContratual,
 )
 from etl_processor import processar_arquivos_analise, ResultadoETL
 from etl_inputs import ETLInputError
@@ -30,6 +31,11 @@ from company_security import (
     restaurar_empresa as restaurar_empresa_segura,
 )
 from session_security import STATUS_CONTA_SEM_ACESSO
+from contract_policy import (
+    contrato_da_vigencia, esquema_contratual_disponivel, motivo_bloqueio_nova_analise,
+    obter_contrato_aplicavel,
+    obter_situacao_contratual, pode_consultar_analise, regime_contratual_ativo,
+)
 import storage
 
 # Categorias de ticket (token persistido -> rótulo exibido) — espelha cliente.py.
@@ -70,14 +76,43 @@ def dashboard():
     canceladas = int(contagem_status.get("CANCELADA", 0))
     total_emp = ativas + suspensas + canceladas
 
-    # --- Receita mensal estimada: soma dos planos atuais das empresas ATIVAS ---
-    receita = db.session.execute(
+    # --- Receita mensal estimada das empresas ATIVAS: valor CONTRATADO quando
+    #     há contrato ATIVO registrado; senão, preço de catálogo do plano atual. ---
+    contratual = esquema_contratual_disponivel()
+    base_receita = (
         select(func.coalesce(func.sum(Plano.valor_mensal), 0))
         .select_from(Empresa)
         .join(Plano, Empresa.id_plano_atual == Plano.id_plano)
         .where(Empresa.status_conta == "ATIVA")
         .where(Empresa.deletado_em.is_(None))
-    ).scalar() or 0
+    )
+    if contratual:
+        base_receita = base_receita.where(~select(Contrato.id_contrato).where(
+            Contrato.id_empresa == Empresa.id_empresa, Contrato.situacao == "ATIVO",
+        ).exists())
+    receita = db.session.execute(base_receita).scalar() or 0
+    alertas_contratuais = None
+    if contratual:
+        receita += db.session.execute(
+            select(func.coalesce(func.sum(Contrato.valor_mensal_contratado), 0))
+            .join(Empresa, Empresa.id_empresa == Contrato.id_empresa)
+            .where(Contrato.situacao == "ATIVO")
+            .where(Empresa.status_conta == "ATIVA")
+            .where(Empresa.deletado_em.is_(None))
+        ).scalar() or 0
+        from contract_admin import visao_geral_contratual
+        painel = visao_geral_contratual(db.session)
+        # Prazos e reconciliação valem só no regime contratual. A suspensão de uma
+        # empresa ainda no legado, já vencida, é pendência de conciliação ("atenção").
+        expiradas_legado = sum(1 for i in painel["suspensoes_expiradas"] if not i["contratual"])
+        alertas_contratuais = {
+            "suspensoes_expiradas": len(painel["suspensoes_expiradas"]) - expiradas_legado,
+            "suspensoes_terminando": sum(1 for i in painel["suspensoes_terminando"] if i["contratual"]),
+            "vencendo": len(painel["vencendo"]),
+            "atencao": (len(painel["vencidos"]) + len(painel["inconsistentes"])
+                        + len(painel["sem_contrato"]) + expiradas_legado),
+            "legado": len(painel["legado"]),
+        }
 
     stats = {
         "total": total_emp,
@@ -161,6 +196,7 @@ def dashboard():
         analises=analises,
         dashboard_data=dashboard_data,
         homologacoes=homologacoes,
+        alertas_contratuais=alertas_contratuais,
     )
 
 
@@ -224,13 +260,16 @@ def analise_nova():
             flash("Selecione uma empresa válida.", "danger")
             return redirect(url_for("admin.analise_nova"))
 
-        empresa = db.session.get(Empresa, id_empresa)
+        # Lock da empresa até o COMMIT: suspensão ou cancelamento concorrente
+        # espera esta decisão (mesma ordem Empresa -> filhos dos demais fluxos).
+        empresa = bloquear_empresa(db.session, id_empresa)
         if empresa is None:
             flash("Empresa não encontrada.", "danger")
             return redirect(url_for("admin.analise_nova"))
         if empresa.status_conta != "ATIVA":
             flash(f"Empresa em status {empresa.status_conta} — novas análises bloqueadas.", "danger")
             return redirect(url_for("admin.analise_nova"))
+        situacao = obter_situacao_contratual(empresa, carregar_coberturas=False)
 
         tipo_analise = form.get("tipo_analise", "").strip().upper()
         if tipo_analise not in ("MENSAL", "QUINZENAL"):
@@ -240,7 +279,9 @@ def analise_nova():
         quinzena_ref = None
         if tipo_analise == "QUINZENAL":
             plano_nome = empresa.plano_atual.nome_plano if empresa.plano_atual else None
-            if plano_nome != "OURO":
+            # No regime contratual vale o plano do contrato que rege o período
+            # (conferido depois das datas); no legado, o plano atual.
+            if plano_nome != "OURO" and not situacao.contratual:
                 flash("Análises QUINZENAIS estão disponíveis apenas para empresas do plano OURO.", "danger")
                 return redirect(url_for("admin.analise_nova"))
             try:
@@ -261,6 +302,19 @@ def analise_nova():
         if periodo_inicio > periodo_fim:
             flash("Período inválido: início é posterior ao fim.", "danger")
             return redirect(url_for("admin.analise_nova"))
+        # Regime contratual: empresa ATIVA e período na vigência efetiva de um
+        # contrato não cancelado; o plano de referência é o desse contrato.
+        bloqueio = motivo_bloqueio_nova_analise(situacao, periodo_inicio, periodo_fim)
+        if bloqueio:
+            flash(bloqueio, "danger")
+            return redirect(url_for("admin.analise_nova"))
+        plano_referencia = empresa.id_plano_atual
+        if situacao.contratual:
+            contrato_periodo = contrato_da_vigencia(id_empresa, periodo_inicio, periodo_fim)
+            plano_referencia = contrato_periodo.id_plano
+            if tipo_analise == "QUINZENAL" and contrato_periodo.plano.nome_plano != "OURO":
+                flash("Análises QUINZENAIS estão disponíveis apenas para empresas do plano OURO.", "danger")
+                return redirect(url_for("admin.analise_nova"))
 
         try:
             mes_ref = int(form["mes_referencia"])
@@ -277,7 +331,9 @@ def analise_nova():
 
         nova = Analise(
             id_empresa=id_empresa,
-            id_plano_referencia=empresa.id_plano_atual,  # snapshot do plano atual
+            # Snapshot do plano: o do contrato que rege o período no regime
+            # contratual, senão o plano atual da empresa (comportamento legado).
+            id_plano_referencia=plano_referencia,
             id_usuario_admin_responsavel=current_user.id_usuario,
             periodo_inicio=periodo_inicio,
             periodo_fim=periodo_fim,
@@ -442,9 +498,21 @@ def empresa_editar(id_empresa):
             flash("Empresa não encontrada.", "danger")
             return redirect(url_for("admin.empresas"))
         planos, segmentos = _planos_segmentos()
+        # Com contrato vigente ou regras ativas, status e plano mudam só pelas
+        # operações contratuais (histórico auditável), nunca por este formulário.
+        governada = esquema_contratual_disponivel() and (
+            regime_contratual_ativo(empresa.id_empresa)
+            or obter_contrato_aplicavel(empresa.id_empresa) is not None
+        )
 
         if request.method == "POST":
             form = request.form
+            if governada and (
+                    form.get("status_conta", empresa.status_conta) != empresa.status_conta
+                    or form.get("id_plano_atual", str(empresa.id_plano_atual)) != str(empresa.id_plano_atual)):
+                db.session.rollback()
+                flash("Status e plano desta empresa são geridos pelos contratos: use Detalhes → Contratos.", "warning")
+                return redirect(url_for("contratos.empresa_detalhe", id_empresa=id_empresa))
             try:
                 data_contratacao = datetime.strptime(form.get("data_contratacao", "").strip(), "%Y-%m-%d").date()
             except ValueError:
@@ -483,7 +551,8 @@ def empresa_editar(id_empresa):
             flash("Empresa atualizada com sucesso.", "success")
             return redirect(url_for("admin.empresas"))
 
-        return render_template("admin/empresa_form.html", empresa=empresa, planos=planos, segmentos=segmentos)
+        return render_template("admin/empresa_form.html", empresa=empresa, planos=planos,
+                               segmentos=segmentos, governada=governada)
     except SQLAlchemyError as erro:
         db.session.rollback()
         current_app.logger.warning("Falha ao editar empresa %s: %s", id_empresa, type(erro).__name__)
@@ -573,6 +642,11 @@ def empresa_excluir_permanente(id_empresa):
       4) Usuario(s) da empresa;
       5) a própria Empresa.
 
+    Empresa com histórico contratual (contratos, períodos pagos, eventos ou
+    regime) NÃO é excluída: contratos, valores e pagamentos são registros
+    financeiros e de auditoria, e a política de retenção ainda depende de
+    decisão (Docs/GESTAO_CONTRATUAL/05, NEXO-AJ-07.3).
+
     Qualquer falha de integridade → rollback atômico (nada é apagado) + aviso.
     """
     nome_emp = "empresa"
@@ -584,6 +658,14 @@ def empresa_excluir_permanente(id_empresa):
             return redirect(url_for("admin.lixeira"))
         usuarios = bloquear_usuarios_empresa(db.session, id_empresa)
         nome_emp = empresa.nome_fantasia or empresa.razao_social
+        if esquema_contratual_disponivel() and any(
+                db.session.scalar(select(modelo.id_empresa).where(modelo.id_empresa == id_empresa).limit(1))
+                is not None for modelo in (Contrato, CoberturaPaga, EventoContratual, RegimeContratual)):
+            db.session.rollback()
+            flash(f"'{nome_emp}' possui histórico contratual (contratos, pagamentos ou eventos). Para "
+                  "preservar os registros financeiros e de auditoria, a exclusão permanente está "
+                  "bloqueada; a empresa continua na lixeira.", "warning")
+            return redirect(url_for("admin.lixeira"))
 
         # 1) Análises e tudo que depende delas.
         analises = db.session.execute(
@@ -888,7 +970,14 @@ def analise_relatorio(id_analise):
 
         # Dispatch-after-commit: só agora que a transação foi confirmada disparamos
         # os efeitos colaterais externos (sininho em tempo real + e-mail ao cliente).
-        if acao == "publicar":
+        # Aviso só quando a política permite ao cliente abrir a análise: empresa
+        # com acesso ao portal e, no regime contratual, período pago. Sem isso
+        # o e-mail anunciaria conteúdo indisponível (ou a conta encerrada).
+        if acao == "publicar" and not pode_consultar_analise(
+                obter_situacao_contratual(analise.empresa), analise):
+            flash("A devolutiva foi publicada, mas o cliente não foi avisado: a empresa está sem "
+                  "acesso ao portal ou o período da análise não tem cobertura paga registrada.", "warning")
+        elif acao == "publicar":
             ref = f"{analise.mes_referencia:02d}/{analise.ano_referencia}"
             link_interno = url_for("cliente.analise", id_analise=analise.id_analise)
             try:

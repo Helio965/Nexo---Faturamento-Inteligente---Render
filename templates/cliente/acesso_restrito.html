@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}{{ titulo }} — NEXO{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>{{ titulo }}</h1>
+        <p class="sub">Acesso conforme a situação contratual da sua empresa.</p>
+    </div>
+</div>
+
+<div class="nexo-card">
+    <div class="empty-state">
+        <div class="es-icon"><i class="bi bi-lock" aria-hidden="true"></i></div>
+        <h3>{{ mensagem }}</h3>
+        <p>Em caso de dúvida sobre sua situação contratual, abra um chamado no Suporte.</p>
+        <div class="d-flex flex-wrap gap-2 justify-content-center mt-3">
+            <a href="{{ url_for('cliente.historico') }}" class="btn-ghost"><i class="bi bi-clock-history"></i> Histórico</a>
+            <a href="{{ url_for('cliente.tickets') }}" class="btn-ghost"><i class="bi bi-life-preserver"></i> Suporte</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

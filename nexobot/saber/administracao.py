@@ -53,7 +53,8 @@ REGISTROS = (
         titulo="Como a equipe gerencia os planos?",
         categoria="Equipe NEXO",
         resumo=(
-            "O plano é escolhido no cadastro da empresa e pode ser alterado na edição. Os planos existentes "
+            "O plano é escolhido no cadastro da empresa. Quando a empresa tem contrato registrado, a troca de "
+            "plano é feita em Detalhes → Contratos, preservando o contrato anterior. Os planos existentes "
             "(Bronze, Prata e Ouro) são registros do sistema; a regra aplicada é que análises quinzenais só "
             "podem ser abertas para o plano Ouro."
         ),
@@ -189,10 +190,12 @@ REGISTROS = (
         titulo="Como a equipe controla o status das contas?",
         categoria="Equipe NEXO",
         resumo=(
-            "Na edição da empresa, a equipe define o status (Ativa, Suspensa ou Cancelada). Apenas empresas "
-            "Ativas recebem novas análises. Cancelar a conta encerra as sessões e bloqueia o login dos "
-            "usuários da empresa até a reativação. A lixeira é um controle separado: suspender ou cancelar a "
-            "conta não move a empresa para a lixeira, e vice-versa."
+            "Sem contrato registrado, a equipe define o status na edição da empresa (Ativa, Suspensa ou "
+            "Cancelada); com contrato, suspensão, prorrogação, reativação e cancelamento são registrados em "
+            "Detalhes → Contratos, com histórico. Apenas empresas Ativas recebem novas análises. Cancelar a "
+            "conta encerra as sessões e bloqueia o login dos usuários da empresa até a reativação. A lixeira "
+            "é um controle separado: suspender ou cancelar a conta não move a empresa para a lixeira, e "
+            "vice-versa."
         ),
         perguntas=(
             "Quem muda o status da minha conta?", "Como a equipe suspende uma conta?", "Como reativar a conta?",

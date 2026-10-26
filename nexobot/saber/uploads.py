@@ -320,8 +320,10 @@ REGISTROS = (
             "processamento está em andamento no servidor naquele instante."
         ),
         explicacao=(
-            "Quando a conta está suspensa, a equipe não abre novos períodos, então com o tempo não haverá "
-            "análise disponível para envio; com a conta cancelada, o acesso ao portal é bloqueado. O portal "
+            "Quando a conta está suspensa, a equipe não abre novos períodos. Se a sua empresa já está sob as "
+            "regras contratuais, o envio fica restrito às análises de períodos já pagos; caso contrário, o "
+            "envio para a análise já aberta segue liberado. Com a conta cancelada, o acesso ao portal é "
+            "bloqueado. O portal "
             "aceita um envio por vez: se aparecer a "
             "mensagem de que há outro upload em andamento, aguarde alguns instantes e tente de novo."
         ),

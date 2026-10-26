@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+
+{% set nome = empresa.nome_fantasia or empresa.razao_social %}
+{% block title %}Registrar período pago — {{ nome }} — NEXO Admin{% endblock %}
+{% block page_title %}Registrar período pago{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Registrar período pago</h1>
+        <p class="sub">{{ nome }} · contrato nº {{ contrato.id_contrato }} ({{ contrato.plano.nome_plano }})</p>
+    </div>
+    <div class="page-head-actions">
+        <a href="{{ url_for('contratos.empresa_detalhe', id_empresa=empresa.id_empresa) }}" class="btn-ghost"><i class="bi bi-arrow-left"></i> Voltar</a>
+    </div>
+</div>
+
+<div class="aviso-contrato" role="note">
+    <i class="bi bi-cash-coin" aria-hidden="true"></i>
+    <div>
+        <strong>Registre somente pagamentos comprovados.</strong>
+        <p>O período deve estar dentro da vigência do contrato ({{ contrato.data_inicio.strftime('%d/%m/%Y') }} a {{ contrato.data_fim.strftime('%d/%m/%Y') if contrato.data_fim else 'prazo indeterminado' }}) e não pode se sobrepor a outra cobertura vigente. Uma análise só fica disponível ao cliente quando todo o seu período estiver pago.</p>
+    </div>
+</div>
+
+<form method="POST" class="relatorio-doc" style="max-width:980px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="nexo-card mb-4">
+        <div class="nexo-card-body">
+            <div class="row g-3">
+                <div class="col-12 col-md-4">
+                    <label class="nexo-label" for="periodo_inicio">Início do período pago <span class="req">*</span></label>
+                    <input type="date" class="form-control" id="periodo_inicio" name="periodo_inicio" required value="{{ form.get('periodo_inicio', '') }}">
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="nexo-label" for="periodo_fim">Fim do período pago <span class="req">*</span></label>
+                    <input type="date" class="form-control" id="periodo_fim" name="periodo_fim" required value="{{ form.get('periodo_fim', '') }}">
+                </div>
+                <div class="col-12">
+                    <label class="nexo-label" for="referencia">Referência administrativa da confirmação <span class="req">*</span></label>
+                    <input type="text" class="form-control" id="referencia" name="referencia" required maxlength="200"
+                           value="{{ form.get('referencia', '') }}" placeholder="Ex.: comprovante de transferência de 05/11/2026, nota fiscal nº 123">
+                    <p class="field-hint mt-1 mb-0">Não registre dados bancários completos nem documentos pessoais.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="d-flex gap-2 justify-content-end">
+        <a href="{{ url_for('contratos.empresa_detalhe', id_empresa=empresa.id_empresa) }}" class="btn-ghost">Cancelar</a>
+        <button type="submit" class="btn-nexo"><i class="bi bi-check2-circle"></i> Confirmar período pago</button>
+    </div>
+</form>
+{% endblock %}

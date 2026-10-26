@@ -24,43 +24,16 @@ from sqlalchemy import select
 from app import create_app
 from extensions import db
 from models import Plano, Segmento, Usuario
+from plan_catalog import CATALOGO_PLANOS
 
 
 def seed_planos():
-    """Cria os 3 planos comerciais."""
-    planos_data = [
-        {
-            "nome_plano": "BRONZE",
-            "descricao": "Análise mensal básica para pequenos comércios.",
-            "valor_mensal": 600,
-            "qtd_analises_mes": 1,
-            "tipo_analise_permitida": "MENSAL",
-            "nivel_entrega_analise": "BASICA",
-            "nivel_dashboard": "RESUMIDO",
-            "nivel_atendimento": "BAIXO",
-        },
-        {
-            "nome_plano": "PRATA",
-            "descricao": "Análise mensal completa com KPIs detalhados.",
-            "valor_mensal": 1000,
-            "qtd_analises_mes": 1,
-            "tipo_analise_permitida": "MENSAL",
-            "nivel_entrega_analise": "COMPLETA",
-            "nivel_dashboard": "GERENCIAL",
-            "nivel_atendimento": "MEDIO",
-        },
-        {
-            "nome_plano": "OURO",
-            "descricao": "Análises quinzenais premium com atendimento prioritário.",
-            "valor_mensal": 1400,
-            "qtd_analises_mes": 2,
-            "tipo_analise_permitida": "QUINZENAL",
-            "nivel_entrega_analise": "PREMIUM",
-            "nivel_dashboard": "COMPLETO",
-            "nivel_atendimento": "ALTO",
-        },
-    ]
-    for p in planos_data:
+    """Cria os 3 planos comerciais ausentes, com os valores do catálogo padrão.
+
+    Planos já existentes NÃO são alterados aqui: o preço de um banco em uso
+    muda só pela atualização auditada `flask planos atualizar-precos`.
+    """
+    for p in CATALOGO_PLANOS:
         existe = db.session.execute(
             select(Plano).where(Plano.nome_plano == p["nome_plano"])
         ).scalar_one_or_none()

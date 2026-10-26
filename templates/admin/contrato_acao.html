@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+
+{% set nome = empresa.nome_fantasia or empresa.razao_social %}
+{% block title %}{{ titulo }} — {{ nome }} — NEXO Admin{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>{{ titulo }}</h1>
+        <p class="sub">{{ nome }} · <span class="t-mono">CNPJ {{ empresa.cnpj }}</span></p>
+    </div>
+    <div class="page-head-actions">
+        <a href="{{ url_for('contratos.empresa_detalhe', id_empresa=empresa.id_empresa) }}" class="btn-ghost"><i class="bi bi-arrow-left"></i> Voltar</a>
+    </div>
+</div>
+
+{% if contrato %}
+<div class="nexo-card mb-4">
+    <div class="nexo-card-head"><div><h2><i class="bi bi-file-earmark-text text-purple"></i> Contrato nº {{ contrato.id_contrato }}</h2></div></div>
+    <div class="nexo-card-body">
+        <dl class="dados-contrato">
+            <div><dt>Situação</dt><dd>{{ m.badge_contrato(contrato.situacao) }}</dd></div>
+            <div><dt>Plano</dt><dd>{{ m.badge_plano(contrato.plano.nome_plano) }}</dd></div>
+            <div><dt>Valor contratado</dt><dd>R$ {{ m.brl(contrato.valor_mensal_contratado) }}</dd></div>
+            <div><dt>Vigência</dt><dd>{{ contrato.data_inicio.strftime('%d/%m/%Y') }} a {{ contrato.data_fim.strftime('%d/%m/%Y') if contrato.data_fim else 'indeterminado' }}</dd></div>
+            {% if contrato.situacao == 'SUSPENSO' %}
+            <div><dt>Suspensão desde</dt><dd>{{ contrato.suspenso_em|instante_local }}</dd></div>
+            <div><dt>Limite original</dt><dd>{{ contrato.suspensao_limite_original|instante_local }}</dd></div>
+            <div><dt>Limite vigente</dt><dd>{{ contrato.suspensao_limite|instante_local }}</dd></div>
+            <div><dt>Exportação de PDF até</dt><dd>{{ contrato.pdf_limite|instante_local }}</dd></div>
+            {% endif %}
+        </dl>
+    </div>
+</div>
+{% endif %}
+
+{% if acao == 'suspender' %}
+<div class="aviso-contrato is-alerta" role="note"><i class="bi bi-pause-circle" aria-hidden="true"></i><div>
+    <strong>Prazos calculados pela política (proposta pendente de homologação comercial).</strong>
+    <p>Acesso ao histórico pago por {{ contrato.meses_suspensao or politica.meses_suspensao }} mês(es) de calendário e exportação de PDF por {{ politica.dias_exportacao_pdf }} dias corridos, contados do início da suspensão no fuso {{ politica.fuso.key }}. Novas análises e envios fora da cobertura ficam bloqueados.</p>
+</div></div>
+{% elif acao == 'prorrogar' %}
+<div class="aviso-contrato" role="note"><i class="bi bi-calendar-plus" aria-hidden="true"></i><div>
+    <strong>A prorrogação não representa pagamento nem amplia o prazo de PDF.</strong>
+    <p>O limite original continua gravado. As análises continuam dependendo dos períodos pagos. Ampliar a exportação exige autorização contratual específica, informada abaixo.</p>
+</div></div>
+{% elif acao == 'reativar' and contrato.situacao == 'ATIVO' %}
+<div class="aviso-contrato" role="note"><i class="bi bi-play-circle" aria-hidden="true"></i><div>
+    <strong>Regularização do status da empresa.</strong>
+    <p>O contrato já está ATIVO e a empresa continua SUSPENSA (por exemplo, depois de registrar o contrato numa conciliação). Esta ação devolve a empresa a ATIVA e fica registrada no histórico.</p>
+</div></div>
+{% elif acao == 'cancelar' %}
+<div class="aviso-contrato is-perigo" role="note"><i class="bi bi-x-octagon" aria-hidden="true"></i><div>
+    <strong>O cancelamento bloqueia o portal e revoga as sessões dos usuários da empresa.</strong>
+    <p>Os dados e o histórico são preservados. Uma nova contratação pode reativar a empresa depois.</p>
+</div></div>
+{% elif acao == 'regras_ativar' %}
+<div class="aviso-contrato is-alerta" role="note"><i class="bi bi-toggle-off" aria-hidden="true"></i><div>
+    <strong>Com as regras ativas, o cliente só consulta análises de períodos pagos registrados.</strong>
+    <p>Confira antes se o contrato vigente e todos os períodos comprovadamente pagos estão cadastrados. Suspensões passam a ter prazo e o portal é bloqueado quando ele terminar.</p>
+</div></div>
+{% elif acao == 'regras_desativar' %}
+<div class="aviso-contrato is-alerta" role="note"><i class="bi bi-toggle-on" aria-hidden="true"></i><div>
+    <strong>A empresa volta ao regime legado.</strong>
+    <p>Prazos e coberturas deixam de restringir o acesso até nova ativação. Use somente como contingência de implantação; a operação fica registrada.</p>
+</div></div>
+{% elif acao == 'revogar_cobertura' %}
+<div class="aviso-contrato is-perigo" role="note"><i class="bi bi-cash-coin" aria-hidden="true"></i><div>
+    <strong>Período {{ cobertura.periodo_inicio.strftime('%d/%m/%Y') }} a {{ cobertura.periodo_fim.strftime('%d/%m/%Y') }} — {{ cobertura.referencia_confirmacao }}</strong>
+    <p>A cobertura deixa de gerar direito às análises desse período. O registro não é apagado.</p>
+</div></div>
+{% endif %}
+
+<form method="POST" class="relatorio-doc" style="max-width:980px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if contrato %}<input type="hidden" name="versao" value="{{ contrato.versao }}">{% endif %}
+    <div class="nexo-card mb-4">
+        <div class="nexo-card-body">
+            <div class="row g-3">
+                {% if acao == 'suspender' %}
+                <div class="col-12 col-md-6">
+                    <label class="nexo-label" for="suspenso_em">Início oficial da suspensão</label>
+                    <input type="datetime-local" class="form-control" id="suspenso_em" name="suspenso_em" value="{{ form.get('suspenso_em', '') }}">
+                    <p class="field-hint mt-1 mb-0">Horário de {{ politica.fuso.key }}. Em branco = agora. Não pode ser futuro nem anterior à última alteração do contrato.</p>
+                </div>
+                {% elif acao == 'prorrogar' %}
+                <div class="col-12 col-md-6">
+                    <label class="nexo-label" for="novo_limite">Nova data-limite da suspensão <span class="req">*</span></label>
+                    <input type="datetime-local" class="form-control" id="novo_limite" name="novo_limite" required value="{{ form.get('novo_limite', '') }}">
+                    <p class="field-hint mt-1 mb-0">Horário de {{ politica.fuso.key }}; deve ser posterior ao limite vigente e futura.</p>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="nexo-label" for="novo_limite_pdf">Novo prazo de PDF (opcional)</label>
+                    <input type="datetime-local" class="form-control" id="novo_limite_pdf" name="novo_limite_pdf" value="{{ form.get('novo_limite_pdf', '') }}">
+                    <div class="form-check mt-2">
+                        <input class="form-check-input" type="checkbox" value="1" id="autorizacao_pdf" name="autorizacao_pdf" {{ 'checked' if form.get('autorizacao_pdf') == '1' }}>
+                        <label class="form-check-label" for="autorizacao_pdf">Há autorização contratual específica para ampliar a exportação de PDF.</label>
+                    </div>
+                </div>
+                {% endif %}
+                <div class="col-12">
+                    <label class="nexo-label" for="justificativa">
+                        {% if acao in ('suspender', 'cancelar') %}Motivo{% elif acao == 'revogar_cobertura' %}Motivo da revogação{% elif acao == 'prorrogar' %}Termos do acordo / justificativa{% else %}Justificativa{% endif %} <span class="req">*</span>
+                    </label>
+                    <textarea class="form-control" id="justificativa" name="justificativa" rows="3" maxlength="2000" required>{{ form.get('justificativa', '') }}</textarea>
+                </div>
+                {% if acao == 'cancelar' %}
+                <div class="col-12 col-md-6">
+                    <label class="nexo-label" for="confirmacao">Digite CANCELAR para confirmar <span class="req">*</span></label>
+                    <input type="text" class="form-control" id="confirmacao" name="confirmacao" required autocomplete="off" pattern="CANCELAR">
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="d-flex gap-2 justify-content-end">
+        <a href="{{ url_for('contratos.empresa_detalhe', id_empresa=empresa.id_empresa) }}" class="btn-ghost">Voltar sem alterar</a>
+        <button type="submit" class="btn-nexo{{ ' is-danger' if acao in ('cancelar', 'revogar_cobertura') }}"><i class="bi bi-check2-circle"></i> Confirmar: {{ titulo|lower }}</button>
+    </div>
+</form>
+{% endblock %}

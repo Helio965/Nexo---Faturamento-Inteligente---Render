@@ -52,6 +52,16 @@
 {%- endif -%}
 {%- endmacro -%}
 
+{# ---- Badge: situação do contrato (Contrato.situacao) ---- #}
+{%- macro badge_contrato(situacao) -%}
+{%- if situacao == 'ATIVO' -%}<span class="nexo-badge b-green"><span class="dot"></span>ATIVO</span>
+{%- elif situacao == 'SUSPENSO' -%}<span class="nexo-badge b-amber"><span class="dot"></span>SUSPENSO</span>
+{%- elif situacao == 'CANCELADO' -%}<span class="nexo-badge b-red"><span class="dot"></span>CANCELADO</span>
+{%- elif situacao == 'ENCERRADO' -%}<span class="nexo-badge b-muted"><span class="dot"></span>ENCERRADO</span>
+{%- else -%}<span class="nexo-badge b-muted">{{ situacao }}</span>
+{%- endif -%}
+{%- endmacro -%}
+
 {# ---- Badge: status da análise (Analise.status_analise) ---- #}
 {%- macro badge_analise(status) -%}
 {%- if status == 'CONCLUIDO' -%}<span class="nexo-badge b-green"><span class="dot"></span>Concluído</span>

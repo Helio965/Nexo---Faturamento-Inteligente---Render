@@ -7,6 +7,7 @@ from flask import current_app, session
 from sqlalchemy import select
 from sqlalchemy.orm import object_session
 
+from contract_policy import condicao_sql_vinculo_contratual
 from extensions import db
 from models import Empresa, Usuario
 
@@ -14,15 +15,23 @@ from models import Empresa, Usuario
 CHAVE_CREDENCIAL = "credential_fingerprint"
 _CONTEXTO_SESSAO = b"nexo-session-credential-v1\0"
 # NEXO-AJ-06.1: CANCELADA bloqueia o CLIENTE como a lixeira. SUSPENSA mantém o
-# acesso atual; suas restrições próprias pertencem à NEXO-AJ-05.x.
+# acesso ao portal; o que ela pode consultar é decidido por contract_policy.
 STATUS_CONTA_SEM_ACESSO = "CANCELADA"
 
 
-def condicoes_empresa_acessivel():
-    """Critério único da empresa que libera CLIENTE: fora da lixeira e não cancelada."""
+def condicoes_empresa_acessivel(instante=None, *, sessao=None):
+    """Critério único da empresa que libera CLIENTE: fora da lixeira, não cancelada
+    e, no regime contratual, com contrato vigente cuja suspensão não expirou.
+
+    O prazo é comparado ao relógio da política no próprio SQL: a expiração
+    bloqueia login, sessão, tokens, Socket.IO e notificações antes mesmo de a
+    reconciliação gravar o cancelamento. `sessao` é a Session que executará a
+    consulta (entregas pós-commit usam Session própria, não db.session).
+    """
     return (
         Empresa.deletado_em.is_(None),
         Empresa.status_conta != STATUS_CONTA_SEM_ACESSO,
+        condicao_sql_vinculo_contratual(instante, sessao=sessao),
     )
 
 
@@ -64,7 +73,7 @@ def usuario_pode_acessar(usuario, *, consulta=None) -> bool:
     with consulta.no_autoflush:
         return consulta.scalar(select(Empresa.id_empresa).where(
             Empresa.id_empresa == usuario.id_empresa,
-            *condicoes_empresa_acessivel(),
+            *condicoes_empresa_acessivel(sessao=consulta),
         )) is not None
 
 

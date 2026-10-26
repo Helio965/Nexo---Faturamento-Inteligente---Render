@@ -234,12 +234,21 @@ def create_app(config_name: str = None) -> Flask:
     from blueprints.cliente import cliente_bp
     from blueprints.notificacoes import notificacoes_bp
     from blueprints.api import api_bp
+    from blueprints.contratos import contratos_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(admin_bp, url_prefix="/admin")
     app.register_blueprint(cliente_bp, url_prefix="/cliente")
     app.register_blueprint(notificacoes_bp)
     app.register_blueprint(api_bp)
+    app.register_blueprint(contratos_bp)
+
+    # Gestão contratual: prazos exibidos no fuso da política (nunca no do
+    # navegador) e comandos `flask contratos` / `flask planos` (simulação padrão).
+    from contract_policy import formatar_instante
+    app.jinja_env.filters["instante_local"] = formatar_instante
+    from cli_contratos import registrar_comandos
+    registrar_comandos(app)
 
     # Context processor: injeta os dados do sininho (contagem + 5 recentes) em
     # TODA página renderizada, para o usuário autenticado. Mantém o template

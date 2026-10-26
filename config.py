@@ -177,6 +177,17 @@ class Config:
     # SEC-005: limites finitos; valores invalidos impedem inicializacao.
     ETL_LIMITS = asdict(limits_from_environment())
 
+    # === Gestão contratual (contract_policy.py) ===
+    # Convenções PROPOSTAS, pendentes de homologação comercial (ver
+    # Docs/GESTAO_CONTRATUAL/05_PENDENCIAS_DE_DECISAO_COMERCIAL.md). São
+    # aplicadas no instante da suspensão e gravadas no contrato: mudar estes
+    # valores não altera prazos de suspensões já registradas.
+    CONTRATO_SUSPENSAO_MESES = 3          # meses de calendário, não 90 dias
+    CONTRATO_EXPORTACAO_PDF_DIAS = 14     # dias corridos desde a suspensão
+    CONTRATO_FUSO_HORARIO = "America/Sao_Paulo"
+    CONTRATO_ALERTA_VENCIMENTO_DIAS = 30  # visão geral: vigência terminando
+    CONTRATO_ALERTA_SUSPENSAO_DIAS = 15   # visão geral: suspensão terminando
+
     # === IA (Claude / Anthropic) — geração automatizada da devolutiva ===
     # Sem a chave, o motor cai no fallback determinístico local (não quebra).
     ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY") or None

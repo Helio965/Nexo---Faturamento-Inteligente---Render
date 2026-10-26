@@ -318,10 +318,16 @@ REGISTROS = (
             "Como exporto o PDF?", "Como baixo a análise em PDF?", "Onde está o botão de exportar?",
             "Posso salvar a devolutiva?", "Como gero o PDF da análise?", "Como imprimo a análise?",
         ),
+        detalhes=(
+            "Com a conta suspensa sob as regras contratuais, a exportação tem prazo próprio, informado no "
+            "aviso da Visão Geral. Encerrado esse prazo, o botão dá lugar a um aviso e a análise autorizada "
+            "continua disponível para consulta na tela."
+        ),
         termos="pdf exportar baixar download salvar imprimir botao analise",
         relacionados=("nexo.historico.pdf_conteudo", "nexo.historico.abrir"),
         destino="historico",
-        fontes=("blueprints/cliente.py", "templates/cliente/analise.html", "pdf_export.py"),
+        fontes=("blueprints/cliente.py", "templates/cliente/analise.html", "pdf_export.py",
+                "contract_policy.py"),
     ),
     registro(
         id="nexo.historico.pdf_conteudo",

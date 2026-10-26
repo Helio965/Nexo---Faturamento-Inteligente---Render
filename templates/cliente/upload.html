@@ -20,6 +20,13 @@
     <span>Fluxo guiado: você <strong>fornece os arquivos</strong> (Vendas e Compras) e o <strong>consultor NEXO homologa</strong> antes de executar o motor de análise. Formatos aceitos: <strong>.csv</strong> e <strong>.xlsx</strong> exportados do seu PDV/ERP.</span>
 </div>
 
+{% if situacao and situacao.contratual and situacao.suspensa %}
+<div class="banner-suspensa" role="status">
+    <i class="bi bi-exclamation-octagon" aria-hidden="true"></i>
+    <div><strong>Conta suspensa: novos arquivos só podem ser enviados para análises de períodos já pagos.</strong></div>
+</div>
+{% endif %}
+
 {% if not analises %}
 <div class="nexo-card">
     <div class="empty-state">

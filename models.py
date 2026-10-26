@@ -15,20 +15,47 @@ Estilo: SQLAlchemy 2.x com `Mapped` e `mapped_column` (mais moderno
 e type-safe que o estilo Column antigo).
 """
 
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import (
     String, Integer, Boolean, Date, DateTime, Numeric, Text, LargeBinary,
-    ForeignKey, CheckConstraint, UniqueConstraint, Index
+    ForeignKey, ForeignKeyConstraint, CheckConstraint, UniqueConstraint, Index, text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
+from sqlalchemy.types import TypeDecorator
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from extensions import db
+
+
+class InstanteUTC(TypeDecorator):
+    """Instante absoluto em UTC: timestamptz no PostgreSQL.
+
+    O SQLite não guarda fuso; grava-se sempre UTC no mesmo formato, o que
+    mantém as comparações de prazo (SQL) corretas. Valor sem fuso é recusado
+    na escrita para que um horário local nunca seja tomado por UTC.
+    """
+    impl = DateTime(timezone=True)
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Instante contratual exige fuso horário explícito.")
+        valor = value.astimezone(timezone.utc)
+        return valor.replace(tzinfo=None) if dialect.name == "sqlite" else valor
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
 
 
 # =====================================================================
@@ -554,4 +581,295 @@ class ArquivoArmazenado(db.Model):
     tamanho: Mapped[int] = mapped_column(Integer, nullable=False)
     data_criacao: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.current_timestamp()
+    )
+
+
+# =====================================================================
+# 15. RegimeContratual  (habilitação gradual da gestão contratual)
+# =====================================================================
+class RegimeContratual(db.Model):
+    """
+    Presença da linha = regras contratuais ativas para a empresa. Sem ela, a
+    empresa segue o regime legado até a conciliação administrativa. Tabela
+    própria (e não coluna em Empresa) para que o código possa chegar à
+    produção antes da migração sem quebrar consultas de Empresa (padrão
+    expand -> migrate -> deploy da Etapa 0.2). Ativação e desativação ficam
+    registradas em EventoContratual.
+    """
+    __tablename__ = "regime_contratual"
+
+    id_empresa: Mapped[int] = mapped_column(
+        ForeignKey("empresa.id_empresa"), primary_key=True, autoincrement=False
+    )
+    ativado_em: Mapped[datetime] = mapped_column(InstanteUTC(), nullable=False)
+    id_usuario_admin_ativacao: Mapped[int] = mapped_column(
+        ForeignKey("usuario.id_usuario"), nullable=False
+    )
+
+
+# =====================================================================
+# 16. Contrato  (gestão contratual)
+# =====================================================================
+SITUACOES_CONTRATO = ("ATIVO", "SUSPENSO", "ENCERRADO", "CANCELADO")
+# Situações que fazem do contrato o vínculo vigente da empresa (no máximo um).
+SITUACOES_CONTRATO_APLICAVEL = ("ATIVO", "SUSPENSO")
+
+
+class Contrato(db.Model):
+    """
+    Acordo específico entre a NEXO e uma empresa. Guarda um snapshot do valor
+    contratado: o catálogo de Plano pode mudar sem afetar contratos antigos.
+    Renovação e troca de plano criam um NOVO contrato ligado ao anterior,
+    que passa a ENCERRADO; nada é sobrescrito. Os prazos da suspensão são
+    instantes UTC calculados por contract_policy no momento da suspensão:
+    o original fica preservado e a prorrogação só move o limite vigente.
+    """
+    __tablename__ = "contrato"
+
+    id_contrato: Mapped[int] = mapped_column(primary_key=True)
+    id_empresa: Mapped[int] = mapped_column(ForeignKey("empresa.id_empresa"), nullable=False)
+    id_plano: Mapped[int] = mapped_column(ForeignKey("plano.id_plano"), nullable=False)
+    # Contrato renovado/substituído por este (mesma empresa, ver FK composta).
+    id_contrato_anterior: Mapped[Optional[int]] = mapped_column(Integer)
+    valor_mensal_contratado: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    data_inicio: Mapped[date] = mapped_column(Date, nullable=False)
+    # NULL = prazo indeterminado (a duração dos contratos é decisão comercial).
+    data_fim: Mapped[Optional[date]] = mapped_column(Date)
+    data_formalizacao: Mapped[Optional[date]] = mapped_column(Date)
+    referencia_formalizacao: Mapped[Optional[str]] = mapped_column(String(200))
+    situacao: Mapped[str] = mapped_column(String(20), nullable=False, default="ATIVO")
+    # Prazo de suspensão menor previsto em contrato; NULL = padrão configurado.
+    meses_suspensao: Mapped[Optional[int]] = mapped_column(Integer)
+    suspenso_em: Mapped[Optional[datetime]] = mapped_column(InstanteUTC())
+    suspensao_motivo: Mapped[Optional[str]] = mapped_column(Text)
+    suspensao_limite_original: Mapped[Optional[datetime]] = mapped_column(InstanteUTC())
+    suspensao_limite: Mapped[Optional[datetime]] = mapped_column(InstanteUTC())
+    pdf_limite_original: Mapped[Optional[datetime]] = mapped_column(InstanteUTC())
+    pdf_limite: Mapped[Optional[datetime]] = mapped_column(InstanteUTC())
+    encerrado_em: Mapped[Optional[datetime]] = mapped_column(InstanteUTC())
+    cancelado_em: Mapped[Optional[datetime]] = mapped_column(InstanteUTC())
+    cancelamento_motivo: Mapped[Optional[str]] = mapped_column(Text)
+    observacoes: Mapped[Optional[str]] = mapped_column(Text)
+    id_usuario_admin_responsavel: Mapped[int] = mapped_column(
+        ForeignKey("usuario.id_usuario"), nullable=False
+    )
+    # Controle otimista: os formulários enviam a versão exibida.
+    versao: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default="1")
+    data_criacao: Mapped[datetime] = mapped_column(
+        InstanteUTC(), nullable=False, server_default=func.current_timestamp()
+    )
+    data_atualizacao: Mapped[Optional[datetime]] = mapped_column(InstanteUTC())
+
+    empresa = relationship("Empresa")
+    plano = relationship("Plano")
+    responsavel = relationship("Usuario", foreign_keys=[id_usuario_admin_responsavel])
+    coberturas = relationship(
+        "CoberturaPaga", viewonly=True,
+        primaryjoin="and_(Contrato.id_contrato == foreign(CoberturaPaga.id_contrato), "
+                    "Contrato.id_empresa == foreign(CoberturaPaga.id_empresa))",
+        order_by="CoberturaPaga.periodo_inicio",
+    )
+
+    __table_args__ = (
+        UniqueConstraint("id_contrato", "id_empresa", name="uq_contrato_id_empresa"),
+        UniqueConstraint("id_contrato_anterior", name="uq_contrato_anterior"),
+        ForeignKeyConstraint(
+            ["id_contrato_anterior", "id_empresa"],
+            ["contrato.id_contrato", "contrato.id_empresa"],
+            name="fk_contrato_anterior_mesma_empresa",
+        ),
+        CheckConstraint(
+            "situacao IN ('ATIVO', 'SUSPENSO', 'ENCERRADO', 'CANCELADO')",
+            name="ck_contrato_situacao",
+        ),
+        CheckConstraint("valor_mensal_contratado >= 0", name="ck_contrato_valor"),
+        CheckConstraint(
+            "data_fim IS NULL OR data_fim >= data_inicio", name="ck_contrato_vigencia",
+        ),
+        CheckConstraint(
+            "meses_suspensao IS NULL OR meses_suspensao BETWEEN 1 AND 12",
+            name="ck_contrato_meses_suspensao",
+        ),
+        CheckConstraint("versao >= 1", name="ck_contrato_versao"),
+        CheckConstraint(
+            "id_contrato_anterior IS NULL OR id_contrato_anterior <> id_contrato",
+            name="ck_contrato_anterior_distinto",
+        ),
+        CheckConstraint(
+            "situacao <> 'SUSPENSO' OR ("
+            "suspenso_em IS NOT NULL AND suspensao_limite_original IS NOT NULL "
+            "AND suspensao_limite IS NOT NULL AND pdf_limite_original IS NOT NULL "
+            "AND pdf_limite IS NOT NULL "
+            "AND suspensao_limite_original > suspenso_em "
+            "AND suspensao_limite >= suspensao_limite_original "
+            "AND pdf_limite_original > suspenso_em "
+            "AND pdf_limite >= pdf_limite_original "
+            "AND pdf_limite <= suspensao_limite)",
+            name="ck_contrato_suspensao",
+        ),
+        CheckConstraint(
+            "situacao <> 'ATIVO' OR (suspenso_em IS NULL AND suspensao_limite IS NULL "
+            "AND suspensao_limite_original IS NULL AND pdf_limite IS NULL "
+            "AND pdf_limite_original IS NULL AND encerrado_em IS NULL "
+            "AND cancelado_em IS NULL)",
+            name="ck_contrato_ativo_sem_prazos",
+        ),
+        CheckConstraint(
+            "situacao <> 'ENCERRADO' OR encerrado_em IS NOT NULL",
+            name="ck_contrato_encerrado",
+        ),
+        CheckConstraint(
+            "situacao <> 'CANCELADO' OR (cancelado_em IS NOT NULL "
+            "AND cancelamento_motivo IS NOT NULL)",
+            name="ck_contrato_cancelado",
+        ),
+        Index("ix_contrato_empresa", "id_empresa"),
+        # No máximo UM contrato vigente (ATIVO/SUSPENSO) por empresa.
+        Index(
+            "uq_contrato_aplicavel_empresa", "id_empresa", unique=True,
+            postgresql_where=text("situacao IN ('ATIVO', 'SUSPENSO')"),
+            sqlite_where=text("situacao IN ('ATIVO', 'SUSPENSO')"),
+        ),
+    )
+
+
+# =====================================================================
+# 17. CoberturaPaga  (períodos efetivamente pagos)
+# =====================================================================
+class CoberturaPaga(db.Model):
+    """
+    Intervalo de datas (inclusivo) efetivamente pago, confirmado por um ADMIN
+    com referência administrativa (ex.: comprovante). É o que gera direito às
+    análises dos períodos correspondentes. Registro imutável: correções são
+    feitas revogando (com motivo) e registrando outra cobertura.
+    """
+    __tablename__ = "cobertura_paga"
+
+    id_cobertura: Mapped[int] = mapped_column(primary_key=True)
+    id_contrato: Mapped[int] = mapped_column(Integer, nullable=False)
+    id_empresa: Mapped[int] = mapped_column(ForeignKey("empresa.id_empresa"), nullable=False)
+    periodo_inicio: Mapped[date] = mapped_column(Date, nullable=False)
+    periodo_fim: Mapped[date] = mapped_column(Date, nullable=False)
+    referencia_confirmacao: Mapped[str] = mapped_column(String(200), nullable=False)
+    confirmado_em: Mapped[datetime] = mapped_column(InstanteUTC(), nullable=False)
+    id_usuario_admin_confirmacao: Mapped[int] = mapped_column(
+        ForeignKey("usuario.id_usuario"), nullable=False
+    )
+    revogada_em: Mapped[Optional[datetime]] = mapped_column(InstanteUTC())
+    revogacao_motivo: Mapped[Optional[str]] = mapped_column(Text)
+    id_usuario_admin_revogacao: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("usuario.id_usuario")
+    )
+    data_criacao: Mapped[datetime] = mapped_column(
+        InstanteUTC(), nullable=False, server_default=func.current_timestamp()
+    )
+
+    confirmado_por = relationship("Usuario", foreign_keys=[id_usuario_admin_confirmacao])
+    revogado_por = relationship("Usuario", foreign_keys=[id_usuario_admin_revogacao])
+
+    __table_args__ = (
+        UniqueConstraint("id_cobertura", "id_empresa", name="uq_cobertura_id_empresa"),
+        # A cobertura só pode pertencer a um contrato da MESMA empresa.
+        ForeignKeyConstraint(
+            ["id_contrato", "id_empresa"],
+            ["contrato.id_contrato", "contrato.id_empresa"],
+            name="fk_cobertura_contrato_mesma_empresa",
+        ),
+        CheckConstraint("periodo_fim >= periodo_inicio", name="ck_cobertura_periodo"),
+        CheckConstraint(
+            "length(trim(referencia_confirmacao)) > 0", name="ck_cobertura_referencia",
+        ),
+        CheckConstraint(
+            "(revogada_em IS NULL AND revogacao_motivo IS NULL "
+            "AND id_usuario_admin_revogacao IS NULL) OR "
+            "(revogada_em IS NOT NULL AND revogacao_motivo IS NOT NULL "
+            "AND id_usuario_admin_revogacao IS NOT NULL)",
+            name="ck_cobertura_revogacao",
+        ),
+        Index("ix_cobertura_empresa", "id_empresa", "periodo_inicio"),
+        Index("ix_cobertura_contrato", "id_contrato"),
+    )
+
+
+# =====================================================================
+# 18. EventoContratual  (histórico auditável, somente inclusão)
+# =====================================================================
+TIPOS_EVENTO_CONTRATUAL = (
+    "CONTRATACAO", "RENOVACAO", "ALTERACAO_PLANO", "SUSPENSAO", "PRORROGACAO",
+    "REATIVACAO", "CANCELAMENTO", "COBERTURA_CONFIRMADA", "COBERTURA_REVOGADA",
+    "REGRAS_ATIVADAS", "REGRAS_DESATIVADAS",
+)
+
+
+class EventoContratual(db.Model):
+    """
+    Trilha de auditoria do ciclo contratual. Cada operação administrativa ou
+    da reconciliação grava um evento na MESMA transação da mudança; a aplicação
+    nunca altera nem apaga eventos. `detalhes` guarda JSON com os valores
+    anteriores e novos (datas-limite, plano, valor, período pago).
+    """
+    __tablename__ = "evento_contratual"
+
+    id_evento: Mapped[int] = mapped_column(primary_key=True)
+    id_empresa: Mapped[int] = mapped_column(ForeignKey("empresa.id_empresa"), nullable=False)
+    id_contrato: Mapped[Optional[int]] = mapped_column(Integer)
+    id_cobertura: Mapped[Optional[int]] = mapped_column(Integer)
+    tipo: Mapped[str] = mapped_column(String(40), nullable=False)
+    ocorrido_em: Mapped[datetime] = mapped_column(InstanteUTC(), nullable=False)
+    origem: Mapped[str] = mapped_column(String(20), nullable=False)
+    id_usuario_responsavel: Mapped[Optional[int]] = mapped_column(ForeignKey("usuario.id_usuario"))
+    situacao_anterior: Mapped[Optional[str]] = mapped_column(String(20))
+    situacao_posterior: Mapped[Optional[str]] = mapped_column(String(20))
+    justificativa: Mapped[Optional[str]] = mapped_column(Text)
+    detalhes: Mapped[Optional[str]] = mapped_column(Text)
+
+    responsavel = relationship("Usuario", foreign_keys=[id_usuario_responsavel])
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["id_contrato", "id_empresa"],
+            ["contrato.id_contrato", "contrato.id_empresa"],
+            name="fk_evento_contrato_mesma_empresa",
+        ),
+        ForeignKeyConstraint(
+            ["id_cobertura", "id_empresa"],
+            ["cobertura_paga.id_cobertura", "cobertura_paga.id_empresa"],
+            name="fk_evento_cobertura_mesma_empresa",
+        ),
+        CheckConstraint(
+            "tipo IN ('CONTRATACAO', 'RENOVACAO', 'ALTERACAO_PLANO', 'SUSPENSAO', "
+            "'PRORROGACAO', 'REATIVACAO', 'CANCELAMENTO', 'COBERTURA_CONFIRMADA', "
+            "'COBERTURA_REVOGADA', 'REGRAS_ATIVADAS', 'REGRAS_DESATIVADAS')",
+            name="ck_evento_tipo",
+        ),
+        CheckConstraint(
+            "(origem = 'ADMIN' AND id_usuario_responsavel IS NOT NULL) OR "
+            "(origem = 'RECONCILIACAO' AND id_usuario_responsavel IS NULL)",
+            name="ck_evento_origem",
+        ),
+        Index("ix_evento_empresa", "id_empresa", "ocorrido_em"),
+        Index("ix_evento_contrato", "id_contrato"),
+    )
+
+
+# =====================================================================
+# 19. HistoricoPrecoPlano  (auditoria do catálogo público de preços)
+# =====================================================================
+class HistoricoPrecoPlano(db.Model):
+    """Cada alteração de Plano.valor_mensal feita pela atualização do catálogo.
+    Contratos não são afetados: cada um guarda o próprio valor contratado."""
+    __tablename__ = "historico_preco_plano"
+
+    id_historico: Mapped[int] = mapped_column(primary_key=True)
+    id_plano: Mapped[int] = mapped_column(ForeignKey("plano.id_plano"), nullable=False)
+    valor_anterior: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    valor_novo: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    alterado_em: Mapped[datetime] = mapped_column(InstanteUTC(), nullable=False)
+    origem: Mapped[str] = mapped_column(String(80), nullable=False)
+
+    plano = relationship("Plano")
+
+    __table_args__ = (
+        CheckConstraint("valor_novo >= 0", name="ck_historico_preco_valor"),
+        Index("ix_historico_preco_plano", "id_plano", "alterado_em"),
     )
