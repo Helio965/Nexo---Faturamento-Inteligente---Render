@@ -25,10 +25,11 @@ from notifications import notificar_clientes_empresa
 from emails import email_analise_publicada, email_ticket_resolvido, email_boas_vindas
 from sqlalchemy.exc import IntegrityError, DataError, SQLAlchemyError
 from company_security import (
-    bloquear_empresa, bloquear_usuarios_empresa,
+    STATUS_CONTA, aplicar_status_conta, bloquear_empresa, bloquear_usuarios_empresa,
     excluir_empresa as excluir_empresa_segura,
     restaurar_empresa as restaurar_empresa_segura,
 )
+from session_security import STATUS_CONTA_SEM_ACESSO
 import storage
 
 # Categorias de ticket (token persistido -> rótulo exibido) — espelha cliente.py.
@@ -315,6 +316,29 @@ def _planos_segmentos():
     return planos, segmentos
 
 
+def _revogacoes_socket(usuarios):
+    """Antes do COMMIT: impressão nova e a da geração anterior de cada revogado."""
+    from session_security import impressao_sessao, impressao_credencial_sessao
+    return [
+        (usuario.id_usuario, impressao_sessao(usuario), impressao_credencial_sessao(
+            usuario.id_usuario, usuario.senha_hash, usuario.geracao_autorizacao - 1,
+        )) for usuario in usuarios
+    ]
+
+
+def _desconectar_revogados(revogacoes, operacao: str) -> None:
+    # Fechar conexões locais é best-effort após COMMIT. Geração, autorização
+    # pelo banco e salas continuam protegendo os demais processos/conexões.
+    try:
+        from realtime import revogar_conexoes_usuario
+        for id_usuario, impressao_atual, impressao_anterior in revogacoes:
+            revogar_conexoes_usuario(
+                id_usuario, impressao_atual, impressao_revogada=impressao_anterior,
+            )
+    except Exception as erro:
+        current_app.logger.warning("Revogação Socket.IO após %s indisponível (%s).", operacao, type(erro).__name__)
+
+
 def _parse_decimal_opcional(valor: str):
     """Aceita string vazia / pt-BR / en-US para faturamento_base_mensal (opcional)."""
     if not valor or not valor.strip():
@@ -376,6 +400,13 @@ def empresa_nova():
             flash("Não foi possível salvar: CNPJ ou e-mail já cadastrados (ou dados inválidos).", "danger")
             return redirect(url_for("admin.empresa_nova"))
 
+        if nova_emp.status_conta == STATUS_CONTA_SEM_ACESSO:
+            # NEXO-AJ-06.1: empresa CANCELADA não recebe token de ativação.
+            flash(f"Empresa '{nova_emp.razao_social}' cadastrada como CANCELADA.", "success")
+            flash("O e-mail de ativação não foi enviado: os usuários só poderão ativar o acesso depois "
+                  "que a empresa for reativada, solicitando um link pela recuperação de senha.", "info")
+            return redirect(url_for("admin.empresas"))
+
         # Insert confirmado → e-mail de boas-vindas com LINK SEGURO de definição
         # de senha (token de 15 min), DIRETO pelo Flask (sem webhook externo).
         # Envio assíncrono e fail-safe; nunca derruba o cadastro.
@@ -429,10 +460,26 @@ def empresa_editar(id_empresa):
             empresa.email_contato = form["email_contato"].strip()
             empresa.telefone_contato = (form.get("telefone_contato") or "").strip() or None
             empresa.data_contratacao = data_contratacao
+            # NEXO-AJ-06.1: campo ausente preserva o status; valor fora do domínio
+            # ou formulário exibido antes de outra troca de status não grava nada.
+            novo_status = form.get("status_conta", empresa.status_conta)
+            exibido = form.get("status_conta_exibido")
+            if novo_status not in STATUS_CONTA:
+                db.session.rollback()
+                flash("Status da conta inválido.", "danger")
+                return redirect(url_for("admin.empresa_editar", id_empresa=id_empresa))
+            if exibido is not None and exibido != empresa.status_conta and novo_status != empresa.status_conta:
+                db.session.rollback()
+                flash("O status desta empresa foi alterado por outra operação. Recarregue a página e confira antes de salvar.", "warning")
+                return redirect(url_for("admin.empresa_editar", id_empresa=id_empresa))
             empresa.faturamento_base_mensal = _parse_decimal_opcional(form.get("faturamento_base_mensal", ""))
-            empresa.status_conta = form.get("status_conta", "ATIVA")
+            # Entrar ou sair de CANCELADA revoga as sessões dos CLIENTE na mesma
+            # transação; as conexões locais só caem depois do COMMIT.
+            revogados = aplicar_status_conta(db.session, empresa, novo_status)
             empresa.data_atualizacao = datetime.now(timezone.utc)
+            revogacoes = _revogacoes_socket(revogados)
             db.session.commit()
+            _desconectar_revogados(revogacoes, "troca de status")
             flash("Empresa atualizada com sucesso.", "success")
             return redirect(url_for("admin.empresas"))
 
@@ -455,12 +502,7 @@ def empresa_excluir(id_empresa):
             flash("Empresa não encontrada (ou já está na lixeira).", "danger")
             return redirect(url_for("admin.empresas"))
         nome_emp = resultado.empresa.nome_fantasia or resultado.empresa.razao_social
-        from session_security import impressao_sessao, impressao_credencial_sessao
-        revogacoes = [
-            (usuario.id_usuario, impressao_sessao(usuario), impressao_credencial_sessao(
-                usuario.id_usuario, usuario.senha_hash, usuario.geracao_autorizacao - 1,
-            )) for usuario in resultado.usuarios
-        ]
+        revogacoes = _revogacoes_socket(resultado.usuarios)
         db.session.commit()
     except SQLAlchemyError as erro:
         db.session.rollback()
@@ -468,17 +510,7 @@ def empresa_excluir(id_empresa):
         flash("Não foi possível mover a empresa para a lixeira. Tente novamente.", "danger")
         return redirect(url_for("admin.empresas"))
 
-    # Fechar conexões locais é best-effort após COMMIT. Geração, autorização
-    # pelo banco e salas continuam protegendo os demais processos/conexões.
-    try:
-        from realtime import revogar_conexoes_usuario
-        for id_usuario, impressao_atual, impressao_anterior in revogacoes:
-            revogar_conexoes_usuario(
-                id_usuario, impressao_atual, impressao_revogada=impressao_anterior,
-            )
-    except Exception as erro:
-        current_app.logger.warning("Revogação Socket.IO após exclusão indisponível (%s).", type(erro).__name__)
-
+    _desconectar_revogados(revogacoes, "exclusão")
     flash(f"Cliente '{nome_emp}' movido para a lixeira com sucesso.", "success")
     return redirect(url_for("admin.empresas"))
 
@@ -507,6 +539,7 @@ def empresa_restaurar(id_empresa):
             return redirect(url_for("admin.lixeira"))
         nome_emp = resultado.empresa.nome_fantasia or resultado.empresa.razao_social
         contas_bloqueadas = resultado.contas_bloqueadas
+        continua_cancelada = resultado.empresa.status_conta == STATUS_CONTA_SEM_ACESSO
         db.session.commit()
     except SQLAlchemyError as erro:
         db.session.rollback()
@@ -515,6 +548,8 @@ def empresa_restaurar(id_empresa):
         return redirect(url_for("admin.lixeira"))
 
     flash(f"Cliente '{nome_emp}' restaurado com sucesso. Usuários autorizados devem realizar novo login.", "success")
+    if continua_cancelada:
+        flash("A empresa continua CANCELADA: os usuários seguem sem acesso até a reativação.", "warning")
     if contas_bloqueadas:
         flash("Contas bloqueadas permaneceram bloqueadas e exigem revisão administrativa antes de qualquer reativação.", "warning")
     return redirect(url_for("admin.lixeira"))

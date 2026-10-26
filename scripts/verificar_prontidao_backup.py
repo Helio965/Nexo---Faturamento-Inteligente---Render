@@ -9,7 +9,6 @@ import hashlib
 import os
 from pathlib import Path
 import re
-import shutil
 import subprocess
 import sys
 
@@ -36,11 +35,27 @@ def child_environment():
     return env
 
 
-def run_local_command(arguments):
+def locate_tool(name):
+    """Procura só em diretórios absolutos do PATH; no Windows, apenas ``.exe``.
+
+    ``shutil.which`` no Windows consulta antes o diretório atual e aceita
+    .bat/.cmd, que repassariam os argumentos ao cmd.exe. ``os.path.isabs``
+    (Python 3.12) aceita ``/dir`` sem unidade no Windows; ``Path`` não.
+    """
+    filename = name + ".exe" if os.name == "nt" else name
+    for directory in os.environ.get("PATH", "").split(os.pathsep):
+        if Path(directory).is_absolute():
+            candidate = os.path.join(directory, filename)
+            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                return candidate
+    return None
+
+
+def run_local_command(arguments, stdin=subprocess.DEVNULL):
     """Executa apenas comandos construídos internamente; nunca mostra saída bruta."""
     try:
         result = subprocess.run(
-            arguments, shell=False, check=False, stdin=subprocess.DEVNULL,
+            arguments, shell=False, check=False, stdin=stdin,
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             timeout=TIMEOUT_SECONDS, env=child_environment(),
         )
@@ -104,7 +119,7 @@ def cli(argv=None):
     executables = {}
     unavailable = False
     for name in TOOLS:
-        executable = shutil.which(name)
+        executable = locate_tool(name)
         executables[name] = executable
         if executable is None:
             print(name + ": indisponível no PATH.")
@@ -115,6 +130,7 @@ def cli(argv=None):
             error = run_local_command([executable, "--version"])
             if error:
                 print(name + ": " + error + ".")
+                executables[name] = None
                 unavailable = True
             else:
                 print(name + ": disponível (--version concluído).")
@@ -130,7 +146,14 @@ def cli(argv=None):
                 print("Catálogo: pg_restore indisponível; inspeção pendente.")
                 return 3
             else:
-                error = run_local_command([executables["pg_restore"], "--list", "--", str(path)])
+                # Reabre o caminho já resolvido e entrega o conteúdo pela entrada
+                # padrão, pois no Windows o argv passa pela página ANSI e pode
+                # indicar outro arquivo. Troca concorrente após o hash não é detectada.
+                try:
+                    with path.open("rb", buffering=0) as archive:
+                        error = run_local_command([executables["pg_restore"], "--list"], stdin=archive)
+                except OSError:
+                    error = "não foi possível executar"
                 if error:
                     print("Catálogo: " + error + "; backup não validado.")
                     return 1

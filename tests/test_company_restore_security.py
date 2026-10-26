@@ -440,8 +440,13 @@ class CompanyRestoreSecurityTests(token_cases._TokenCase):
                 self._restore()
                 self.assertEqual(self._company()[1], status)
                 self.assertEqual(self._users()[self.ids["active"]]["active"], before[self.ids["active"]]["active"])
-                # Login já não condicionava autorização ao status comercial.
-                self.assertEqual(self._login_client().get("/_security/protected").status_code, 200)
+                # NEXO-AJ-06.1: a restauração preserva o status comercial, e só
+                # CANCELADA nega o CLIENTE; SUSPENSA mantém o acesso atual.
+                if status == "CANCELADA":
+                    client, _ = self._attempt_login()
+                    self._assert_private_denied(client)
+                else:
+                    self.assertEqual(self._login_client().get("/_security/protected").status_code, 200)
 
     def test_trash_interface_keeps_protected_restore_and_permanent_delete_forms(self):
         self._trash()

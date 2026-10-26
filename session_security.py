@@ -13,6 +13,17 @@ from models import Empresa, Usuario
 
 CHAVE_CREDENCIAL = "credential_fingerprint"
 _CONTEXTO_SESSAO = b"nexo-session-credential-v1\0"
+# NEXO-AJ-06.1: CANCELADA bloqueia o CLIENTE como a lixeira. SUSPENSA mantém o
+# acesso atual; suas restrições próprias pertencem à NEXO-AJ-05.x.
+STATUS_CONTA_SEM_ACESSO = "CANCELADA"
+
+
+def condicoes_empresa_acessivel():
+    """Critério único da empresa que libera CLIENTE: fora da lixeira e não cancelada."""
+    return (
+        Empresa.deletado_em.is_(None),
+        Empresa.status_conta != STATUS_CONTA_SEM_ACESSO,
+    )
 
 
 def _id_valido(valor):
@@ -31,7 +42,7 @@ def id_sessao(dados=None):
 
 
 def usuario_pode_acessar(usuario, *, consulta=None) -> bool:
-    """Estado administrativo e bloqueio da empresa, sempre lido do banco.
+    """Estado administrativo, lixeira e cancelamento da empresa, sempre lidos do banco.
 
     Não usa o relacionamento ORM potencialmente desatualizado nem outra
     conexão: notificações/varreduras passam sua própria Session. O SELECT da
@@ -53,7 +64,7 @@ def usuario_pode_acessar(usuario, *, consulta=None) -> bool:
     with consulta.no_autoflush:
         return consulta.scalar(select(Empresa.id_empresa).where(
             Empresa.id_empresa == usuario.id_empresa,
-            Empresa.deletado_em.is_(None),
+            *condicoes_empresa_acessivel(),
         )) is not None
 
 

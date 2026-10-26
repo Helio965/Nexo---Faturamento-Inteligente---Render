@@ -1,4 +1,5 @@
 """NEXO-SEC-004: lixeira transacional sem alterar a condição administrativa.
+NEXO-AJ-06.1: o cancelamento comercial revoga sessões pelo mesmo protocolo.
 
 Os helpers não confirmam nem revertem a transação. O chamador deve fazer
 commit/rollback e só depois notificar ou desconectar conexões locais.
@@ -10,6 +11,10 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from models import Empresa, Usuario
+from session_security import STATUS_CONTA_SEM_ACESSO
+
+# Mesmo domínio do CHECK de empresa.status_conta (models.py).
+STATUS_CONTA = ("ATIVA", "SUSPENSA", STATUS_CONTA_SEM_ACESSO)
 
 
 @dataclass(frozen=True)
@@ -70,3 +75,23 @@ def restaurar_empresa(sessao, id_empresa: int) -> ResultadoLixeira | None:
     empresa.deletado_em = None
     empresa.data_atualizacao = datetime.now(timezone.utc)
     return ResultadoLixeira(empresa, usuarios)
+
+
+def aplicar_status_conta(sessao, empresa: Empresa, novo_status: str) -> tuple[Usuario, ...]:
+    """Troca o status comercial; entrar ou sair de CANCELADA revoga as sessões dos CLIENTE.
+
+    A empresa já deve estar bloqueada por bloquear_empresa. Como na lixeira,
+    os CLIENTE são bloqueados depois da empresa e a geração sobe na mesma
+    transação: rollback não revoga nada e emissões anteriores terminam antes.
+    Revogar também ao sair garante novo login após a reativação, mesmo que o
+    cancelamento tenha sido gravado fora desta função (script ou processo).
+    """
+    revogados = ()
+    if (novo_status == STATUS_CONTA_SEM_ACESSO) != (empresa.status_conta == STATUS_CONTA_SEM_ACESSO):
+        revogados = bloquear_usuarios_empresa(sessao, empresa.id_empresa)
+        agora = datetime.now(timezone.utc)
+        for usuario in revogados:
+            usuario.geracao_autorizacao += 1
+            usuario.data_atualizacao = agora
+    empresa.status_conta = novo_status
+    return revogados

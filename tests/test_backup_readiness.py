@@ -6,6 +6,7 @@ import importlib.util
 import io
 import os
 from pathlib import Path
+import stat
 import subprocess
 import tempfile
 from types import SimpleNamespace
@@ -38,7 +39,7 @@ class BackupReadinessTests(unittest.TestCase):
         stderr = io.StringIO()
         if command_result is None:
             command_result = SimpleNamespace(returncode=0)
-        with patch.object(readiness.shutil, "which", side_effect=lambda name: name if found else None), \
+        with patch.object(readiness, "locate_tool", side_effect=lambda name: name if found else None), \
                 patch.object(readiness.subprocess, "run", return_value=command_result) as run, \
                 contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
             try:
@@ -125,7 +126,15 @@ class BackupReadinessTests(unittest.TestCase):
             code, output, run = self.invoke(["--backup", str(self.backup), "--list"])
         self.assertEqual(code, 0)
         call = run.call_args_list[-1]
-        self.assertEqual(call.args[0], ["pg_restore", "--list", "--", str(self.backup.resolve())])
+        # O caminho não vai no argv: o Python reabre o caminho já resolvido após o hash e
+        # entrega o conteúdo pelo stdin; uma troca nesse intervalo não é detectada.
+        self.assertEqual(call.args[0], ["pg_restore", "--list"])
+        archive = call.kwargs["stdin"]
+        self.assertEqual((archive.name, archive.mode, archive.closed), (str(self.backup.resolve()), "rb", True))
+        self.assertIs(call.kwargs["shell"], False)
+        self.assertEqual(call.kwargs["stdout"], subprocess.DEVNULL)
+        self.assertEqual(call.kwargs["stderr"], subprocess.DEVNULL)
+        self.assertEqual(call.kwargs["timeout"], 15)
         self.assertEqual(call.kwargs["env"]["PGPASSFILE"], os.devnull)
         self.assertEqual(call.kwargs["env"]["PGSERVICEFILE"], os.devnull)
         self.assertNotIn(secret, str(call.kwargs["env"]))
@@ -136,13 +145,100 @@ class BackupReadinessTests(unittest.TestCase):
     def test_truncated_archive_failing_pg_restore_is_not_validated(self):
         stdout = io.StringIO()
         responses = [SimpleNamespace(returncode=0)] * 3 + [SimpleNamespace(returncode=1)]
-        with patch.object(readiness.shutil, "which", side_effect=lambda name: name), \
+        with patch.object(readiness, "locate_tool", side_effect=lambda name: name), \
                 patch.object(readiness.subprocess, "run", side_effect=responses), \
                 contextlib.redirect_stdout(stdout):
             code = readiness.cli(["--backup", str(self.backup), "--list"])
         self.assertEqual(code, 1)
         self.assertIn("backup não validado", stdout.getvalue())
         self.assertNotIn("--list concluído", stdout.getvalue())
+
+    def test_failed_version_check_marks_tool_unavailable_and_skips_listing(self):
+        stdout = io.StringIO()
+        responses = [SimpleNamespace(returncode=0), SimpleNamespace(returncode=1), SimpleNamespace(returncode=0)]
+        with patch.object(readiness, "locate_tool", side_effect=lambda name: name), \
+                patch.object(readiness.subprocess, "run", side_effect=responses) as run, \
+                contextlib.redirect_stdout(stdout):
+            code = readiness.cli(["--backup", str(self.backup), "--list"])
+        self.assertEqual(code, 3)
+        self.assertEqual(run.call_count, 3)
+        self.assertIn("inspeção pendente", stdout.getvalue())
+        self.assertNotIn("backup não validado", stdout.getvalue())
+
+    def test_backup_unavailable_when_reopened_for_listing_is_not_validated(self):
+        inspect_backup = readiness.inspect_backup
+
+        def inspect_then_remove(filename, expected_sha256):
+            path = inspect_backup(filename, expected_sha256)
+            self.backup.unlink()
+            return path
+
+        with patch.object(readiness, "inspect_backup", side_effect=inspect_then_remove):
+            code, output, run = self.invoke(["--backup", str(self.backup), "--list"])
+        self.assertEqual(code, 1)
+        self.assertIn("Catálogo: não foi possível executar; backup não validado.", output)
+        self.assertNotIn(str(self.backup), output)
+        self.assertEqual(run.call_count, 3)
+
+    def test_locate_tool_ignores_current_directory_relative_entries_and_wrappers(self):
+        suffix = ".exe" if os.name == "nt" else ""
+        trusted = self.directory / "bin"
+        planted = self.directory / "trabalho"
+        trusted.mkdir()
+        planted.mkdir()
+        tool = trusted / ("pg_restore" + suffix)
+        for executable in (tool, planted / ("pg_restore" + suffix)):
+            executable.write_bytes(b"")
+            executable.chmod(0o700)
+        with contextlib.chdir(planted):
+            # Entrada relativa que, a partir de planted, aponta para o próprio planted.
+            relative = os.path.join(os.pardir, "trabalho")
+            with patch.dict(os.environ, {"PATH": os.pathsep.join([".", "", relative, str(trusted)])}):
+                self.assertEqual(readiness.locate_tool("pg_restore"), str(tool))
+            with patch.dict(os.environ, {"PATH": os.pathsep.join([".", ""])}):
+                self.assertIsNone(readiness.locate_tool("pg_restore"))
+        # Entrada relativa simples, sem "." inicial: a partir de self.directory, aponta para planted.
+        with contextlib.chdir(self.directory), \
+                patch.dict(os.environ, {"PATH": os.pathsep.join([planted.name, str(trusted)])}):
+            self.assertEqual(readiness.locate_tool("pg_restore"), str(tool))
+        if os.name == "nt":
+            wrappers = self.directory / "wrappers"
+            wrappers.mkdir()
+            for extension in (".bat", ".cmd", ".com"):
+                (wrappers / ("pg_restore" + extension)).write_bytes(b"")
+            with patch.dict(os.environ, {"PATH": str(wrappers)}):
+                self.assertIsNone(readiness.locate_tool("pg_restore"))
+            # Sem unidade, "\dir" depende da unidade atual; os.path.isabs (3.12) o aceitaria.
+            with contextlib.chdir(self.directory), \
+                    patch.dict(os.environ, {"PATH": os.path.splitdrive(str(trusted))[1]}):
+                self.assertIsNone(readiness.locate_tool("pg_restore"))
+
+    def test_locate_tool_requires_an_executable_regular_file(self):
+        filename = "pg_restore" + (".exe" if os.name == "nt" else "")
+        decoy = self.directory / "decoy"
+        trusted = self.directory / "bin"
+        (decoy / filename).mkdir(parents=True)
+        trusted.mkdir()
+        tool = trusted / filename
+        tool.write_bytes(b"")
+        tool.chmod(0o700)
+        with patch.dict(os.environ, {"PATH": os.pathsep.join([str(decoy), str(trusted)])}):
+            self.assertEqual(readiness.locate_tool("pg_restore"), str(tool))
+            # Bits de execução dependem do sistema de arquivos: vale o que os.access informar.
+            with patch.object(readiness.os, "access", return_value=False) as access:
+                self.assertIsNone(readiness.locate_tool("pg_restore"))
+        access.assert_called_once_with(str(tool), os.X_OK)
+
+    def test_read_only_backup_is_hashed_and_listed_without_write_access(self):
+        self.backup.chmod(stat.S_IREAD)
+        self.addCleanup(self.backup.chmod, stat.S_IREAD | stat.S_IWRITE)
+        digest = hashlib.sha256(self.content).hexdigest()
+        code, output, run = self.invoke(["--backup", str(self.backup), "--sha256", digest, "--list"])
+        self.assertEqual(code, 0)
+        self.assertIn("coincide com a referência", output)
+        self.assertIn("metadados não exibidos", output)
+        self.assertEqual(run.call_count, 4)
+        self.assertEqual(self.backup.read_bytes(), self.content)
 
     def test_missing_tools_is_reported_with_meaningful_exit_status(self):
         code, output, run = self.invoke([], found=False)
@@ -161,7 +257,7 @@ class BackupReadinessTests(unittest.TestCase):
         for error in (subprocess.TimeoutExpired(secret, 15), OSError(secret)):
             with self.subTest(error=type(error).__name__):
                 stdout = io.StringIO()
-                with patch.object(readiness.shutil, "which", side_effect=lambda name: name), \
+                with patch.object(readiness, "locate_tool", side_effect=lambda name: name), \
                         patch.object(readiness.subprocess, "run", side_effect=error), \
                         contextlib.redirect_stdout(stdout):
                     self.assertEqual(readiness.cli([]), 3)

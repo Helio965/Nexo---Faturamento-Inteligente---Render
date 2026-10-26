@@ -265,6 +265,8 @@ Garantias: limite de 30 mensagens/minuto por usuário; respostas JSON para CSRF 
 
 Observação de auditoria mantida: no Render, clientes de empresas `CANCELADA` continuam podendo entrar no portal; o NexoBot segue as mesmas permissões das páginas do cliente.
 
+**Atualização (26/10/2026, NEXO-AJ-06.1):** a observação acima descreve o código anterior. Com a AJ-06.1, o CLIENTE de empresa `CANCELADA` é negado no login, nas sessões já abertas, nas rotas do portal, na API do NexoBot e no Socket.IO (`session_security.py`); `SUSPENSA` mantém o acesso. Em produção isso só vale depois de a versão ser publicada com o banco na revisão `e4c004a26b01`.
+
 ## 11. Testes
 
 ```bash
