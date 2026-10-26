@@ -23,7 +23,7 @@ A auditoria anterior registra cópia privada dos arquivos do projeto. Ela não c
 
 ## 2. O que precisa ser protegido
 
-Um dump lógico completo e bem-sucedido deve preservar todas as tabelas reais do banco, schema, dados, constraints, índices e estado das sequências. As 14 tabelas ORM atuais são:
+Um dump lógico completo e bem-sucedido deve preservar todas as tabelas reais do banco, schema, dados, constraints, índices e estado das sequências. As 19 tabelas ORM atuais são (14 anteriores e 5 da gestão contratual, revisão `81287c74387a`):
 
 | Tabelas | Dados e vínculos que devem sobreviver |
 |---|---|
@@ -35,6 +35,10 @@ Um dump lógico completo e bem-sucedido deve preservar todas as tabelas reais do
 | `chamado_suporte`, `mensagem_suporte`, `notificacao` | Empresa, usuário do chamado, remetentes, histórico, destinatários e leitura. |
 | `guia_topico` | Conteúdo e referência de mídia da base de conhecimento. |
 | `arquivo_armazenado` | Chave, **bytes em `conteudo` (BYTEA)**, MIME, tamanho e data de criação. |
+| `regime_contratual` | Empresas com as regras contratuais ativas (chave natural `id_empresa`, sem sequência), data e administrador da ativação. |
+| `contrato`, `cobertura_paga` | Contratos com valor contratado (snapshot), vigência, situação e prazos da suspensão em `timestamptz`; períodos efetivamente pagos com referência da confirmação e revogação. FKs compostas garantem cobertura e contrato da mesma empresa; índice único parcial impede dois contratos vigentes. |
+| `evento_contratual` | Trilha de auditoria (somente inclusão) de contratação, renovação, troca de plano, suspensão, prorrogação, reativação, cancelamento, coberturas e regras. |
+| `historico_preco_plano` | Cada alteração de `plano.valor_mensal` feita pela atualização auditada do catálogo. |
 
 Incluir também `alembic_version` e quaisquer objetos adicionais encontrados no inventário autorizado do banco. Não limitar o backup a essa lista de nomes nem usar somente `--data-only`/`--schema-only`.
 
@@ -234,7 +238,7 @@ Executar testes do comportamento afetado e `python -B -m unittest discover -s te
 
 ## 10. Estratégia B — recuperação do banco
 
-Um revert Git muda os arquivos, não os dados nem o schema que uma migração já alterou. Alembic registra revisões executadas; retirar um arquivo de migração ou voltar código não desfaz a execução. `downgrade` pode descartar informação irrecuperável: a revisão `b7c4e2a9f031` remove `arquivo_armazenado` (todos os bytes dos documentos), a `d61b5e68082c` remove `guia_topico`, a `e4c004a26b01` remove `geracao_autorizacao`, perdendo o histórico de revogação sem reativar as contas que bloqueou, outras removem colunas e a inicial remove tabelas. No SQLite, downgrades que recriam tabelas referenciadas falham com dados e podem deixar o banco numa revisão intermediária. Não usar downgrade como mecanismo genérico de rollback.
+Um revert Git muda os arquivos, não os dados nem o schema que uma migração já alterou. Alembic registra revisões executadas; retirar um arquivo de migração ou voltar código não desfaz a execução. `downgrade` pode descartar informação irrecuperável: a revisão `b7c4e2a9f031` remove `arquivo_armazenado` (todos os bytes dos documentos), a `81287c74387a` remove as tabelas da gestão contratual (o downgrade dela se recusa a rodar se houver qualquer linha contratual), a `d61b5e68082c` remove `guia_topico`, a `e4c004a26b01` remove `geracao_autorizacao`, perdendo o histórico de revogação sem reativar as contas que bloqueou, outras removem colunas e a inicial remove tabelas. No SQLite, downgrades que recriam tabelas referenciadas falham com dados e podem deixar o banco numa revisão intermediária. Não usar downgrade como mecanismo genérico de rollback.
 
 Antes de cada mudança estrutural futura, o PR deve conter plano específico:
 
