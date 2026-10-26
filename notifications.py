@@ -21,7 +21,7 @@ from sqlalchemy.orm import Session
 
 from extensions import db, socketio
 from models import Empresa, Notificacao, Usuario
-from session_security import impressao_sessao, usuario_pode_acessar
+from session_security import condicoes_empresa_acessivel, impressao_sessao, usuario_pode_acessar
 from realtime import sala_do_usuario
 
 logger = logging.getLogger(__name__)
@@ -166,7 +166,7 @@ def notificar_admins(texto: str, link_destino: str | None = None) -> int:
 
 
 def notificar_clientes_empresa(id_empresa: int, texto: str, link_destino: str | None = None) -> int:
-    """Notifica os usuários CLIENTE ativos vinculados a uma empresa."""
+    """Notifica os CLIENTE ativos de empresa fora da lixeira e não cancelada."""
     clientes = db.session.execute(
         select(Usuario.id_usuario).where(
             Usuario.role == "CLIENTE",
@@ -174,7 +174,7 @@ def notificar_clientes_empresa(id_empresa: int, texto: str, link_destino: str | 
             Usuario.ativo.is_(True),
             select(Empresa.id_empresa).where(
                 Empresa.id_empresa == Usuario.id_empresa,
-                Empresa.deletado_em.is_(None),
+                *condicoes_empresa_acessivel(),
             ).exists(),
         )
     ).scalars().all()

@@ -16,9 +16,9 @@ from extensions import db, limiter
 from models import Empresa, Usuario
 from emails import email_recuperacao_senha, email_boas_vindas
 from session_security import (
-    CHAVE_CREDENCIAL, impressao_sessao, impressao_credencial_sessao,
-    mesma_impressao, registrar_sessao, usuario_pode_acessar,
-    vincular_geracao_autorizacao,
+    CHAVE_CREDENCIAL, condicoes_empresa_acessivel, impressao_sessao,
+    impressao_credencial_sessao, mesma_impressao, registrar_sessao,
+    usuario_pode_acessar, vincular_geracao_autorizacao,
 )
 
 logger = logging.getLogger(__name__)
@@ -187,7 +187,7 @@ def _atualizar_credencial(estado: _CredencialEsperada, nova_senha: str, *, renov
             and_(Usuario.role == "ADMIN", Usuario.id_empresa.is_(None)),
             and_(Usuario.role == "CLIENTE", select(Empresa.id_empresa).where(
                 Empresa.id_empresa == Usuario.id_empresa,
-                Empresa.deletado_em.is_(None),
+                *condicoes_empresa_acessivel(),
             ).exists()),
         ),
         Usuario.role == estado.role,

@@ -132,21 +132,23 @@ REGISTROS = (
         titulo="O que significa conta ativa, suspensa ou cancelada?",
         categoria="Empresa e cadastro",
         resumo=(
-            "ATIVA é a situação normal. SUSPENSA e CANCELADA são definidas pela equipe NEXO; nesses dois "
-            "estados a equipe não abre novas análises para a empresa, mas o histórico publicado continua "
-            "acessível."
+            "ATIVA é a situação normal. SUSPENSA e CANCELADA são definidas pela equipe NEXO. Com a conta "
+            "SUSPENSA a equipe não abre novas análises, mas o histórico publicado continua acessível. Com a "
+            "conta CANCELADA os usuários da empresa não conseguem mais entrar no portal."
         ),
         explicacao=(
             "O status aparece na Visão Geral, ao lado do plano. Com a conta suspensa, o portal exibe um aviso "
             "no topo da Visão Geral. Para regularizar a situação, fale com a equipe pelo Suporte. O status da "
-            "conta pertence à empresa. O acesso de cada usuário tem um indicador próprio (ativo/inativo), "
-            "independente desse status, que bloqueia o login quando inativo; nenhuma tela do portal altera esse "
-            "indicador."
+            "conta pertence à empresa. Quando a conta é cancelada, as sessões abertas são encerradas e o login "
+            "é recusado até a equipe reativar a conta; depois da reativação é preciso entrar de novo. Além do "
+            "status da empresa, cada usuário tem um indicador próprio (ativo/inativo), que também bloqueia o "
+            "login quando inativo; nenhuma tela do portal altera esse indicador."
         ),
         detalhes=(
             "Regra implementada: a abertura de uma nova análise exige empresa ATIVA. Uma análise que já estava "
             "aberta antes da suspensão continua aceitando arquivos enquanto estiver em Aguardando relatório ou "
-            "Relatório recebido."
+            "Relatório recebido. Com a conta CANCELADA, login, sessões, PDFs, notificações e conexões em tempo "
+            "real dos usuários da empresa ficam bloqueados."
         ),
         perguntas=(
             "O que é conta suspensa?", "O que é conta cancelada?", "Quais são os status da conta?",

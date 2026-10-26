@@ -100,6 +100,8 @@
                         <option value="SUSPENSA" {{ 'selected' if sc == 'SUSPENSA' }}>SUSPENSA</option>
                         <option value="CANCELADA" {{ 'selected' if sc == 'CANCELADA' }}>CANCELADA</option>
                     </select>
+                    {# NEXO-AJ-06.1: status exibido; o servidor recusa salvar sobre uma troca feita por outra operação. #}
+                    {% if ed %}<input type="hidden" name="status_conta_exibido" value="{{ sc }}">{% endif %}
                 </div>
             </div>
         </div>

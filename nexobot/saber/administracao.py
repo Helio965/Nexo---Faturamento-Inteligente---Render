@@ -190,8 +190,9 @@ REGISTROS = (
         categoria="Equipe NEXO",
         resumo=(
             "Na edição da empresa, a equipe define o status (Ativa, Suspensa ou Cancelada). Apenas empresas "
-            "Ativas recebem novas análises. A lixeira é um controle separado: suspender ou cancelar a conta não "
-            "move a empresa para a lixeira, e vice-versa."
+            "Ativas recebem novas análises. Cancelar a conta encerra as sessões e bloqueia o login dos "
+            "usuários da empresa até a reativação. A lixeira é um controle separado: suspender ou cancelar a "
+            "conta não move a empresa para a lixeira, e vice-versa."
         ),
         perguntas=(
             "Quem muda o status da minha conta?", "Como a equipe suspende uma conta?", "Como reativar a conta?",
