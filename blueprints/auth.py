@@ -5,16 +5,17 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from urllib.parse import urlparse
 
-from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app, has_request_context
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session, current_app, has_request_context, make_response
 from flask_login import login_user, logout_user, login_required, current_user
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadData
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
-from werkzeug.security import generate_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from extensions import db, limiter
 from models import Empresa, Usuario
 from emails import email_recuperacao_senha, email_boas_vindas
+from contract_policy import obter_situacao_contratual
 from session_security import (
     CHAVE_CREDENCIAL, condicoes_empresa_acessivel, impressao_sessao,
     impressao_credencial_sessao, mesma_impressao, registrar_sessao,
@@ -234,6 +235,39 @@ def _atualizar_credencial(estado: _CredencialEsperada, nova_senha: str, *, renov
     return True
 
 
+_HASH_FICTICIO = None
+
+
+def _conferir_senha_ficticia(senha: str) -> None:
+    """E-mail inexistente custa o mesmo hash de uma conta real (anti-enumeração por tempo)."""
+    global _HASH_FICTICIO
+    if _HASH_FICTICIO is None:
+        _HASH_FICTICIO = generate_password_hash("nexo-login-sem-conta")
+    check_password_hash(_HASH_FICTICIO, senha)
+
+
+def _conta_encerrada(usuario) -> bool:
+    """Senha correta de CLIENTE ativo cuja empresa perdeu o vínculo contratual.
+
+    Só depois de a senha ser validada; usuário inativo e empresa na lixeira
+    continuam com a mensagem genérica. Falha de banco falha fechado.
+    """
+    if not usuario.ativo or usuario.role != "CLIENTE" or usuario.id_empresa is None:
+        return False
+    try:
+        with db.session.no_autoflush:
+            empresa = db.session.scalar(select(Empresa).where(
+                Empresa.id_empresa == usuario.id_empresa,
+            ).execution_options(populate_existing=True))
+        return empresa is not None and obter_situacao_contratual(
+            empresa, carregar_coberturas=False,
+        ).conta_encerrada
+    except SQLAlchemyError as erro:
+        db.session.rollback()
+        logger.warning("Situação contratual indisponível no login (%s).", type(erro).__name__)
+        return False
+
+
 def _validar_nova_senha(nova: str, confirma: str):
     """Regras mínimas de senha. Retorna mensagem de erro ou None se OK."""
     if len(nova) < 8:
@@ -270,6 +304,12 @@ def login():
             # a sessão; nunca adotar um hash posterior por refresh do ORM.
             impressao_login = impressao_sessao(usuario)
             if not usuario_pode_acessar(usuario):
+                if _conta_encerrada(usuario):
+                    # Página própria, sem login_user, flash ou redirect: nenhuma
+                    # sessão autenticada nem dado do portal é entregue.
+                    resposta = make_response(render_template("auth/conta_encerrada.html"))
+                    resposta.headers["Cache-Control"] = "no-store"
+                    return resposta
                 flash("Esta conta está desativada. Contacte o administrador.", "danger")
                 return render_template("auth/login.html")
 
@@ -290,6 +330,8 @@ def login():
                 return redirect(url_for("admin.dashboard"))
             return redirect(url_for("cliente.dashboard"))
         
+        if usuario is None:
+            _conferir_senha_ficticia(senha)
         # Mensagem genérica por motivos de segurança (não revelar se o erro foi o e-mail ou a senha)
         flash("E-mail ou senha incorretos.", "danger")
 
