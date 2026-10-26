@@ -240,6 +240,7 @@ Os demais prompts ainda não têm registro de execução.
 | 26/10/2026 | 6 | Identidade visual com o cubo transparente executada por pedido direto do proprietário, fora da sequência de prompts; corresponde ao escopo da `NEXO-AJ-01` (usa as artes novas em PNG transparente, não o `nexo_cubo_centralizado.png` citado no mapa). A linha da `NEXO-AJ-01` no índice não foi alterada: a aprovação continua sendo humana |
 | 26/10/2026 | 7 | Merge do PR #26 pelo proprietário (`6abc96c`, CI aprovada na `main`): situação da identidade visual atualizada. A publicação em produção continua não confirmada |
 | 26/10/2026 | 8 | Gestão contratual implementada por pedido direto do proprietário: linhas da `NEXO-AJ-02` (parcial), `03.1` a `03.4`, `05.1` a `05.5`, `06.2` e `06.3` passaram a "EXECUTADO / AGUARDANDO REVISÃO", com registro de execução e linha na situação por ambiente. As `04.x` (avisos de renovação) e a `06.4` continuam não executadas |
+| 26/10/2026 | 9 | Merge do PR #27 (gestão contratual) pelo proprietário (`dcaa896`, 16:20 UTC), antes de a CI terminar no último commit; o relatório para auditoria foi concluído depois, em PR de documentação. CI da `main`: job PostgreSQL verde; suíte e navegador em execução na redação. A publicação em produção continua não confirmada (o Auto-Deploy pode ter disparado) e as migrações `e4c004a26b01` e `81287c74387a` seguem não aplicadas por mim |
 
 **Buscas pelo mapa feitas na versão 1** (preservadas da primeira entrega):
 
