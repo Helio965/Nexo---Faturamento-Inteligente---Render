@@ -92,6 +92,8 @@ Para atualizar a aplicação (roteiro revisado na Etapa 0.2A; cada passo depende
 
 Critérios, riscos e pendências: [00_02 — Proteção do banco e preparação das migrações](REESTRUTURACAO_COMERCIAL/00_02_PROTECAO_BANCO_MIGRACOES.md).
 
+**Migração pendente `b7c4e2a9f031` → `e4c004a26b01` (incidente HTTP 500 do login, 25/10/2026):** o procedimento de referência é o [RELATORIO_CORRECAO_MIGRACAO_SUPABASE_NEXO.md](../RELATORIO_CORRECAO_MIGRACAO_SUPABASE_NEXO.md), seções 9 e 10 (autorização, sonda, backup verificado, variáveis só da sessão, proibição de `stamp`/`downgrade`). Ele é posterior a este roteiro genérico e prevalece sobre ele nessa migração, inclusive quanto à necessidade de suspender o tráfego.
+
 ## 6. Diagnóstico de Erros Comuns
 
 | Erro | Causa Provável | Solução |

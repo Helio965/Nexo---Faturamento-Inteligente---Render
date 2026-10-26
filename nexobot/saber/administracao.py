@@ -199,7 +199,7 @@ REGISTROS = (
         ),
         termos="controle status contas ativa suspensa cancelada admin editar",
         relacionados=("nexo.empresas.status_conta", "nexo.admin.lixeira"),
-        fontes=("blueprints/admin.py", "models.py"),
+        fontes=("blueprints/admin.py", "models.py", "company_security.py", "session_security.py"),
     ),
     registro(
         id="nexo.admin.lixeira",

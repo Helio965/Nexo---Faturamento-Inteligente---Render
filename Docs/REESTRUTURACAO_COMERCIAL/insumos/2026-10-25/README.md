@@ -2,12 +2,6 @@
 
 Material enviado pelo proprietário do NEXO em 25/10/2026, guardado aqui para orientar as próximas etapas da reestruturação comercial. **Nada foi implementado ainda: o proprietário vai dar as instruções.**
 
-> **Nota de integração (26/10/2026).** Estes insumos são referências do proprietário e não significam que as funcionalidades representadas já existam. A identidade visual do sistema **não** foi alterada nesta integração. Ao publicar no GitHub:
->
-> - `01`, `02`, `04` e `05` foram mantidos byte a byte (o `01` conserva o SHA-256 `ff29a45f…2b16b6d` citado em `Docs/AJUSTES_NEXO_2026/NEXO_AJ_00_BASELINE.md`).
-> - A captura original `03_telas_atuais_marca_portal_admin_login.png` **não foi versionada**. Ela mostra razão social, CNPJ, nomes de arquivos, valores financeiros de uma empresa, os totais do painel ADMIN (empresas por status, receita mensal estimada, gráficos) e uma URL na barra de status. O próprio relatório da NEXO-AJ-00 pede confirmação antes de compartilhá-la. Foi publicada a versão `03_telas_atuais_marca_portal_admin_login_redigida.png`, com esses trechos cobertos por tarjas "REDIGIDO" e com marca, layout e tela de login preservados. O original continua com o proprietário; se ele confirmar que são dados fictícios, pode versioná-lo depois.
-> - Após a NEXO-AJ-06.1, a linha "Conta cancelada" da tabela "O que o código faz hoje" ficou desatualizada: login, sessões, rotas, PDFs, uploads, notificações e Socket.IO do CLIENTE de empresa CANCELADA passaram a ser bloqueados. A tela própria com desfoque e mensagem (06.3) e a transição automática (06.2) continuam pendentes.
-
 ## Arquivos
 
 | Arquivo | Conteúdo |
@@ -74,3 +68,13 @@ depois                       tela bloqueada (com desfoque) e mensagem
 5. **Conta cancelada:** o usuário ainda consegue entrar e vê a tela desfocada, ou o login é bloqueado com a mensagem?
 6. **LGPD:** a revisão é um documento de conformidade (dados tratados, base legal, retenção, direitos do titular) ou também inclui mudanças no sistema? O prazo de 3 meses até o cancelamento e o destino dos dados depois dele entram na política de retenção.
 7. **DNS:** já existe um domínio próprio registrado? A hospedagem é a do `render.yaml` (Render)?
+
+## Nota de integração (26/10/2026)
+
+Acrescentada ao fim do arquivo para não deslocar as referências de linha (`README.md:62-70`) usadas em `Docs/AJUSTES_NEXO_2026/`.
+
+Estes insumos são referências do proprietário e não significam que as funcionalidades representadas já existam. A identidade visual do sistema **não** foi alterada nesta integração. Ao publicar no GitHub:
+
+- `01`, `02`, `04` e `05` foram mantidos byte a byte (o `01` conserva o SHA-256 `ff29a45f…2b16b6d` citado em `Docs/AJUSTES_NEXO_2026/NEXO_AJ_00_BASELINE.md`).
+- A captura original `03_telas_atuais_marca_portal_admin_login.png` **não foi versionada**. Ela mostra razão social, CNPJ, nomes de arquivos, valores financeiros de uma empresa, os totais do painel ADMIN (empresas por status, receita mensal estimada, gráficos) e uma URL na barra de status. O próprio relatório da NEXO-AJ-00 pede confirmação antes de compartilhá-la. Foi publicada a versão `03_telas_atuais_marca_portal_admin_login_redigida.png`, com esses trechos cobertos por tarjas "REDIGIDO" e com marca, layout e tela de login preservados. O original continua com o proprietário; se ele confirmar que são dados fictícios, pode versioná-lo depois.
+- Após a NEXO-AJ-06.1, a linha "Conta cancelada" da tabela "O que o código faz hoje" ficou desatualizada: login, sessões, rotas, PDFs, uploads, notificações e Socket.IO do CLIENTE de empresa CANCELADA passaram a ser bloqueados. A tela própria com desfoque e mensagem (06.3) e a transição automática (06.2) continuam pendentes.

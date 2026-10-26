@@ -332,7 +332,7 @@ REGISTROS = (
         termos="bloqueado nao consigo enviar upload nao funciona erro envio motivo",
         relacionados=("nexo.uploads.erros", "nexo.primeiros_passos.analises_disponiveis"),
         destino="upload",
-        fontes=("blueprints/cliente.py", "etl_uploads.py", "blueprints/admin.py"),
+        fontes=("blueprints/cliente.py", "etl_uploads.py", "blueprints/admin.py", "session_security.py"),
     ),
     registro(
         id="nexo.uploads.erros",

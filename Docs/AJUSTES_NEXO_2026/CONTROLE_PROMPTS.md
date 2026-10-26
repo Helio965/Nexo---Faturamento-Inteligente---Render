@@ -8,7 +8,7 @@ Registro do andamento dos 27 prompts de ajuste do NEXO. Cada prompt executado de
 
 **Metodologia.** O proprietário decidiu **não usar mais a sequência dos 27 prompts como roteiro obrigatório**. O mapa e este controle continuam valendo como **referências técnicas e registro histórico**: as funcionalidades já implementadas são preservadas, os requisitos continuam relevantes, as etapas podem ser executadas em outra ordem e as próximas atividades serão priorizadas conforme as necessidades atuais do projeto. A coluna "Ordem" e a seção "Ordem recomendada" passam a ser apenas informativas, e não há mais "próximo prompt" obrigatório. Os itens "NÃO EXECUTADO" **não** devem ser desenvolvidos automaticamente.
 
-**Integração.** O conteúdo local (ZIP derivado do commit `ff8c2d8` da `main`) foi conciliado com a `main` do repositório oficial `Helio965/Nexo---Faturamento-Inteligente---Render` (base `94e9b6a`) e com a Etapa 0.2 do PR #22. Detalhes, inventário, testes e pendências: [`Docs/INTEGRACOES/RELATORIO_INTEGRACAO_GITHUB_ZIP_2026_10_26.md`](../INTEGRACOES/RELATORIO_INTEGRACAO_GITHUB_ZIP_2026_10_26.md). Integrar à `main` **não** significa implantar em produção.
+**Integração.** O conteúdo local (ZIP derivado do commit `ff8c2d8` da `main`) foi conciliado com a `main` do repositório `Helio965/Nexo---Faturamento-Inteligente---Render` (base `94e9b6a`), indicado pelo proprietário como oficial no pedido de integração e com a Etapa 0.2 do PR #22. Detalhes, inventário, testes e pendências: [`Docs/INTEGRACOES/RELATORIO_INTEGRACAO_GITHUB_ZIP_2026_10_26.md`](../INTEGRACOES/RELATORIO_INTEGRACAO_GITHUB_ZIP_2026_10_26.md). Integrar à `main` **não** significa implantar em produção.
 
 **Situação por ambiente em 26/10/2026** (somente as atividades com execução registrada):
 
@@ -223,13 +223,13 @@ Os outros 25 prompts ainda não têm registro de execução.
 | 25/10/2026 11:03 | 1 | Criado na primeira entrega da NEXO-AJ-00, sem o mapa. O índice tinha `NEXO-AJ-00` na linha 1 e **26 linhas numeradas reservadas** (#2 a #27, "a preencher pelo mapa"); a `NEXO-AJ-06.1` ficava numa tabela à parte. O texto da própria versão 1 falava em "25 linhas", o que não batia com a tabela. A NEXO-AJ-00 ficou como "PARCIAL — AGUARDANDO REVISÃO" |
 | 25/10/2026 13:21 | 2 | Complemento da NEXO-AJ-00. Mapa oficial recebido; os 27 IDs foram cadastrados com atividade, tipo, dependências, ordem e status. Escopo, aceite, regras e checklist foram transcritos literalmente do mapa. Foi incluído o registro de execução por ID. A NEXO-AJ-00 passou a "EXECUTADO / AGUARDANDO REVISÃO" e os outros 26 seguem "NÃO EXECUTADO". A correspondência dos "ajustes 01 a 09" foi refeita, como interpretação a confirmar |
 | 25/10/2026 14:38 | 3 | NEXO-AJ-06.1 executada: linha 16 passou a "EXECUTADO / AGUARDANDO REVISÃO", com o registro de execução acrescentado; próximo prompt pela ordem recomendada passou a ser `NEXO-AJ-07.1`. A estrutura dos 27 prompts não mudou |
-| 26/10/2026 | 4 | Integração ao GitHub: registrada a mudança de metodologia (sequência dos 27 prompts deixa de ser obrigatória) e a situação por ambiente. Caminhos locais com o nome do usuário do Windows foram anonimizados como `%USERPROFILE%`. Os status e as aprovações da tabela de índice não mudaram: a aprovação continua dependendo de revisão humana |
+| 26/10/2026 | 4 | Integração ao GitHub: registrada a mudança de metodologia (sequência dos 27 prompts deixa de ser obrigatória) e a situação por ambiente. Caminhos locais com o nome do usuário do Windows foram anonimizados como `%USERPROFILE%`, e nomes de projetos sem relação, generalizados. Os status e as aprovações da tabela de índice não mudaram: a aprovação continua dependendo de revisão humana |
 
 **Buscas pelo mapa feitas na versão 1** (preservadas da primeira entrega):
 
 | Busca | Resultado |
 |---|---|
-| Nome `*MAPA*`, `*MAPA_DE_PROMPTS*` e `*ETAPAS_E_SUBETAPAS*` em todo o perfil do usuário (Downloads, Documentos, Desktop, OneDrive, AppData) e em `C:\ADS` | Só arquivos sem relação (mapas da empatia, projeto ConnectAgro) |
+| Nome `*MAPA*`, `*MAPA_DE_PROMPTS*` e `*ETAPAS_E_SUBETAPAS*` em todo o perfil do usuário (Downloads, Documentos, Desktop, OneDrive, AppData) e em `C:\ADS` | Só arquivos sem relação (de outros projetos) |
 | Nome `*MAPA_DE_PROMPTS*` e `*NEXO_MAPA*` em `C:\` e `D:\` inteiros | Nenhum arquivo |
 | Texto `NEXO-AJ-0`, `MAPA_DE_PROMPTS` e `MAPA DE PROMPTS` em `.md` e `.txt` de Downloads, Documentos, Desktop, OneDrive e `C:\ADS` | Nenhuma ocorrência |
 | `NEXO_DOCUMENTO_MESTRE_ETAPAS_SUBETAPAS_E_STATUS.docx` (Downloads) | Usa outra numeração (Etapas 1 a 8 e subetapas `n.m`); não cita nenhum ID `NEXO-AJ` |

@@ -2,19 +2,6 @@
 
 **Etapa 0.2A — Auditoria, proteção do banco de dados e preparação das migrações**
 
-> **Nota de integração (26/10/2026).** Documento da Etapa 0.2A, produzido localmente e recebido
-> no ZIP do proprietário. É a versão citada pelos demais documentos (`OPERACAO_BACKUP_RESTAURACAO.md`,
-> `PREPARACAO_RENDER.md`, `Docs/AJUSTES_NEXO_2026/`), inclusive por seção (B.1, E15, G, G.10, H, K).
-> Em paralelo, a Etapa 0.2 foi executada no GitHub (PR #22) com outra estrutura de seções; esse
-> registro foi preservado em
-> [00_02_PROTECAO_BANCO_MIGRACOES_ETAPA_0_2_PR22.md](00_02_PROTECAO_BANCO_MIGRACOES_ETAPA_0_2_PR22.md).
-> As menções abaixo a "pasta sem `.git`", "commit não verificado" e "repositório oficial de destino"
-> descrevem a execução local de 24/10/2026: o repositório oficial é
-> `Helio965/Nexo---Faturamento-Inteligente---Render`, e a base `ff8c2d8` foi confirmada na
-> integração ([relatório](../INTEGRACOES/RELATORIO_INTEGRACAO_GITHUB_ZIP_2026_10_26.md)). Fato
-> posterior: o HTTP 500 do login e a migração `e4c004a26b01` pendente no Supabase estão em
-> [RELATORIO_CORRECAO_MIGRACAO_SUPABASE_NEXO.md](../../RELATORIO_CORRECAO_MIGRACAO_SUPABASE_NEXO.md).
-
 Este documento é a referência da Etapa 0.2A. Registra a auditoria dos mecanismos de
 persistência, migração, backup e recuperação do NEXO, os testes executados, as correções
 locais feitas e o planejamento das alterações estruturais das próximas etapas. Continua a
@@ -952,3 +939,15 @@ esses itens estão em J e são pré-requisito da Etapa 0.3.
 *Documento gerado na Etapa 0.2A da reestruturação comercial do NEXO, em 2026-10-24, sobre a
 pasta local (sem `.git`). Destino do commit manual: repositório oficial
 `nexofaturamentointeligente-coder/Nexo-Faturamento-Inteligente`.*
+
+---
+
+## Nota de integração (26/10/2026)
+
+Acrescentada ao fim do arquivo para não deslocar as referências de linha usadas em `Docs/AJUSTES_NEXO_2026/`.
+
+- **Versões.** Este é o documento da Etapa 0.2A, produzido localmente e recebido no ZIP do proprietário. É a versão citada pelos demais documentos (`OPERACAO_BACKUP_RESTAURACAO.md`, `PREPARACAO_RENDER.md`, `Docs/AJUSTES_NEXO_2026/`), inclusive por seção (B.1, E15, G, G.10, H, K) e por linha. Em paralelo, a Etapa 0.2 foi executada no GitHub (PR #22) com outra estrutura de seções; esse registro foi preservado em [00_02_PROTECAO_BANCO_MIGRACOES_ETAPA_0_2_PR22.md](00_02_PROTECAO_BANCO_MIGRACOES_ETAPA_0_2_PR22.md).
+- **Repositório e base.** As menções a "pasta sem `.git`", "commit não verificado" e ao repositório `nexofaturamentointeligente-coder/Nexo-Faturamento-Inteligente` como destino descrevem a execução local de 24/10/2026. Na integração, o proprietário indicou como repositório oficial `Helio965/Nexo---Faturamento-Inteligente---Render`; a base `ff8c2d8` foi confirmada por conteúdo, e o `faa59d9` do comentário do ZIP não existe neste repositório (deve pertencer ao outro, com o mesmo conteúdo). Qual repositório o Render publica não foi verificado ([relatório](../INTEGRACOES/RELATORIO_INTEGRACAO_GITHUB_ZIP_2026_10_26.md)).
+- **Revisão de produção.** "Revisão aplicada desconhecida" (C.4, J) é anterior ao incidente de 25/10/2026: o banco foi informado em `b7c4e2a9f031`, sem a coluna exigida pela `main`, e o login responde HTTP 500. Diagnóstico e procedimento da migração `e4c004a26b01` em [RELATORIO_CORRECAO_MIGRACAO_SUPABASE_NEXO.md](../../RELATORIO_CORRECAO_MIGRACAO_SUPABASE_NEXO.md).
+- **Backup real: divergências entre os três documentos.** Esta 0.2A (seção G), a Etapa 0.2 do PR #22 (F.2 e Apêndice B) e o relatório do PR #23 (seção 10, Fase C) divergem quanto (1) à versão do cliente `pg_dump` (mesma major do servidor × igual ou maior), (2) ao artefato principal (dump completo `-Fc` × `--schema=public` mais o conjunto SQL da CLI) e (3) às entradas removidas do TOC antes do restore (`SCHEMA - public` × também `COMMENT - SCHEMA public`). Para a migração pendente, o procedimento mais recente e específico é o do PR #23; as divergências devem ser decididas pelo responsável antes do primeiro backup real. Nenhuma delas foi resolvida nesta integração.
+- **`.gitignore`.** Na `main`, o arquivo passou a combinar as regras WAL/journal do SQLite (F6) com as regras de dumps e chaves do PR #22; a expressão "endurecimentos opcionais não adotados" de D.4 deixou de valer para tar/diretório e chaves.

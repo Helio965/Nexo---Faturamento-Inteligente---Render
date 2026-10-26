@@ -158,7 +158,8 @@ REGISTROS = (
         termos="status conta ativa suspensa cancelada situacao empresa bloqueio regularizar",
         relacionados=("nexo.empresas.conta_suspensa", "nexo.admin.status_contas"),
         destino="dashboard",
-        fontes=("models.py", "blueprints/admin.py", "templates/cliente/dashboard.html"),
+        fontes=("models.py", "blueprints/admin.py", "templates/cliente/dashboard.html", "session_security.py",
+                "company_security.py", "notifications.py"),
     ),
     registro(
         id="nexo.empresas.conta_suspensa",

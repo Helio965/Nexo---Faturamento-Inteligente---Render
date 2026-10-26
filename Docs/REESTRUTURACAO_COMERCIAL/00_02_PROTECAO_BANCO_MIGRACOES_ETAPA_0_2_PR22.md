@@ -13,6 +13,13 @@
 > [relatório da integração](../INTEGRACOES/RELATORIO_INTEGRACAO_GITHUB_ZIP_2026_10_26.md). Fato
 > posterior a ambas: o HTTP 500 do login e a migração `e4c004a26b01` pendente no Supabase estão em
 > [RELATORIO_CORRECAO_MIGRACAO_SUPABASE_NEXO.md](../../RELATORIO_CORRECAO_MIGRACAO_SUPABASE_NEXO.md).
+>
+> **Estado após a integração.** A constatação de que só a lixeira bloqueia o CLIENTE (B.5, H.3, I.5)
+> foi corrigida pela NEXO-AJ-06.1, integrada junto: CLIENTE de empresa `CANCELADA` é negado por todas as
+> vias; `SUSPENSA` e a lixeira mantêm o comportamento. S14 (`.gitignore`) e S15 (caminho local em
+> `OPERACAO_BACKUP_RESTAURACAO.md`) foram resolvidos; os testes de prontidão e de ensaio passaram a 18 e 8.
+> As instruções de backup real deste registro (F.2, Apêndice B) divergem das da 0.2A e do PR #23; ver a
+> nota ao fim de [00_02_PROTECAO_BANCO_MIGRACOES.md](00_02_PROTECAO_BANCO_MIGRACOES.md).
 
 Este documento prepara o NEXO para futuras alterações estruturais no banco PostgreSQL/Supabase.
 Ele registra o inventário do esquema conforme o código e as migrações, a auditoria da cadeia

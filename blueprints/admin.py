@@ -479,7 +479,7 @@ def empresa_editar(id_empresa):
             empresa.data_atualizacao = datetime.now(timezone.utc)
             revogacoes = _revogacoes_socket(revogados)
             db.session.commit()
-            _desconectar_revogados(revogacoes, "cancelamento")
+            _desconectar_revogados(revogacoes, "troca de status")
             flash("Empresa atualizada com sucesso.", "success")
             return redirect(url_for("admin.empresas"))
 
