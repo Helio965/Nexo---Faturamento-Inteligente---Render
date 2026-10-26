@@ -165,14 +165,21 @@
 {% block extra_js %}
 {% if analise.indicador %}
 <script>
+  /* Mesma leitura do comparativo da Visão Geral: Compras em âmbar, Vendas em azul. */
   NEXO.plot('chartAnaliseCli', [{
     type: 'bar',
-    x: ['Faturamento', 'Total comprado'],
-    y: [{{ (analise.indicador.faturamento_total or 0)|float }}, {{ (analise.indicador.total_comprado or 0)|float }}],
-    marker: { color: ['rgba(56,189,248,0.9)', 'rgba(245,158,11,0.9)'], line: { color: 'rgba(255,255,255,0.22)', width: 1 } },
+    x: ['Compras', 'Vendas'],
+    y: [{{ (analise.indicador.total_comprado or 0)|float }}, {{ (analise.indicador.faturamento_total or 0)|float }}],
+    marker: { color: ['rgba(245,158,11,0.9)', 'rgba(56,189,248,0.9)'], line: { color: 'rgba(255,255,255,0.22)', width: 1 } },
     width: 0.5,
-    hovertemplate: '%{x}: R$ %{y:,.2f}<extra></extra>'
-  }], { yaxis: { tickprefix: 'R$ ', tickformat: ',.0f', rangemode: 'tozero' }, height: 240 });
+    texttemplate: 'R$ %{y:,.0f}', textposition: 'outside', cliponaxis: false,
+    textfont: { color: '#ece9f8', size: 12.5, family: 'JetBrains Mono, monospace' },
+    hovertemplate: '<b>%{x}</b><br>R$ %{y:,.2f}<extra></extra>'
+  }], {
+    yaxis: { tickprefix: 'R$ ', tickformat: ',.0f', rangemode: 'tozero', fixedrange: true },
+    xaxis: { fixedrange: true, tickfont: { size: 13, color: '#ece9f8' } },
+    margin: { l: 64, r: 18, t: 32, b: 42 }, bargap: 0.45, height: 300
+  });
 </script>
 {% if abc_chart %}
 <script>

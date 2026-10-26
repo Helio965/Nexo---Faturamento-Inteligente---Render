@@ -38,6 +38,10 @@
 <div class="app-shell" id="appShell">
 
     <aside class="sidebar" id="sidebar">
+        {# Fechar a gaveta no celular: fica ao lado dela, sobre o véu (oculto no desktop). #}
+        <button class="sidebar-close" id="navClose" type="button" aria-label="Fechar menu">
+            <i class="bi bi-x-lg" aria-hidden="true"></i>
+        </button>
         <div class="sidebar-brand">
             <span class="brand-logo">
                 <img src="{{ url_for('static', filename='img/nexo-cubo-transparente.png') }}" alt="" width="253" height="279" decoding="async">
@@ -211,12 +215,14 @@
         var toggle = document.getElementById('navToggle');
         var overlay = document.getElementById('sidebarOverlay');
         var sidebar = document.getElementById('sidebar');
+        var fechar = document.getElementById('navClose');
         var pagina = document.querySelector('.main-area');
         var gaveta = window.matchMedia ? window.matchMedia('(max-width: 991.98px)') : null;
         function definir(aberta, devolverFoco) {
           if (!shell) return;
           shell.classList.toggle('nav-open', aberta);
-          /* Com a gaveta aberta, o conteúdo atrás do véu sai do Tab e do leitor de tela. */
+          /* Com a gaveta aberta, o conteúdo atrás do véu sai do Tab e do leitor de tela;
+             quem fecha é o botão visível dentro da gaveta (#navClose), o véu ou o Esc. */
           if (pagina) pagina.inert = !!(aberta && gaveta && gaveta.matches);
           if (toggle) {
             toggle.setAttribute('aria-expanded', aberta ? 'true' : 'false');
@@ -234,6 +240,9 @@
         }
         if (overlay && shell) {
           overlay.addEventListener('click', function () { definir(false, true); });
+        }
+        if (fechar && shell) {
+          fechar.addEventListener('click', function () { definir(false, true); });
         }
         document.addEventListener('keydown', function (e) {
           if (e.key === 'Escape' && shell && shell.classList.contains('nav-open')) {
@@ -265,13 +274,27 @@
           });
         }
         /* ---- Tabelas largas: coluna de ações fixa à direita durante a rolagem ---- */
+        /* Sem coluna fixa, a borda direita esmaece enquanto ainda há colunas à direita. */
+        function marcarDica(caixa) {
+          var resta = caixa.scrollWidth - caixa.clientWidth - caixa.scrollLeft;
+          caixa.classList.toggle('rola-mais', resta > 2 && !caixa.classList.contains('tem-rolagem'));
+        }
         function marcarTabelas() {
           document.querySelectorAll('.table-responsive-x').forEach(function (caixa) {
-            var rola = caixa.scrollWidth > caixa.clientWidth + 1;
-            caixa.classList.toggle('tem-rolagem', rola);
             var cabecalho = caixa.querySelector('thead tr');
             var ultima = cabecalho && cabecalho.lastElementChild;
-            if (!ultima || !/^a[çc](ão|ões|ao|oes)$/i.test(ultima.textContent.trim())) return;
+            var ehAcoes = !!ultima && /^a[çc](ão|ões|ao|oes)$/i.test(ultima.textContent.trim());
+            var rola = caixa.scrollWidth > caixa.clientWidth + 1;
+            /* Só fixa a coluna se ela for estreita: os dados mantêm ao menos 70% da
+               largura (senão ela cobriria status e e-mail, como em Empresas). */
+            var estreita = ehAcoes && ultima.getBoundingClientRect().width <= caixa.clientWidth * 0.3;
+            caixa.classList.toggle('tem-rolagem', rola && estreita);
+            marcarDica(caixa);
+            if (!caixa.dataset.dica) {
+              caixa.dataset.dica = '1';
+              caixa.addEventListener('scroll', function () { marcarDica(caixa); }, { passive: true });
+            }
+            if (!ehAcoes) return;
             caixa.querySelectorAll('tr').forEach(function (linha) {
               var celula = linha.lastElementChild;
               if (celula && !celula.hasAttribute('colspan')) celula.classList.add('col-acoes');
@@ -348,6 +371,14 @@
         mesclar.forEach(function (chave) {
           if (extra && extra[chave] && base[chave]) {
             saida[chave] = Object.assign({}, base[chave], extra[chave]);
+            /* Um nível abaixo também: { font: { size } } não apaga a cor do tema. */
+            ['font', 'tickfont', 'title'].forEach(function (sub) {
+              var b = base[chave][sub], e = extra[chave][sub];
+              /* Título em texto puro ('R$') não é objeto: fica como veio. */
+              if (b && e && typeof b === 'object' && typeof e === 'object') {
+                saida[chave][sub] = Object.assign({}, b, e);
+              }
+            });
           } else if (extra && extra[chave] && chave === 'yaxis2') {
             saida[chave] = Object.assign({}, eixo, { showgrid: false }, extra[chave]);
           }
@@ -390,6 +421,9 @@
 
       /* Cores oficiais da Curva ABC (consistentes com os badges do CSS). */
       NEXO.abcColor = { A: '#22c55e', B: '#f59e0b', C: '#9aa0b7' };
+      /* Linha-guia do hover unificado: fina, pontilhada e lilás. Espessura
+         negativa elimina o contorno branco (espessura + 2) que o Plotly desenha. */
+      NEXO.spike = { spikecolor: 'rgba(196,160,251,0.6)', spikethickness: -2, spikedash: 'dot' };
 
       /* ---- GRÁFICO DE PARETO da Curva ABC (combo barras + linha) ----
          data = { labels:[...], values:[...], classes:[...], acumulado:[...] }
@@ -446,10 +480,10 @@
             type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y2', y0: 80, y1: 80,
             line: { color: 'rgba(251, 191, 36, 0.45)', width: 1, dash: 'dot' }
           }],
-          xaxis: {
+          xaxis: Object.assign({
             tickangle: -38, tickfont: { size: 10, color: NEXO.colors.text }, fixedrange: true,
             tickmode: 'array', tickvals: labels, ticktext: curtos
-          },
+          }, NEXO.spike),
           yaxis: {
             title: estreito ? { text: '' } : { text: 'Faturamento', font: { size: 11, color: NEXO.colors.text } },
             tickprefix: 'R$ ', tickformat: ',.0f', rangemode: 'tozero', fixedrange: true
@@ -469,16 +503,17 @@
          em âmbar (par legível também para daltonismo vermelho-verde). */
       NEXO.plotLinhaTemporal = function (id, data) {
         if (!data || !data.labels || data.labels.length < 2) return;
-        /* Linhas suaves; só Vendas tem área translúcida (duas áreas sobrepostas
-           virariam um cinza turvo). */
+        /* Linhas suaves; só Vendas tem área, em degradê que some na base (duas
+           áreas sobrepostas virariam um cinza turvo). */
         NEXO.plot(id, [
           {
             type: 'scatter', mode: 'lines+markers', name: 'Vendas',
             x: data.labels, y: data.vendas,
             line: { color: '#38bdf8', width: 2.5, shape: 'spline', smoothing: 0.7 },
             marker: { size: 7, color: '#38bdf8', line: { color: 'rgba(17,13,32,0.95)', width: 2 } },
-            fill: 'tozeroy', fillcolor: 'rgba(56, 189, 248, 0.12)',
-            hovertemplate: '<b>Vendas</b> %{x}<br>R$ %{y:,.2f}<extra></extra>'
+            fill: 'tozeroy',
+            fillgradient: { type: 'vertical', colorscale: [[0, 'rgba(56,189,248,0)'], [1, 'rgba(56,189,248,0.24)']] },
+            hovertemplate: '<b>Vendas</b>: R$ %{y:,.2f}<extra></extra>'
           },
           {
             type: 'scatter', mode: 'lines+markers', name: 'Compras',
@@ -486,14 +521,18 @@
             line: { color: '#f59e0b', width: 2.5, shape: 'spline', smoothing: 0.7 },
             /* Losango: distingue Compras de Vendas também sem depender da cor. */
             marker: { size: 8, symbol: 'diamond', color: '#f59e0b', line: { color: 'rgba(17,13,32,0.95)', width: 2 } },
-            hovertemplate: '<b>Compras</b> %{x}<br>R$ %{y:,.2f}<extra></extra>'
+            hovertemplate: '<b>Compras</b>: R$ %{y:,.2f}<extra></extra>'
           }
         ], {
           showlegend: true,
           hovermode: 'x unified',
-          legend: { y: 1.16, font: { size: 12 } },
+          legend: { y: 1.02, yanchor: 'bottom', font: { size: 12 } },
           yaxis: { tickprefix: 'R$ ', tickformat: ',.0f', rangemode: 'tozero', fixedrange: true },
-          xaxis: { fixedrange: true, tickfont: { size: 12, color: NEXO.colors.text } },
+          /* Folga nas pontas para os marcadores não colarem nas bordas. */
+          xaxis: Object.assign({
+            type: 'category', range: [-0.25, data.labels.length - 0.75],
+            fixedrange: true, tickfont: { size: 12, color: NEXO.colors.text }
+          }, NEXO.spike),
           height: 280, margin: { l: 64, r: 18, t: 36, b: 42 }
         });
       };
