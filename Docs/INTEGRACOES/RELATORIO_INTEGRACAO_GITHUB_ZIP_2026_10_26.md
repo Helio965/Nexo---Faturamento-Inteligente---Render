@@ -2,7 +2,7 @@
 
 Conciliação das duas linhas de desenvolvimento do **NEXO: Faturamento Inteligente**: a `main` do repositório oficial e o projeto local recebido em ZIP. Inventário arquivo a arquivo no anexo [INVENTARIO_COMPARATIVO_ZIP_MAIN_2026_10_26.md](INVENTARIO_COMPARATIVO_ZIP_MAIN_2026_10_26.md).
 
-**Classificação final: COMMITS PUBLICADOS, MERGE PENDENTE** (justificativa na seção 19.10)
+**Classificação final: INTEGRADA À MAIN E VALIDADA** (pelo CI; não homologada nem confirmada em produção). Ao publicar os commits, a classificação era "commits publicados, merge pendente"; o proprietário fez o merge do PR #24 em seguida (seção 18.3). Justificativa na seção 19.10.
 
 ---
 
@@ -160,9 +160,9 @@ Achados tratados nesta integração: preservar o CRLF dos 3 arquivos (feito desd
 | Commit 4 | `b37e4d507f684766f72a12a23b523af96e5e3363`: fix(integracao): aplicar ajustes da revisão adversarial |
 | Commit 5 | Este relatório e o inventário (commit seguinte a `b37e4d5`; um documento não consegue citar o SHA do próprio commit) |
 | Pull Request | [Helio965/Nexo---Faturamento-Inteligente---Render#24](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/24), base `main`, aberto como rascunho |
-| Estado | Aberto, sem conflitos com a `main` (a `main` não avançou desde `94e9b6a`) |
-| Merge | **Pendente** (ver "Implantação" abaixo) |
-| SHA final da `main` | Inalterado: `94e9b6ae4e2fb3d6582301cdfc3dd4397b4fdbb2` |
+| Estado | **Integrado (merged)** pelo proprietário (`Helio965`) em 26/10/2026 às 09:38:56 (UTC−3) |
+| Merge | `d7eb7e471d938948a23915036960670cd5609bc7` ("Merge pull request #24"), árvore idêntica a `2cf0269` |
+| SHA final da `main` | `d7eb7e471d938948a23915036960670cd5609bc7` |
 
 **Organização dos commits.** Os três commits sugeridos foram mantidos, com dois acréscimos justificados:
 
@@ -181,7 +181,7 @@ O relatório vai num commit final porque cita os SHAs dos anteriores.
 | Alteração de banco automática | Nenhuma: o build (`tools/install_dependencies.py`) não migra; esta integração não cria migração |
 | Checks do PR | Run `40321393139` (commit `6326999`): `security-sqlite-browser` **success** (638 testes OK) e `security-postgresql` **success**. A CI dos commits seguintes aparece no PR |
 
-**Conclusão:** não foi possível comprovar que um merge na `main` não provocaria deploy de produção não autorizado, e há registro do proprietário em sentido contrário. Por isso **o merge não foi executado** (condição 18.2). Mesmo sem nova dependência de schema, publicar esta versão com o Supabase em `b7c4e2a9f031` manteria o login em HTTP 500.
+**Conclusão:** não foi possível comprovar que um merge na `main` não provocaria deploy de produção não autorizado, e há registro do proprietário em sentido contrário. Por isso o executor **não fez o merge** (condição 18.2). O merge foi feito depois pelo próprio proprietário (seção 18.3); o estado do Auto-Deploy continua não verificado daqui, e o Render pode ter publicado `d7eb7e4` se ele estiver ativo. Mesmo sem nova dependência de schema, publicar esta versão com o Supabase em `b7c4e2a9f031` manteria o login em HTTP 500.
 
 ## 19.8 Segurança
 
@@ -229,13 +229,27 @@ O relatório vai num commit final porque cita os SHAs dos anteriores.
 - Aprovação humana das entregas NEXO-AJ-00 e NEXO-AJ-06.1 (`CONTROLE_PROMPTS.md`).
 - Merge do PR de integração pelo responsável, depois das confirmações acima.
 
+## 18.3 Registro do merge
+
+| Item | Valor |
+|---|---|
+| Pull Request | [Helio965/Nexo---Faturamento-Inteligente---Render#24](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/24) |
+| Quem fez o merge | O proprietário (`Helio965`), depois de marcar o PR como pronto para revisão. O executor não fez o merge |
+| Data | 26/10/2026, 09:38:56 (UTC−3) |
+| SHA do merge | `d7eb7e471d938948a23915036960670cd5609bc7` (pais `94e9b6a` e `2cf0269`; árvore idêntica ao head `2cf0269`) |
+| CI do PR no head final | Run `40324126061` (`2cf0269`): **success**; as runs anteriores do mesmo head foram substituídas pelo `cancel-in-progress` do workflow |
+| CI da `main` após o merge | Run `40324156855` (`d7eb7e4`): **success**, com `security-sqlite-browser` (suíte completa, navegador e ensaios PostgreSQL) e `security-postgresql` (os 5 módulos) aprovados |
+| Revisão automática do Codex | Concluída no head `2cf0269`, sem achados |
+| Arquivos integrados | 35 arquivos (5.854 inclusões, 78 remoções), listados nas seções 19.4 e no anexo |
+| Deploy e banco | O executor não fez deploy nem migração. O estado do Render (Auto-Deploy, repositório e commit publicados) não foi verificado. O Supabase continua sem a `e4c004a26b01`, segundo o relatório do PR #23 |
+
 ## 19.10 Conclusão
 
-**COMMITS PUBLICADOS, MERGE PENDENTE.**
+**INTEGRADA À MAIN E VALIDADA** (pelo CI; não homologada nem confirmada em produção).
 
 - As duas linhas de desenvolvimento foram conciliadas sem perda: a `main` foi preservada integralmente, o ZIP foi integrado (AJ-06.1, Etapa 0.2A, documentação e insumos seguros) e o PR #22 entrou com o histórico original.
 - O bloqueio de empresas CANCELADAS está integrado e testado: localmente em SQLite e PostgreSQL descartável, e no CI.
 - A suíte completa passou localmente (638) e no CI do PR (638), sem regressão conhecida; a revisão adversarial não encontrou defeito bloqueante.
-- O merge na `main` **não** foi feito porque a condição 18.2 de não haver deploy não autorizado não pôde ser comprovada: o painel do Render não é acessível daqui e há registro do proprietário de Auto-Deploy ativado na `main`.
+- O executor não fez o merge porque a condição 18.2 de não haver deploy não autorizado não pôde ser comprovada (painel do Render inacessível daqui; registro do proprietário de Auto-Deploy ativado). O proprietário fez o merge em seguida (`d7eb7e4`), e o CI da `main` passou.
 - O incidente HTTP 500 do Supabase continua aberto e é tratado à parte. O funcionamento em produção depende da migração `e4c004a26b01`.
-- Para concluir: o responsável confirma no Render o Auto-Deploy e o repositório/commit publicados, decide o momento da migração e então marca o PR #24 como pronto e faz o merge.
+- Próximo passo do responsável: conferir no Render se `d7eb7e4` foi publicado (Auto-Deploy) e qual repositório o serviço usa, e conduzir a migração `e4c004a26b01` pelo procedimento do PR #23. Até lá o login em produção continua sujeito ao HTTP 500, e a AJ-06.1 só vale em produção depois disso.

@@ -15,10 +15,10 @@ Registro do andamento dos 27 prompts de ajuste do NEXO. Cada prompt executado de
 | Atividade | Implementada localmente | Integrada ao GitHub | Testada | CI | Homologação | Implantação em produção |
 |---|---|---|---|---|---|---|
 | Etapa 0.1 (baseline, PR #19) | Não (feita no GitHub) | Sim, na `main` (PR #19) | Não se aplica (documentação) | Aprovada no PR #19 | Não se aplica | Não se aplica |
-| Etapa 0.2 (PR #22) | Não (feita no GitHub) | Na branch `feature/reestruturacao-comercial-nexo`; trazida para a linha da `main` pelo PR de integração | Não se aplica (documentação e `.gitignore`) | Ver PR de integração | Não se aplica | Não se aplica |
-| Etapa 0.2A (backup e migrações) | Sim (24/10/2026) | PR de integração | Sim: verificador e ensaio isolado em PostgreSQL descartável | Ver PR de integração | **Pendente**: nenhum backup ou restauração do Supabase real foi executado | Não se aplica (scripts e documentos operacionais) |
-| `NEXO-AJ-00` | Sim (25/10/2026) | PR de integração (documentos) | Não se aplica (diagnóstico) | Não se aplica | Aprovação humana pendente | Não se aplica |
-| `NEXO-AJ-06.1` | Sim (25/10/2026) | PR de integração | Sim: SQLite e PostgreSQL descartável | Ver PR de integração | **Pendente** | **Pendente**: depende de a `main` ser publicada e de o Supabase estar na revisão `e4c004a26b01` (incidente HTTP 500, `RELATORIO_CORRECAO_MIGRACAO_SUPABASE_NEXO.md`) |
+| Etapa 0.2 (PR #22) | Não (feita no GitHub) | Sim, na `main` pelo PR #24 (merge `d7eb7e4`) | Não se aplica (documentação e `.gitignore`) | Aprovada (PR #24 e `main`) | Não se aplica | Não se aplica |
+| Etapa 0.2A (backup e migrações) | Sim (24/10/2026) | Sim, na `main` pelo PR #24 (merge `d7eb7e4`) | Sim: verificador e ensaio isolado em PostgreSQL descartável | Aprovada (PR #24 e `main`, run 40324156855) | **Pendente**: nenhum backup ou restauração do Supabase real foi executado | Não se aplica (scripts e documentos operacionais) |
+| `NEXO-AJ-00` | Sim (25/10/2026) | Sim, documentos na `main` pelo PR #24 | Não se aplica (diagnóstico) | Não se aplica | Aprovação humana pendente | Não se aplica |
+| `NEXO-AJ-06.1` | Sim (25/10/2026) | Sim, na `main` pelo PR #24 (merge `d7eb7e4`) | Sim: SQLite e PostgreSQL descartável | Aprovada (PR #24 e `main`, run 40324156855) | **Pendente** | **Não confirmada**: não se sabe se o Render publicou `d7eb7e4`; em produção ela depende ainda de o Supabase estar na revisão `e4c004a26b01` (incidente HTTP 500, `RELATORIO_CORRECAO_MIGRACAO_SUPABASE_NEXO.md`) |
 | Demais 25 prompts `NEXO-AJ` | Não | Não | — | — | — | — |
 
 ## Fonte oficial
@@ -224,6 +224,7 @@ Os outros 25 prompts ainda não têm registro de execução.
 | 25/10/2026 13:21 | 2 | Complemento da NEXO-AJ-00. Mapa oficial recebido; os 27 IDs foram cadastrados com atividade, tipo, dependências, ordem e status. Escopo, aceite, regras e checklist foram transcritos literalmente do mapa. Foi incluído o registro de execução por ID. A NEXO-AJ-00 passou a "EXECUTADO / AGUARDANDO REVISÃO" e os outros 26 seguem "NÃO EXECUTADO". A correspondência dos "ajustes 01 a 09" foi refeita, como interpretação a confirmar |
 | 25/10/2026 14:38 | 3 | NEXO-AJ-06.1 executada: linha 16 passou a "EXECUTADO / AGUARDANDO REVISÃO", com o registro de execução acrescentado; próximo prompt pela ordem recomendada passou a ser `NEXO-AJ-07.1`. A estrutura dos 27 prompts não mudou |
 | 26/10/2026 | 4 | Integração ao GitHub: registrada a mudança de metodologia (sequência dos 27 prompts deixa de ser obrigatória) e a situação por ambiente. Caminhos locais com o nome do usuário do Windows foram anonimizados como `%USERPROFILE%`, e nomes de projetos sem relação, generalizados. Os status e as aprovações da tabela de índice não mudaram: a aprovação continua dependendo de revisão humana |
+| 26/10/2026 | 5 | Merge do PR #24 pelo proprietário (`d7eb7e4`, CI aprovada na `main`): coluna "Integrada ao GitHub" e CI atualizadas. A implantação em produção continua não confirmada |
 
 **Buscas pelo mapa feitas na versão 1** (preservadas da primeira entrega):
 
