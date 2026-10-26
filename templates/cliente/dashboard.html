@@ -325,9 +325,12 @@
     var v = Number(dashboardData.pressao_estoque || 0);
     var cor, legenda;
     var caixa = document.getElementById('chartPressaoCliente');
-    var largura = caixa ? caixa.clientWidth : 240;
     var digitos = ('R$ ' + Math.abs(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + (v < 0 ? '-' : '')).length;
-    var tamanho = Math.max(16, Math.min(32, Math.floor(largura / (digitos * 0.64))));
+    function tamanhoNumero() {
+      var largura = caixa ? caixa.clientWidth : 240;
+      return Math.max(16, Math.min(32, Math.floor(largura / (digitos * 0.64))));
+    }
+    var tamanho = tamanhoNumero();
     if (v > 0)      { cor = '#fbd07a'; legenda = 'Pressão de estoque'; }
     else if (v < 0) { cor = '#22c55e'; legenda = 'Giro saudável';      }
     else            { cor = '#9aa0b7'; legenda = 'Equilíbrio';          }
@@ -363,6 +366,18 @@
           frame: { duration: ms, redraw: false }
         });
       }, 150);
+      /* A grade muda de coluna ao redimensionar: o valor acompanha a nova largura. */
+      var esperaPressao;
+      window.addEventListener('resize', function () {
+        window.clearTimeout(esperaPressao);
+        esperaPressao = window.setTimeout(function () {
+          var novo = tamanhoNumero();
+          if (novo !== tamanho && caixa && caixa.data) {
+            tamanho = novo;
+            Plotly.restyle(caixa, { 'number.font.size': novo });
+          }
+        }, 150);
+      });
     }
   })();
 

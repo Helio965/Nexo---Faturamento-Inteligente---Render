@@ -17,7 +17,7 @@
 
 {% set ativos_suspeitos = topicos | selectattr('ativo') | selectattr('id', 'in', suspeitos) | list %}
 {% if ativos_suspeitos %}
-<div class="nota-pressao mb-4" style="background:var(--warning-bg);border-color:rgba(245,158,11,0.3);">
+<div class="nota-pressao mb-4" style="background:linear-gradient(var(--warning-bg),var(--warning-bg)),var(--glass-strong);border-color:rgba(245,158,11,0.3);">
     <i class="bi bi-exclamation-triangle"></i>
     <span><strong>{{ ativos_suspeitos | length }} tópico(s) ativo(s) com sinais de conteúdo de teste.</strong>
     O NexoBot não os apresenta como assuntos do portal e reduz a prioridade deles nas respostas, mas eles continuam visíveis no Guia do cliente. Revise e desative (ou exclua) os tópicos marcados abaixo.</span>

@@ -249,8 +249,10 @@ a { text-decoration: none; }
 /* Só o painel autenticado recebe a paisagem: login e landing não mudam.
    A arte é original (scripts/gerar_fundo_dashboard.py), já desfocada; por
    cima vão um véu escuro e a tonalidade roxa da marca, para o fundo nunca
-   competir com o conteúdo. O pseudoelemento fixo não rola com a página. */
-.app-shell { display: flex; min-height: 100vh; position: relative; isolation: isolate; }
+   competir com o conteúdo. O pseudoelemento fixo não rola com a página.
+   Sem isolation/z-index no shell: um contexto de empilhamento aqui prenderia
+   os modais do Bootstrap abaixo do .modal-backdrop (anexado ao <body>). */
+.app-shell { display: flex; min-height: 100vh; }
 .app-shell::before {
   content: "";
   position: fixed;
@@ -444,6 +446,8 @@ a { text-decoration: none; }
 }
 .nav-toggle:hover { background: rgba(168, 85, 247, 0.16); border-color: var(--glass-border-2); }
 .nav-toggle:focus-visible { outline: 2px solid var(--primary-2); outline-offset: 2px; }
+/* Fechar a gaveta (só no celular): encostado à direita dela, sobre o véu. */
+.sidebar-close { display: none; }
 .user-chip {
   display: flex; align-items: center; gap: 10px;
   padding: 5px 6px 5px 14px;
@@ -617,11 +621,11 @@ a { text-decoration: none; }
 .nexo-table tbody tr { transition: background 0.14s ease, box-shadow 0.14s ease; }
 /* Zebra moderno: linhas pares com tom escuro sutilmente diferente */
 .nexo-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.022); }
-/* Row highlight: realce roxo translúcido + cursor pointer (vence a zebra) */
+/* Row highlight: realce roxo translúcido (vence a zebra). Sem cursor de link:
+   a linha em si não é clicável, só os botões dela. */
 .nexo-table tbody tr:hover {
   background: rgba(168, 85, 247, 0.10);
   box-shadow: inset 3px 0 0 var(--primary);
-  cursor: pointer;
 }
 .nexo-table tbody tr:last-child td { border-bottom: none; }
 .nexo-table .t-strong { font-weight: 600; }
@@ -653,32 +657,51 @@ a { text-decoration: none; }
 .plan-ouro   { background: rgba(250, 204, 21, 0.14); color: #f5d76e; border-color: rgba(250, 204, 21, 0.32); }
 
 /* ===================== BOTÕES =================================== */
+/* Base igual à do login e das telas de acesso; o visual de vidro vale só
+   dentro do painel (.app-shell), declarado antes de :hover/:disabled. */
 .btn-nexo {
-  background: var(--grad-cta);
-  border: 1px solid rgba(255, 255, 255, 0.14); color: #fff; font-weight: 600;
-  border-radius: 14px;
+  background: var(--grad);
+  border: none; color: #fff; font-weight: 600;
+  border-radius: var(--radius-sm);
   padding: 10px 18px;
-  box-shadow: 0 10px 24px -10px var(--primary-glow), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  box-shadow: 0 8px 20px -8px var(--primary-glow);
   transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
   display: inline-flex; align-items: center; gap: 8px;
 }
-.btn-nexo:focus-visible, .btn-ghost:focus-visible { outline: 2px solid #d8c2fd; outline-offset: 2px; }
-.btn-nexo:hover { background: var(--grad-cta-hover); color: #fff; transform: translateY(-1px); box-shadow: 0 12px 26px -8px var(--primary-glow); }
+.app-shell .btn-nexo {
+  background: var(--grad-cta);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 14px;
+  box-shadow: 0 10px 24px -10px var(--primary-glow), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+.app-shell .btn-nexo:focus-visible, .app-shell .btn-ghost:focus-visible { outline: 2px solid #d8c2fd; outline-offset: 2px; }
+.btn-nexo:hover { background: var(--grad-hover); color: #fff; transform: translateY(-1px); box-shadow: 0 12px 26px -8px var(--primary-glow); }
+.app-shell .btn-nexo:hover { background: var(--grad-cta-hover); }
 .btn-nexo:active { transform: translateY(0); }
 .btn-nexo:disabled, .btn-nexo.disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; transform: none; }
 
 .btn-ghost {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
   color: var(--text);
-  border-radius: 14px;
+  border-radius: var(--radius-sm);
   padding: 10px 16px; font-weight: 500;
   display: inline-flex; align-items: center; gap: 8px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.app-shell .btn-ghost {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+}
+/* Desfoque só onde o botão fica direto sobre o fundo: dentro de cartões e
+   tabelas (que já desfocam) ele não muda nada e custa uma camada por botão. */
+.page-head-actions .btn-ghost {
   -webkit-backdrop-filter: var(--glass-blur-sm);
   backdrop-filter: var(--glass-blur-sm);
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
 }
-.btn-ghost:hover { background: rgba(168, 85, 247, 0.14); border-color: var(--glass-border-2); color: #fff; }
+.btn-ghost:hover { background: var(--surface-3); border-color: var(--border-strong); color: var(--text); }
+.app-shell .btn-ghost:hover { background: rgba(168, 85, 247, 0.14); border-color: var(--glass-border-2); color: #fff; }
 .btn-ghost.is-danger:hover { background: var(--danger-bg); color: #fca5a5; border-color: rgba(239,68,68,0.3); }
 
 /* Override do Bootstrap p/ manter consistência onde .btn-* já é usado */
@@ -696,20 +719,26 @@ a { text-decoration: none; }
 .nexo-label .req { color: var(--primary); }
 
 .form-control, .form-select {
-  background: rgba(9, 7, 20, 0.62);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-2);
+  border: 1px solid var(--border);
   color: var(--text);
   border-radius: var(--radius-sm);
   padding: 11px 14px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
+/* No painel, campos translúcidos sobre o vidro (login e acesso seguem opacos). */
+.app-shell .form-control, .app-shell .form-select {
+  background: rgba(9, 7, 20, 0.62);
+  border-color: rgba(255, 255, 255, 0.1);
+}
 .form-control::placeholder { color: var(--text-dim); }
 .form-control:focus, .form-select:focus {
-  background: rgba(9, 7, 20, 0.78);
+  background: var(--bg-2);
   border-color: var(--primary-2);
   box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.18);
   color: var(--text);
 }
+.app-shell .form-control:focus, .app-shell .form-select:focus { background: rgba(9, 7, 20, 0.78); }
 .form-control:disabled, .form-select:disabled { background: var(--surface); opacity: 0.7; }
 .form-text, .field-hint { color: var(--text-dim); font-size: 0.8rem; }
 .input-group-text { background: var(--surface-3); border-color: var(--border); color: var(--text-muted); }
@@ -944,6 +973,26 @@ a { text-decoration: none; }
   box-shadow: inset 1px 0 0 var(--glass-border), -16px 0 18px -14px rgba(3, 0, 12, 0.9);
 }
 .table-responsive-x.tem-rolagem .nexo-table thead .col-acoes { background: rgb(27, 22, 47); }
+.table-responsive-x.tem-rolagem .nexo-table tbody tr:hover .col-acoes { background: rgb(36, 22, 62); }
+/* Sem coluna fixa (ela cobriria dados demais): a borda direita esmaece enquanto
+   ainda há colunas para rolar, e some ao chegar ao fim. */
+.table-responsive-x.rola-mais {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 72px), rgba(0, 0, 0, 0.18));
+  mask-image: linear-gradient(90deg, #000 calc(100% - 72px), rgba(0, 0, 0, 0.18));
+}
+/* Navegando pelo teclado dentro da tabela, nada fica esmaecido. */
+.table-responsive-x.rola-mais:has(:focus-visible) { -webkit-mask-image: none; mask-image: none; }
+.table-responsive-x :is(a, button) { scroll-margin-inline: 6px; }
+
+/* Texto solto direto sobre o fundo (fora de cartão): claro e com sombra, como
+   o subtítulo dos cabeçalhos de seção. */
+.app-shell .texto-solto { color: #e2dff2; text-shadow: 0 1px 10px rgba(8, 6, 18, 0.85); }
+
+/* Linha de 3 KPIs exibida 2 a 2 (576–1199 px): o terceiro ocupa a linha toda
+   em vez de ficar órfão pela metade. */
+@media (min-width: 576px) and (max-width: 1199.98px) {
+  .app-shell .row > .col-sm-6:last-child:nth-child(odd):has(> .kpi-tile) { width: 100%; }
+}
 @media (max-width: 1199.98px) {
   .nexo-table thead th, .nexo-table tbody td { padding-left: 16px; padding-right: 16px; }
 }
@@ -979,6 +1028,16 @@ body:has(> .nexobot) .app-shell .page { padding-bottom: 104px; }
     transition: transform 0.32s var(--ease-out), visibility 0s linear 0.32s;
   }
   .app-shell.nav-open .sidebar { transform: translateX(0); visibility: visible; transition-delay: 0s; }
+  .sidebar-close {
+    display: grid; place-items: center;
+    position: absolute; top: 14px; left: calc(100% + 10px);
+    width: 40px; height: 40px; border-radius: 12px;
+    background: rgba(17, 13, 32, 0.92); border: 1px solid var(--glass-border-2);
+    color: var(--text); font-size: 1rem; cursor: pointer;
+    box-shadow: var(--shadow-glass);
+  }
+  .sidebar-close:hover { background: rgba(45, 26, 82, 0.95); color: #fff; }
+  .sidebar-close:focus-visible { outline: 2px solid #d8c2fd; outline-offset: 2px; }
   .app-shell.nav-open .sidebar-overlay { display: block; }
   .main-area { margin-left: 0; }
   .nav-toggle { display: grid; place-items: center; }
@@ -1078,7 +1137,7 @@ input, textarea, select, option,
    =================================================================== */
 .semaforo-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
   gap: 14px;
 }
 .semaforo-card {
