@@ -1,5 +1,7 @@
 # Relatório NEXO-AJ-06.1 para revisão
 
+> **Nota de integração (26/10/2026).** Documento produzido na pasta local (sem `.git`) e publicado no repositório oficial `Helio965/Nexo---Faturamento-Inteligente---Render` pela integração de 26/10/2026. A base do ZIP foi confirmada por comparação de conteúdo: o commit `ff8c2d8` da `main` (o `faa59d9` do comentário do ZIP não aparece em nenhuma branch nem PR deste repositório). Afirmações como "sem `.git`", "sem acesso ao remoto" e "VERSÃO NÃO VERIFICADA" (seção 14.3) descrevem a execução original e foram superadas pelo [relatório da integração](../INTEGRACOES/RELATORIO_INTEGRACAO_GITHUB_ZIP_2026_10_26.md). O restante do conteúdo foi preservado. Os pontos de reversão em `C:\ADS\...\Backups_NEXO\` e a pasta `evidencias\` citados abaixo ficaram na máquina do proprietário e não foram versionados.
+
 Correção prioritária do bloqueio de empresas CANCELADAS (Etapa 06, Contas Canceladas, subetapa 06.1). Controle dos prompts em [`CONTROLE_PROMPTS.md`](CONTROLE_PROMPTS.md). Escopo e aceite oficiais: mapa, linhas 199-205.
 
 **Status final: CONCLUÍDO PARA REVISÃO.** A aprovação depende da revisão independente e do responsável. Nenhum status "APROVADO" foi registrado.
