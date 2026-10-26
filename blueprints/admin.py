@@ -32,7 +32,8 @@ from company_security import (
 )
 from session_security import STATUS_CONTA_SEM_ACESSO
 from contract_policy import (
-    esquema_contratual_disponivel, motivo_bloqueio_nova_analise, obter_contrato_aplicavel,
+    contrato_da_vigencia, esquema_contratual_disponivel, motivo_bloqueio_nova_analise,
+    obter_contrato_aplicavel,
     obter_situacao_contratual, pode_consultar_analise, regime_contratual_ativo,
 )
 import storage
@@ -255,7 +256,9 @@ def analise_nova():
             flash("Selecione uma empresa válida.", "danger")
             return redirect(url_for("admin.analise_nova"))
 
-        empresa = db.session.get(Empresa, id_empresa)
+        # Lock da empresa até o COMMIT: suspensão ou cancelamento concorrente
+        # espera esta decisão (mesma ordem Empresa -> filhos dos demais fluxos).
+        empresa = bloquear_empresa(db.session, id_empresa)
         if empresa is None:
             flash("Empresa não encontrada.", "danger")
             return redirect(url_for("admin.analise_nova"))
@@ -272,7 +275,9 @@ def analise_nova():
         quinzena_ref = None
         if tipo_analise == "QUINZENAL":
             plano_nome = empresa.plano_atual.nome_plano if empresa.plano_atual else None
-            if plano_nome != "OURO":
+            # No regime contratual vale o plano do contrato que rege o período
+            # (conferido depois das datas); no legado, o plano atual.
+            if plano_nome != "OURO" and not situacao.contratual:
                 flash("Análises QUINZENAIS estão disponíveis apenas para empresas do plano OURO.", "danger")
                 return redirect(url_for("admin.analise_nova"))
             try:
@@ -293,11 +298,19 @@ def analise_nova():
         if periodo_inicio > periodo_fim:
             flash("Período inválido: início é posterior ao fim.", "danger")
             return redirect(url_for("admin.analise_nova"))
-        # Regime contratual: só contrato ATIVO, com o período dentro da vigência.
+        # Regime contratual: empresa ATIVA e período na vigência efetiva de um
+        # contrato não cancelado; o plano de referência é o desse contrato.
         bloqueio = motivo_bloqueio_nova_analise(situacao, periodo_inicio, periodo_fim)
         if bloqueio:
             flash(bloqueio, "danger")
             return redirect(url_for("admin.analise_nova"))
+        plano_referencia = empresa.id_plano_atual
+        if situacao.contratual:
+            contrato_periodo = contrato_da_vigencia(id_empresa, periodo_inicio, periodo_fim)
+            plano_referencia = contrato_periodo.id_plano
+            if tipo_analise == "QUINZENAL" and contrato_periodo.plano.nome_plano != "OURO":
+                flash("Análises QUINZENAIS estão disponíveis apenas para empresas do plano OURO.", "danger")
+                return redirect(url_for("admin.analise_nova"))
 
         try:
             mes_ref = int(form["mes_referencia"])
@@ -314,10 +327,9 @@ def analise_nova():
 
         nova = Analise(
             id_empresa=id_empresa,
-            # Snapshot do plano: o do contrato ativo no regime contratual,
-            # senão o plano atual da empresa (comportamento legado).
-            id_plano_referencia=(situacao.contrato.id_plano if situacao.contratual
-                                 else empresa.id_plano_atual),
+            # Snapshot do plano: o do contrato que rege o período no regime
+            # contratual, senão o plano atual da empresa (comportamento legado).
+            id_plano_referencia=plano_referencia,
             id_usuario_admin_responsavel=current_user.id_usuario,
             periodo_inicio=periodo_inicio,
             periodo_fim=periodo_fim,
@@ -623,9 +635,13 @@ def empresa_excluir_permanente(id_empresa):
          IndicadorAnalise (1:1), RelatorioAnalise (1:1) → depois a Analise;
       2) Por chamado: MensagemSuporte → depois o ChamadoSuporte;
       3) Notificacao dos usuários da empresa;
-      4) Registros contratuais (eventos, coberturas, contratos, regime);
-      5) Usuario(s) da empresa;
-      6) a própria Empresa.
+      4) Usuario(s) da empresa;
+      5) a própria Empresa.
+
+    Empresa com histórico contratual (contratos, períodos pagos, eventos ou
+    regime) NÃO é excluída: contratos, valores e pagamentos são registros
+    financeiros e de auditoria, e a política de retenção ainda depende de
+    decisão (Docs/GESTAO_CONTRATUAL/05, NEXO-AJ-07.3).
 
     Qualquer falha de integridade → rollback atômico (nada é apagado) + aviso.
     """
@@ -638,6 +654,14 @@ def empresa_excluir_permanente(id_empresa):
             return redirect(url_for("admin.lixeira"))
         usuarios = bloquear_usuarios_empresa(db.session, id_empresa)
         nome_emp = empresa.nome_fantasia or empresa.razao_social
+        if esquema_contratual_disponivel() and any(
+                db.session.scalar(select(modelo.id_empresa).where(modelo.id_empresa == id_empresa).limit(1))
+                is not None for modelo in (Contrato, CoberturaPaga, EventoContratual, RegimeContratual)):
+            db.session.rollback()
+            flash(f"'{nome_emp}' possui histórico contratual (contratos, pagamentos ou eventos). Para "
+                  "preservar os registros financeiros e de auditoria, a exclusão permanente está "
+                  "bloqueada; a empresa continua na lixeira.", "warning")
+            return redirect(url_for("admin.lixeira"))
 
         # 1) Análises e tudo que depende delas.
         analises = db.session.execute(
@@ -673,20 +697,7 @@ def empresa_excluir_permanente(id_empresa):
             )
             db.session.delete(ch)
 
-        # 4) Gestão contratual: a exclusão permanente leva também o histórico
-        #    contratual da empresa (eventos antes de coberturas e contratos).
-        if esquema_contratual_disponivel():
-            for modelo in (EventoContratual, CoberturaPaga):
-                db.session.execute(modelo.__table__.delete().where(modelo.id_empresa == id_empresa))
-            db.session.execute(Contrato.__table__.update().where(
-                Contrato.id_empresa == id_empresa,
-            ).values(id_contrato_anterior=None))
-            db.session.execute(Contrato.__table__.delete().where(Contrato.id_empresa == id_empresa))
-            db.session.execute(RegimeContratual.__table__.delete().where(
-                RegimeContratual.id_empresa == id_empresa,
-            ))
-
-        # 3/5) Notificações dos usuários da empresa + os próprios usuários.
+        # 3/4) Notificações dos usuários da empresa + os próprios usuários.
         ids_usuarios = [u.id_usuario for u in usuarios]
         if ids_usuarios:
             db.session.execute(

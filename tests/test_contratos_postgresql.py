@@ -28,7 +28,8 @@ SQLite; aqui só o que depende do PostgreSQL real):
   5. contratações concorrentes deixam um único contrato vigente;
   6. prorrogação x reconciliação serializadas pelos locks da empresa;
   7. exclusão permanente (rota ADMIN) de empresa na lixeira com contratos,
-     coberturas, eventos e renovação encadeada, sem erro de FK;
+     coberturas, eventos e renovação encadeada é recusada sem apagar nada
+     (histórico financeiro preservado) e sem afetar as outras empresas;
   8. downgrade para e4c004a26b01 recusado com dados contratuais, aceito com as
      tabelas vazias (portal segue no regime legado) e novo upgrade até o head.
 """
@@ -84,7 +85,7 @@ CHECKS = (
     "reconciliation_waits_extension_lock", "extension_first_prevents_cancellation",
     "reconciliation_first_rejects_extension",
     # 7. Exclusão permanente
-    "permanent_delete_removes_contract_data", "permanent_delete_keeps_other_companies",
+    "permanent_delete_blocked_with_contract_history", "permanent_delete_keeps_other_companies",
     # 8. Downgrade e novo upgrade
     "downgrade_refused_with_contract_data", "downgrade_with_empty_tables",
     "legacy_access_without_schema", "upgrade_again_after_downgrade",
@@ -1146,12 +1147,14 @@ class _PrivateCluster:
                       sessao.scalar(select(func.count()).select_from(Analise).where(Analise.id_empresa == id_ex)),
                       sessao.scalar(select(func.count()).select_from(Notificacao).where(
                           Notificacao.id_usuario == id_cliente_ex)))
-        self.check("permanent_delete_removes_contract_data",
+        # Histórico contratual é registro financeiro e de auditoria: a exclusão
+        # permanente é recusada e nada é apagado (retenção pendente de decisão).
+        self.check("permanent_delete_blocked_with_contract_history",
                    logado and encadeado and lixeira.status_code == 302 and exclusao.status_code == 302
                    and "/admin/lixeira" in exclusao.headers.get("Location", "")
                    and antes == {"regime_contratual": 1, "contrato": 2, "cobertura_paga": 2, "evento_contratual": 6}
-                   and all(n == 0 for n in depois.values()) and restos == (None, None, 0, 0)
-                   and "excluídos permanentemente" in pagina and "Não foi possível excluir" not in pagina,
+                   and depois == antes and restos[0] is not None and restos[1] is not None and restos[2] > 0
+                   and "possui histórico contratual" in pagina and "excluídos permanentemente" not in pagina,
                    f"login={resposta.status_code} lixeira={lixeira.status_code} exclusao={exclusao.status_code} "
                    f"antes={antes} depois={depois} restos={[r is None if not isinstance(r, int) else r for r in restos]}")
         self.check("permanent_delete_keeps_other_companies",

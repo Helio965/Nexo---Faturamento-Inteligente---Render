@@ -33,6 +33,7 @@ from zoneinfo import ZoneInfo
 
 from flask import current_app, g, has_app_context, has_request_context
 from sqlalchemy import and_, inspect, or_, select, true
+from sqlalchemy.exc import SQLAlchemyError
 
 from extensions import db
 from models import CoberturaPaga, Contrato, Empresa, RegimeContratual
@@ -65,6 +66,11 @@ class EsquemaContratualIndisponivel(RuntimeError):
     """A migração da gestão contratual ainda não foi aplicada neste banco."""
 
 
+class EsquemaContratualInconsistente(SQLAlchemyError):
+    """Só parte das tabelas contratuais existe. É erro de banco: guarda de
+    sessão (503), Socket.IO (desconecta) e notificações falham fechado."""
+
+
 # ---------------------------------------------------------------------------
 # Disponibilidade do esquema (implantação expand -> migrate -> deploy)
 # ---------------------------------------------------------------------------
@@ -91,7 +97,7 @@ def esquema_contratual_disponivel(sessao=None) -> bool:
         _esquema_por_engine[engine] = True
         return True
     if presentes:
-        raise RuntimeError("Esquema contratual parcial: confira a migração 81287c74387a.")
+        raise EsquemaContratualInconsistente("Esquema contratual parcial: confira a migração 81287c74387a.")
     _esquema_por_engine[engine] = time.monotonic()
     return False
 
@@ -123,17 +129,18 @@ def utc(instante: datetime) -> datetime:
     return instante.astimezone(timezone.utc)
 
 
-def agora() -> datetime:
+def agora(*, nova_leitura: bool = False) -> datetime:
     """Relógio único da política. Testes injetam NEXO_RELOGIO (callable).
 
     Dentro de uma requisição o instante é fixado na primeira leitura: guarda
-    de sessão, rota e template avaliam o MESMO instante.
+    de sessão, rota e template avaliam o MESMO instante. `nova_leitura` lê o
+    relógio de novo (reverificação após uma etapa demorada, como o upload).
     """
-    if has_request_context() and "_nexo_agora_contratual" in g:
+    if not nova_leitura and has_request_context() and "_nexo_agora_contratual" in g:
         return g._nexo_agora_contratual
     relogio = current_app.config.get("NEXO_RELOGIO") if has_app_context() else None
     instante = utc(relogio() if relogio is not None else datetime.now(timezone.utc))
-    if has_request_context():
+    if has_request_context() and "_nexo_agora_contratual" not in g:
         g._nexo_agora_contratual = instante
     return instante
 
@@ -287,13 +294,19 @@ def intervalos_pagos(id_empresa: int, *, instante: datetime | None = None, sessa
 # ---------------------------------------------------------------------------
 # Estado efetivo
 # ---------------------------------------------------------------------------
-def obter_contrato_aplicavel(id_empresa: int, *, sessao=None) -> Contrato | None:
-    """Contrato ATIVO ou SUSPENSO (índice único parcial garante no máximo um)."""
+def obter_contrato_aplicavel(id_empresa: int, *, sessao=None, atualizar: bool = False) -> Contrato | None:
+    """Contrato ATIVO ou SUSPENSO (índice único parcial garante no máximo um).
+
+    `atualizar` relê os atributos do banco em vez do mapa de identidade.
+    """
     sessao = sessao or db.session
-    return sessao.scalars(select(Contrato).where(
+    consulta = select(Contrato).where(
         Contrato.id_empresa == id_empresa,
         Contrato.situacao.in_(("ATIVO", "SUSPENSO")),
-    ).order_by(Contrato.id_contrato.desc()).limit(1)).first()
+    ).order_by(Contrato.id_contrato.desc()).limit(1)
+    if atualizar:
+        consulta = consulta.execution_options(populate_existing=True)
+    return sessao.scalars(consulta).first()
 
 
 @dataclass(frozen=True)
@@ -342,9 +355,16 @@ class SituacaoContratual:
 
 
 def obter_situacao_contratual(empresa: Empresa | None, *, instante: datetime | None = None,
-                              sessao=None, carregar_coberturas: bool = True) -> SituacaoContratual:
-    """Situação da empresa no instante; mesma regra da cláusula SQL de acesso."""
-    instante = agora() if instante is None else utc(instante)
+                              sessao=None, carregar_coberturas: bool = True,
+                              atualizar: bool = False) -> SituacaoContratual:
+    """Situação da empresa no instante; mesma regra da cláusula SQL de acesso.
+
+    `atualizar` relê empresa e contrato do banco e o relógio, para reverificar
+    uma decisão depois de uma etapa longa da mesma requisição.
+    """
+    instante = agora(nova_leitura=atualizar) if instante is None else utc(instante)
+    if atualizar and empresa is not None:
+        (sessao or db.session).refresh(empresa)
     if empresa is None:
         return SituacaoContratual(None, REGIME_LEGADO, ESTADO_EXCLUIDA, None, instante)
     base = dict(id_empresa=empresa.id_empresa, status_conta=empresa.status_conta, instante=instante)
@@ -358,7 +378,7 @@ def obter_situacao_contratual(empresa: Empresa | None, *, instante: datetime | N
         estado = ESTADO_SUSPENSA if empresa.status_conta == "SUSPENSA" else ESTADO_ATIVA
         return SituacaoContratual(regime=regime, estado=estado, **base)
 
-    contrato = obter_contrato_aplicavel(empresa.id_empresa, sessao=sessao)
+    contrato = obter_contrato_aplicavel(empresa.id_empresa, sessao=sessao, atualizar=atualizar)
     if contrato is None:
         return SituacaoContratual(regime=regime, estado=ESTADO_SEM_CONTRATO, **base)
     intervalos = (intervalos_pagos(empresa.id_empresa, instante=instante, sessao=sessao)
@@ -452,15 +472,56 @@ def pode_enviar_relatorio(situacao: SituacaoContratual, analise=None) -> bool:
     return analise_coberta(situacao, analise)
 
 
+def vigencia_efetiva(contrato: Contrato, *, sessao=None) -> tuple[date, date | None]:
+    """Intervalo em que o contrato realmente regeu a relação (fim None = aberto).
+
+    ENCERRADO termina na véspera do início do sucessor; CANCELADO, na data
+    local do cancelamento; sempre limitado ao término previsto.
+    """
+    sessao = sessao or db.session
+    fim = contrato.data_fim
+    limite = None
+    if contrato.situacao == "ENCERRADO":
+        inicio_sucessor = sessao.scalar(select(Contrato.data_inicio).where(
+            Contrato.id_contrato_anterior == contrato.id_contrato,
+            Contrato.id_empresa == contrato.id_empresa,
+        ))
+        if inicio_sucessor is not None:
+            limite = inicio_sucessor - timedelta(days=1)
+    elif contrato.situacao == "CANCELADO" and contrato.cancelado_em is not None:
+        limite = data_local(contrato.cancelado_em)
+    if limite is not None:
+        fim = limite if fim is None else min(fim, limite)
+    return contrato.data_inicio, fim
+
+
+def contrato_da_vigencia(id_empresa: int, periodo_inicio: date, periodo_fim: date, *,
+                         sessao=None) -> Contrato | None:
+    """Contrato não cancelado cuja vigência efetiva contém todo o período.
+
+    Se mais de um servir (renovação com períodos sobrepostos), vale o de
+    início mais recente: é ele que rege o período.
+    """
+    sessao = sessao or db.session
+    if periodo_inicio is None or periodo_fim is None or periodo_inicio > periodo_fim:
+        return None
+    candidatos = []
+    for contrato in sessao.scalars(select(Contrato).where(
+            Contrato.id_empresa == id_empresa, Contrato.situacao != "CANCELADO")):
+        inicio, fim = vigencia_efetiva(contrato, sessao=sessao)
+        if inicio <= periodo_inicio and (fim is None or periodo_fim <= fim):
+            candidatos.append(contrato)
+    return max(candidatos, key=lambda c: (c.data_inicio, c.id_contrato), default=None)
+
+
 def motivo_bloqueio_nova_analise(situacao: SituacaoContratual, periodo_inicio: date,
-                                 periodo_fim: date) -> str | None:
-    """Regime contratual: só empresa ATIVA e período dentro da vigência do contrato."""
+                                 periodo_fim: date, *, sessao=None) -> str | None:
+    """Regime contratual: empresa ATIVA e período inteiro na vigência efetiva de
+    um contrato não cancelado (o vigente ou um anterior encerrado)."""
     if not situacao.contratual:
         return None
     if situacao.estado != ESTADO_ATIVA or situacao.contrato is None:
         return "A empresa não possui contrato ativo: novas análises estão bloqueadas."
-    contrato = situacao.contrato
-    if periodo_inicio < contrato.data_inicio or (
-            contrato.data_fim is not None and periodo_fim > contrato.data_fim):
-        return "O período da análise está fora da vigência do contrato ativo."
+    if contrato_da_vigencia(situacao.id_empresa, periodo_inicio, periodo_fim, sessao=sessao) is None:
+        return "O período da análise está fora da vigência dos contratos da empresa."
     return None

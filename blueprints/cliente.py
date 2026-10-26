@@ -403,8 +403,9 @@ def upload():
                 or analise.status_analise not in STATUS_ACEITA_UPLOAD):
             db.session.rollback()
             abort(404)
-        # A situação contratual pode ter mudado durante a validação do arquivo.
-        if not pode_enviar_relatorio(obter_situacao_contratual(empresa), analise):
+        # A situação contratual pode ter mudado durante a validação do arquivo:
+        # relê empresa, contrato e relógio antes de gravar.
+        if not pode_enviar_relatorio(obter_situacao_contratual(empresa, atualizar=True), analise):
             db.session.rollback()
             return _acesso_restrito(
                 "Envio indisponível",

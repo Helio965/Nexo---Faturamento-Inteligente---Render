@@ -15,6 +15,7 @@ depois desconecta os sockets revogados. Prazos usam contract_policy.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
@@ -24,7 +25,7 @@ from sqlalchemy import func, select
 from company_security import aplicar_status_conta, bloquear_empresa
 from contract_policy import (
     agora, calcular_limite_exportacao_pdf, calcular_limite_suspensao, data_local,
-    exigir_esquema_contratual, politica_prazos, utc,
+    exigir_esquema_contratual, politica_prazos, utc, vigencia_efetiva,
 )
 from models import CoberturaPaga, Contrato, Empresa, EventoContratual, Plano, RegimeContratual
 
@@ -77,14 +78,25 @@ def texto(valor, nome: str, *, obrigatorio: bool = False, maximo: int = TAMANHO_
     return valor or None
 
 
+_VALOR_BR = re.compile(r"(?:\d{1,3}(?:\.\d{3})+|\d+)(?:,\d{1,2})?")
+_VALOR_PONTO = re.compile(r"\d+(?:\.\d{1,2})?")
+
+
 def valor_monetario(valor) -> Decimal:
-    """Aceita '650', '650.00', '650,00' e '1.234,56'."""
+    """Valor em reais: '650', '650,00', '1.500' (mil e quinhentos), '1.234,56'
+    ou '650.00' (ponto decimal com até duas casas, como o preenchimento automático).
+
+    Ponto seguido de exatamente três dígitos é separador de milhar, nunca
+    decimal; formatos ambíguos ou mistos ('1,234.56') são recusados.
+    """
     if isinstance(valor, Decimal):
         bruto = valor
     else:
-        s = (valor or "").strip() if isinstance(valor, str) else str(valor)
-        if "," in s:
+        s = valor.strip() if isinstance(valor, str) else ("" if valor is None else str(valor))
+        if _VALOR_BR.fullmatch(s) and ("," in s or "." in s and not _VALOR_PONTO.fullmatch(s)):
             s = s.replace(".", "").replace(",", ".")
+        elif not _VALOR_PONTO.fullmatch(s):
+            raise ErroContratual("Valor mensal contratado inválido. Use o formato 1.234,56.")
         try:
             bruto = Decimal(s)
         except (InvalidOperation, ValueError):
@@ -290,6 +302,12 @@ def renovar_contrato(sessao, id_empresa: int, id_contrato: int, versao: int, dad
     _validar_dados(sessao, dados, instante)
     if dados.data_inicio <= atual.data_inicio:
         raise ErroContratual("A nova vigência deve começar depois do início do contrato atual.")
+    # O contrato atual passa a ENCERRADO agora: um sucessor com início futuro
+    # deixaria o intervalo até lá sem contrato vigente (renovação agendada não
+    # é suportada; registre-a quando a nova vigência começar).
+    if dados.data_inicio > data_local(instante):
+        raise ErroContratual("A nova vigência não pode começar no futuro: registre a renovação "
+                             "ou a troca de plano a partir da data de início.")
     if alteracao_plano and dados.id_plano == atual.id_plano:
         raise ErroContratual("Selecione um plano diferente do atual para registrar a alteração.")
     justificativa = texto(justificativa, "a justificativa", obrigatorio=alteracao_plano)
@@ -334,13 +352,18 @@ def suspender_contrato(sessao, id_empresa: int, id_contrato: int, versao: int, *
         raise ErroContratual("Somente contratos ativos podem ser suspensos.")
     motivo = texto(motivo, "o motivo da suspensão", obrigatorio=True)
     suspenso_em = instante if suspenso_em is None else utc(suspenso_em)
+    if not DATA_MINIMA.year <= suspenso_em.year <= DATA_MAXIMA.year:
+        raise ErroContratual("Início da suspensão fora do intervalo permitido.")
     if suspenso_em > instante:
         raise ErroContratual("O início da suspensão não pode estar no futuro.")
     inicio_contrato = datetime.combine(contrato.data_inicio, time.min, politica.fuso)
-    ultimo_registro = contrato.data_atualizacao or contrato.data_criacao
-    if suspenso_em < utc(inicio_contrato) or (ultimo_registro is not None and suspenso_em < ultimo_registro):
+    # Conciliação: o cadastro do contrato pode ser posterior à suspensão real,
+    # por isso só uma mudança de situação já registrada (ex.: reativação)
+    # limita o retroativo, além do início da vigência.
+    ultima_mudanca = contrato.data_atualizacao
+    if suspenso_em < utc(inicio_contrato) or (ultima_mudanca is not None and suspenso_em < ultima_mudanca):
         raise ErroContratual("O início da suspensão não pode ser anterior ao início do contrato "
-                             "nem à última alteração registrada nele.")
+                             "nem à última mudança de situação registrada nele.")
     limite = calcular_limite_suspensao(suspenso_em, contrato.meses_suspensao, politica)
     if limite <= instante:
         raise ErroContratual("Com essa data o prazo de suspensão já estaria encerrado. Revise o início informado.")
@@ -381,7 +404,8 @@ def registrar_prorrogacao(sessao, id_empresa: int, id_contrato: int, versao: int
         raise ErroContratual("Somente suspensões registradas podem ser prorrogadas.")
     justificativa = texto(justificativa, "a justificativa do acordo", obrigatorio=True)
     novo_limite = utc(novo_limite)
-    if data_local(novo_limite) > DATA_MAXIMA:
+    if not DATA_MINIMA.year <= novo_limite.year <= DATA_MAXIMA.year or (
+            novo_limite_pdf is not None and not DATA_MINIMA.year <= utc(novo_limite_pdf).year <= DATA_MAXIMA.year):
         raise ErroContratual("Nova data-limite fora do intervalo permitido.")
     if novo_limite <= contrato.suspenso_em:
         raise ErroContratual("A nova data-limite não pode ser anterior ao início da suspensão.")
@@ -486,9 +510,10 @@ def registrar_cobertura(sessao, id_empresa: int, id_contrato: int, *, periodo_in
     _data_valida(periodo_fim, "o fim do período pago", obrigatoria=True)
     if periodo_fim < periodo_inicio:
         raise ErroContratual("O fim do período pago não pode ser anterior ao início.")
-    if periodo_inicio < contrato.data_inicio or (
-            contrato.data_fim is not None and periodo_fim > contrato.data_fim):
-        raise ErroContratual("O período pago precisa estar dentro da vigência do contrato.")
+    inicio_vigencia, fim_vigencia = vigencia_efetiva(contrato, sessao=sessao)
+    if periodo_inicio < inicio_vigencia or (fim_vigencia is not None and periodo_fim > fim_vigencia):
+        raise ErroContratual("O período pago precisa estar dentro da vigência do contrato. A vigência "
+                             "efetiva termina no término previsto, na renovação ou no cancelamento.")
     referencia = texto(referencia, "a referência da confirmação", obrigatorio=True,
                        maximo=TAMANHO_TEXTO_CURTO)
     conflito = sessao.scalar(select(CoberturaPaga).where(
@@ -637,14 +662,17 @@ def _candidatos_vencidos(sessao, instante):
     ).all())
 
 
-def reconciliar_vencimentos(sessao, *, aplicar: bool = False, instante=None) -> RelatorioReconciliacao:
+def reconciliar_vencimentos(sessao, *, aplicar: bool = False, instante=None,
+                            acionado_por=None) -> RelatorioReconciliacao:
     """Cancela suspensões vencidas no regime contratual. Idempotente.
 
     Simulação (padrão) só lista candidatos. Na aplicação, um lock consultivo
     de transação impede execuções concorrentes no PostgreSQL; cada empresa é
     bloqueada e reavaliada antes da mudança, então uma prorrogação ou
     renovação gravada no intervalo é respeitada. O chamador confirma a
-    transação e depois desconecta os sockets revogados.
+    transação e depois desconecta os sockets revogados. `acionado_por` (ADMIN
+    que usou o botão) fica nos detalhes do evento; a origem continua sendo a
+    reconciliação, que aplica a regra e não uma decisão individual.
     """
     exigir_esquema_contratual(sessao)
     instante = _instante(instante)
@@ -669,7 +697,8 @@ def reconciliar_vencimentos(sessao, *, aplicar: bool = False, instante=None) -> 
             sessao, empresa, contrato, MOTIVO_EXPIRACAO, instante,
             detalhes=_detalhes(suspenso_em=contrato.suspenso_em,
                                suspensao_limite=contrato.suspensao_limite,
-                               suspensao_limite_original=contrato.suspensao_limite_original),
+                               suspensao_limite_original=contrato.suspensao_limite_original,
+                               acionado_por=getattr(acionado_por, "id_usuario", None)),
         )
         relatorio.cancelados.append({"id_empresa": id_empresa, "id_contrato": id_contrato})
         relatorio.revogados.extend(resultado.revogados)

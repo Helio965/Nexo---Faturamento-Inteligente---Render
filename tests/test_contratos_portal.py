@@ -936,7 +936,7 @@ class AdministracaoContratualHttpTests(PortalContratualCase):
         self.assertEqual((self._contrato(c).situacao, self._empresa().status_conta), ("ATIVO", "ATIVA"))
 
         resposta = self._operar(f"{self.base}/contratos/{c}/renovar", id_plano=str(self.bronze),
-                                valor_mensal="160,00", data_inicio="2027-01-01", data_fim="2027-12-31")
+                                valor_mensal="160,00", data_inicio="2026-03-01", data_fim="2027-02-28")
         self._assert_sucesso(resposta, "Renovação registrada; o contrato anterior foi preservado como encerrado.",
                              "RENOVACAO")
         self.assertEqual(self._contrato(c).situacao, "ENCERRADO")
@@ -944,8 +944,8 @@ class AdministracaoContratualHttpTests(PortalContratualCase):
         self.assertEqual((renovado.id_contrato_anterior, renovado.valor_mensal_contratado), (c, Decimal("160.00")))
 
         resposta = self._operar(f"{self.base}/contratos/{renovado.id_contrato}/alterar-plano",
-                                id_plano=str(self.prata), valor_mensal="300,00", data_inicio="2027-02-01",
-                                data_fim="2027-12-31", justificativa="Cliente fictício pediu o plano Prata")
+                                id_plano=str(self.prata), valor_mensal="300,00", data_inicio="2026-03-02",
+                                data_fim="2027-02-28", justificativa="Cliente fictício pediu o plano Prata")
         self._assert_sucesso(resposta, "Alteração de plano registrada; o contrato anterior foi preservado "
                              "como encerrado.", "ALTERACAO_PLANO")
         atual = self._vigente()
@@ -1019,10 +1019,10 @@ class AdministracaoContratualHttpTests(PortalContratualCase):
             (f"{rota}/cancelar", dict(justificativa="Rescisão fictícia", confirmacao="cancelar"),
              "Digite CANCELAR para confirmar o cancelamento."),
             (f"{rota}/alterar-plano", dict(id_plano=str(self.bronze), valor_mensal="150,00",
-                                           data_inicio="2026-06-01", justificativa="x"),
+                                           data_inicio="2026-03-01", justificativa="x"),
              "Selecione um plano diferente do atual para registrar a alteração."),
             (f"{rota}/alterar-plano", dict(id_plano=str(self.prata), valor_mensal="300,00",
-                                           data_inicio="2026-06-01"),
+                                           data_inicio="2026-03-01"),
              "Informe a justificativa."),
             (novo, dict(id_plano=str(self.bronze), valor_mensal="150,00", data_inicio="2026-01-01"),
              "A empresa já possui contrato vigente: use a renovação ou a alteração de plano."),
@@ -1312,7 +1312,8 @@ class BloqueiosAdministrativosTests(PortalContratualCase):
                 resposta = self._abrir_analise(inicio, fim)
                 self.assertEqual(resposta.status_code, 302)
                 self.assertTrue(resposta.headers["Location"].endswith("/admin/analises/nova"))
-                self.assertIn("O período da análise está fora da vigência do contrato ativo.", self._flashes(self.adm))
+                self.assertIn("O período da análise está fora da vigência dos contratos da empresa.",
+                              self._flashes(self.adm))
         self.assertEqual(self._contagem_analises(), total)
         resposta = self._abrir_analise(date(2026, 5, 1), date(2026, 5, 31))
         self.assertEqual(resposta.status_code, 302)

@@ -84,11 +84,11 @@ A presença da linha significa **regras contratuais ativas** para a empresa; a a
 | `confirmado_em`, `id_usuario_admin_confirmacao` | timestamptz, FK | |
 | `revogada_em`, `revogacao_motivo`, `id_usuario_admin_revogacao` | | Revogação auditada. O CHECK `ck_cobertura_revogacao` exige os três campos juntos |
 
-O registro é imutável: para corrigir, revoga-se a cobertura com motivo e registra-se outra. A sobreposição entre coberturas vigentes da mesma empresa é recusada pela aplicação, sob o lock da empresa.
+O registro é imutável: para corrigir, revoga-se a cobertura com motivo e registra-se outra. A sobreposição entre coberturas vigentes da mesma empresa é recusada pela aplicação, sob o lock da empresa. O período precisa caber na vigência efetiva do contrato (`contract_policy.vigencia_efetiva`). `uq_cobertura_id_empresa` é o alvo da FK composta do evento.
 
 ### 2.4 `evento_contratual` (`EventoContratual`)
 
-Trilha somente de inclusão. Tem os campos `tipo` (CHECK nomeado), `ocorrido_em`, `origem` e `id_usuario_responsavel`. O CHECK `ck_evento_origem` amarra os dois últimos: `ADMIN` exige responsável e `RECONCILIACAO` exige responsável nulo. Também guarda `situacao_anterior`/`situacao_posterior`, `justificativa` e `detalhes` (JSON com os valores anteriores e novos), e se liga à cobertura e ao contrato pela FK composta. A aplicação nunca altera nem apaga um evento; a única exceção é a exclusão permanente da empresa, que já existia (ver §5).
+Trilha somente de inclusão. Tem os campos `tipo` (CHECK nomeado), `ocorrido_em`, `origem` e `id_usuario_responsavel`. O CHECK `ck_evento_origem` amarra os dois últimos: `ADMIN` exige responsável e `RECONCILIACAO` exige responsável nulo. Também guarda `situacao_anterior`/`situacao_posterior`, `justificativa` e `detalhes` (JSON com os valores anteriores e novos), e se liga à cobertura (`fk_evento_cobertura_mesma_empresa`) e ao contrato (`fk_evento_contrato_mesma_empresa`) por FKs compostas, que garantem que ambos são da mesma empresa do evento. A aplicação nunca altera nem apaga um evento; a única exceção é a exclusão permanente da empresa, que já existia (ver §5).
 
 Tipos registrados: `CONTRATACAO`, `RENOVACAO`, `ALTERACAO_PLANO`, `SUSPENSAO`, `PRORROGACAO`, `REATIVACAO`, `CANCELAMENTO`, `COBERTURA_CONFIRMADA`, `COBERTURA_REVOGADA`, `REGRAS_ATIVADAS` e `REGRAS_DESATIVADAS`.
 
@@ -111,7 +111,7 @@ Cada alteração de `plano.valor_mensal` feita pela atualização do catálogo r
 `contract_policy.esquema_contratual_disponivel()` confere se as cinco tabelas existem. O resultado é guardado por engine; uma ausência é reavaliada a cada 30 s.
 
 - **Antes da migração:** todo o sistema fica no regime legado. A cláusula SQL vira `TRUE`, a política devolve LEGADO e as telas de contratos avisam que a migração está pendente. Nenhuma tabela nova é consultada.
-- **Esquema parcial ou erro de consulta:** falha fechado (exceção).
+- **Esquema parcial ou erro de consulta:** falha fechado. O esquema parcial lança `EsquemaContratualInconsistente`, subclasse de `SQLAlchemyError`, que cai no tratamento já existente de erro de banco: guarda de sessão com 503, Socket.IO desconectado, entrega de notificação recusada.
 - **Depois da migração:** cada empresa continua no regime legado até o administrador concluir a conciliação e ativar as regras (§2.1).
 
 ## 5. Integrações com o que já existia (reutilizado, não refeito)
@@ -122,7 +122,7 @@ Cada alteração de `plano.valor_mensal` feita pela atualização do catálogo r
 | Rotas do cliente | Dashboard, histórico, análise, PDF e upload consultam a política. Os dados não autorizados não chegam ao HTML nem ao JSON do gráfico. O gráfico histórico usa só as análises autorizadas |
 | Login | Senha correta de conta encerrada mostra `auth/conta_encerrada.html`, sem sessão. E-mail inexistente agora custa um hash fictício, o que elimina a diferença de tempo que permitia enumerar contas |
 | Admin | Novo item "Contratos" na barra lateral e botão "Detalhes" na lista de empresas. A edição da empresa bloqueia status e plano quando há contrato vigente ou regras ativas. `analise_nova` respeita a vigência e grava o plano do contrato. O dashboard soma o valor contratado na receita estimada e mostra as pendências. A publicação só avisa o cliente se ele puder consultar a análise |
-| Exclusão permanente | Remove eventos, coberturas, contratos e regime antes dos usuários (só quando o esquema existe) |
+| Exclusão permanente | Bloqueada para empresas com histórico contratual, para preservar os registros financeiros e de auditoria (a retenção é decisão pendente). Sem histórico contratual, o comportamento é o anterior |
 | NexoBot | Os textos sobre suspensão, PDF e planos foram ajustados, sem citar prazos nem valores (regra editorial do bot) |
 | Backup | O inventário do documento operacional e o ensaio de backup/restauração cobrem as cinco tabelas novas |
 

@@ -768,6 +768,7 @@ class CoberturaPaga(db.Model):
     revogado_por = relationship("Usuario", foreign_keys=[id_usuario_admin_revogacao])
 
     __table_args__ = (
+        UniqueConstraint("id_cobertura", "id_empresa", name="uq_cobertura_id_empresa"),
         # A cobertura só pode pertencer a um contrato da MESMA empresa.
         ForeignKeyConstraint(
             ["id_contrato", "id_empresa"],
@@ -812,7 +813,7 @@ class EventoContratual(db.Model):
     id_evento: Mapped[int] = mapped_column(primary_key=True)
     id_empresa: Mapped[int] = mapped_column(ForeignKey("empresa.id_empresa"), nullable=False)
     id_contrato: Mapped[Optional[int]] = mapped_column(Integer)
-    id_cobertura: Mapped[Optional[int]] = mapped_column(ForeignKey("cobertura_paga.id_cobertura"))
+    id_cobertura: Mapped[Optional[int]] = mapped_column(Integer)
     tipo: Mapped[str] = mapped_column(String(40), nullable=False)
     ocorrido_em: Mapped[datetime] = mapped_column(InstanteUTC(), nullable=False)
     origem: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -829,6 +830,11 @@ class EventoContratual(db.Model):
             ["id_contrato", "id_empresa"],
             ["contrato.id_contrato", "contrato.id_empresa"],
             name="fk_evento_contrato_mesma_empresa",
+        ),
+        ForeignKeyConstraint(
+            ["id_cobertura", "id_empresa"],
+            ["cobertura_paga.id_cobertura", "cobertura_paga.id_empresa"],
+            name="fk_evento_cobertura_mesma_empresa",
         ),
         CheckConstraint(
             "tipo IN ('CONTRATACAO', 'RENOVACAO', 'ALTERACAO_PLANO', 'SUSPENSAO', "

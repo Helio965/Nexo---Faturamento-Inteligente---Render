@@ -57,7 +57,11 @@ class ContratoCadastroTests(ContratosCase):
     def test_valor_aceita_formato_brasileiro(self):
         self.assertEqual(contract_admin.valor_monetario("1.234,56"), Decimal("1234.56"))
         self.assertEqual(contract_admin.valor_monetario("650"), Decimal("650.00"))
-        for invalido in ("abc", "NaN", "Infinity", "-5", "1000000.01"):
+        # Ponto com três dígitos é milhar (mil e quinhentos), nunca R$ 1,50.
+        self.assertEqual(contract_admin.valor_monetario("1.500"), Decimal("1500.00"))
+        self.assertEqual(contract_admin.valor_monetario("650.00"), Decimal("650.00"))
+        self.assertEqual(contract_admin.valor_monetario("12,5"), Decimal("12.50"))
+        for invalido in ("abc", "NaN", "Infinity", "-5", "1000000.01", "1,234.56", "1.2345", "1e3", ""):
             with self.subTest(invalido), self.assertRaises(ErroContratual):
                 contract_admin.valor_monetario(invalido)
 
@@ -129,7 +133,7 @@ class RenovacaoEPlanoTests(ContratosCase):
         antigo = self.contratar(valor_mensal=Decimal("120.00"))
         resultado = contract_admin.renovar_contrato(
             self.db.session, self.empresa_id, antigo.id_contrato, antigo.versao,
-            self.dados(valor_mensal=Decimal("150.00"), data_inicio=date(2027, 1, 1), data_fim=date(2027, 12, 31)),
+            self.dados(valor_mensal=Decimal("150.00"), data_inicio=date(2026, 3, 1), data_fim=date(2027, 2, 28)),
             responsavel=self.admin, instante=self.agora,
         )
         self.db.session.commit()
@@ -151,18 +155,18 @@ class RenovacaoEPlanoTests(ContratosCase):
         with self.assertRaises(ErroContratual):  # mesmo plano
             contract_admin.renovar_contrato(
                 self.db.session, self.empresa_id, antigo.id_contrato, antigo.versao,
-                self.dados(data_inicio=date(2026, 6, 1)), responsavel=self.admin,
+                self.dados(data_inicio=date(2026, 3, 1)), responsavel=self.admin,
                 justificativa="Troca", alteracao_plano=True, instante=self.agora)
         self.db.session.rollback()
         with self.assertRaises(ErroContratual):  # justificativa obrigatória
             contract_admin.renovar_contrato(
                 self.db.session, self.empresa_id, antigo.id_contrato, antigo.versao,
-                self.dados(id_plano=prata.id_plano, data_inicio=date(2026, 6, 1)),
+                self.dados(id_plano=prata.id_plano, data_inicio=date(2026, 3, 1)),
                 responsavel=self.admin, alteracao_plano=True, instante=self.agora)
         self.db.session.rollback()
         novo = contract_admin.renovar_contrato(
             self.db.session, self.empresa_id, antigo.id_contrato, antigo.versao,
-            self.dados(id_plano=prata.id_plano, valor_mensal=Decimal("300.00"), data_inicio=date(2026, 6, 1)),
+            self.dados(id_plano=prata.id_plano, valor_mensal=Decimal("300.00"), data_inicio=date(2026, 3, 1)),
             responsavel=self.admin, justificativa="Cliente pediu o Prata", alteracao_plano=True,
             instante=self.agora,
         ).contrato
@@ -177,12 +181,15 @@ class RenovacaoEPlanoTests(ContratosCase):
         detalhes = json.loads(eventos(self.db, self.empresa_id)[-1].detalhes)
         self.assertEqual((detalhes["plano_anterior"], detalhes["id_plano"]), (antigo.id_plano, prata.id_plano))
 
-    def test_nova_vigencia_precisa_comecar_depois(self):
+    def test_nova_vigencia_precisa_comecar_depois_e_nao_no_futuro(self):
         antigo = self.contratar()
-        with self.assertRaises(ErroContratual):
-            contract_admin.renovar_contrato(self.db.session, self.empresa_id, antigo.id_contrato, antigo.versao,
-                                            self.dados(data_inicio=date(2026, 1, 1)), responsavel=self.admin,
-                                            instante=self.agora)
+        for inicio in (date(2026, 1, 1), date(2026, 3, 3), date(2027, 1, 1)):  # T0 = 02/03/2026
+            with self.subTest(inicio=inicio), self.assertRaises(ErroContratual):
+                contract_admin.renovar_contrato(self.db.session, self.empresa_id, antigo.id_contrato, antigo.versao,
+                                                self.dados(data_inicio=inicio), responsavel=self.admin,
+                                                instante=self.agora)
+            self.db.session.rollback()
+        self.assertEqual(self.vigente().id_contrato, antigo.id_contrato)
 
     def test_contrato_de_outra_empresa_e_recusado(self):
         alheio = self.contratar(empresa_id=self.outra_empresa_id)
@@ -350,14 +357,37 @@ class SuspensaoTests(ContratosCase):
                                               motivo="x", responsavel=self.admin,
                                               suspenso_em=T0 + timedelta(minutes=1), instante=self.agora)
         self.db.session.rollback()
-        with self.assertRaises(ErroContratual):  # antes da última alteração registrada
-            contract_admin.suspender_contrato(self.db.session, self.empresa_id, contrato.id_contrato, contrato.versao,
-                                              motivo="x", responsavel=self.admin,
-                                              suspenso_em=T0 - timedelta(days=10), instante=self.agora)
-        self.db.session.rollback()
+        for invalido in (datetime(2025, 12, 31, 12, tzinfo=timezone.utc),  # antes do início do contrato
+                         datetime(9999, 12, 31, 23, tzinfo=timezone.utc)):
+            with self.subTest(invalido=invalido), self.assertRaises(ErroContratual):
+                contract_admin.suspender_contrato(self.db.session, self.empresa_id, contrato.id_contrato,
+                                                  contrato.versao, motivo="x", responsavel=self.admin,
+                                                  suspenso_em=invalido, instante=self.agora)
+            self.db.session.rollback()
         with self.assertRaises(ErroContratual):  # motivo obrigatório
             contract_admin.suspender_contrato(self.db.session, self.empresa_id, contrato.id_contrato, contrato.versao,
                                               motivo=" ", responsavel=self.admin, instante=self.agora)
+
+    def test_conciliacao_registra_suspensao_real_anterior_ao_cadastro(self):
+        # O contrato foi cadastrado em T0, mas a suspensão real começou 20 dias antes.
+        real = T0 - timedelta(days=20)
+        contrato = self.suspender(suspenso_em=real)
+        self.assertEqual(contrato.suspenso_em, real)
+        self.assertEqual(contrato.pdf_limite, real + timedelta(days=14))
+        self.assertFalse(self.situacao().exportacao_pdf_aberta)  # 14 dias já passaram
+        self.assertEqual(self.situacao().estado, "SUSPENSA")
+
+    def test_suspensao_depois_de_reativacao_respeita_a_ultima_mudanca(self):
+        contrato = self.suspender()
+        self.relogio(T0 + timedelta(days=10))
+        contract_admin.reativar_contrato(self.db.session, self.empresa_id, contrato.id_contrato, contrato.versao,
+                                         justificativa="Pagou", responsavel=self.admin, instante=self.agora)
+        self.db.session.commit()
+        contrato = self.vigente()
+        with self.assertRaises(ErroContratual):
+            contract_admin.suspender_contrato(self.db.session, self.empresa_id, contrato.id_contrato, contrato.versao,
+                                              motivo="x", responsavel=self.admin,
+                                              suspenso_em=self.agora - timedelta(days=1), instante=self.agora)
 
     def test_prazo_contratual_menor(self):
         from models import Contrato
@@ -438,7 +468,7 @@ class SuspensaoTests(ContratosCase):
     def test_renovacao_antes_do_encerramento_mantem_acesso(self):
         contrato = self.suspender()
         contract_admin.renovar_contrato(self.db.session, self.empresa_id, contrato.id_contrato, contrato.versao,
-                                        self.dados(data_inicio=date(2026, 4, 1), data_fim=date(2027, 3, 31)),
+                                        self.dados(data_inicio=date(2026, 3, 2), data_fim=date(2027, 3, 1)),
                                         responsavel=self.admin, instante=self.agora)
         self.db.session.commit()
         self.relogio(contrato.suspensao_limite + timedelta(days=1))
@@ -639,6 +669,119 @@ class EsquemaAusenteTests(ContratosCase):
         contract_policy._esquema_por_engine.clear()
         self.assertTrue(contract_policy.esquema_contratual_disponivel())
         self.assertIsNotNone(self.vigente())
+
+
+class CorrecoesRevisaoTests(ContratosCase):
+    """Regressões dos achados das revisões independentes A–E."""
+
+    def _plano(self, nome):
+        from models import Plano
+        plano = Plano(nome_plano=nome, valor_mensal=650, qtd_analises_mes=2, tipo_analise_permitida="QUINZENAL",
+                      nivel_entrega_analise="PREMIUM", nivel_dashboard="COMPLETO", nivel_atendimento="ALTO")
+        self.db.session.add(plano)
+        self.db.session.commit()
+        return plano
+
+    def test_cobertura_respeita_a_vigencia_efetiva_de_contratos_encerrados_e_cancelados(self):
+        antigo = self.contratar(data_fim=date(2026, 12, 31))
+        contract_admin.renovar_contrato(self.db.session, self.empresa_id, antigo.id_contrato, antigo.versao,
+                                        self.dados(data_inicio=date(2026, 3, 1)), responsavel=self.admin,
+                                        instante=self.agora)
+        self.db.session.commit()
+        self.pagar(date(2026, 2, 1), date(2026, 2, 28), contrato=antigo)  # antes do sucessor: aceito
+        with self.assertRaises(ErroContratual):  # depois do início do sucessor
+            self.pagar(date(2026, 3, 1), date(2026, 3, 31), contrato=antigo)
+        self.db.session.rollback()
+        novo = self.vigente()
+        self.relogio(datetime(2026, 4, 10, 15, tzinfo=timezone.utc))
+        contract_admin.cancelar_contrato(self.db.session, self.empresa_id, novo.id_contrato, novo.versao,
+                                         motivo="Rescisão", responsavel=self.admin, instante=self.agora)
+        self.db.session.commit()
+        self.pagar(date(2026, 3, 1), date(2026, 3, 31), contrato=novo)  # antes do cancelamento
+        with self.assertRaises(ErroContratual):
+            self.pagar(date(2026, 4, 11), date(2026, 4, 30), contrato=novo)
+
+    def test_nova_analise_de_periodo_do_contrato_anterior_usa_o_plano_dele(self):
+        bronze_id = self.contratar().id_plano
+        ouro = self._plano("OURO")
+        antigo = self.vigente()
+        contract_admin.renovar_contrato(
+            self.db.session, self.empresa_id, antigo.id_contrato, antigo.versao,
+            self.dados(id_plano=ouro.id_plano, data_inicio=date(2026, 3, 1)), responsavel=self.admin,
+            justificativa="Troca", alteracao_plano=True, instante=self.agora)
+        self.db.session.commit()
+        self.ativar_regras()
+        situacao = self.situacao()
+        self.assertIsNone(contract_policy.motivo_bloqueio_nova_analise(situacao, date(2026, 2, 1), date(2026, 2, 28)))
+        self.assertEqual(contract_policy.contrato_da_vigencia(self.empresa_id, date(2026, 2, 1), date(2026, 2, 28)).id_plano,
+                         bronze_id)
+        self.assertEqual(contract_policy.contrato_da_vigencia(self.empresa_id, date(2026, 3, 1), date(2026, 3, 31)).id_plano,
+                         ouro.id_plano)
+        # Período atravessando a troca não pertence a um único contrato.
+        self.assertIsNotNone(contract_policy.motivo_bloqueio_nova_analise(situacao, date(2026, 2, 15), date(2026, 3, 14)))
+        # Pelo HTTP: fevereiro gravado com o plano BRONZE; quinzenal de fevereiro recusada.
+        from models import Analise
+        self.login("admin-test@example.invalid")
+        token = self.csrf_token("/admin/analises/nova")
+        base = {"csrf_token": token, "id_empresa": str(self.empresa_id), "periodo_inicio": "2026-02-01",
+                "periodo_fim": "2026-02-28", "mes_referencia": "2", "ano_referencia": "2026"}
+        self.client.post("/admin/analises/nova", data=base | {"tipo_analise": "MENSAL"})
+        self.db.session.expire_all()
+        nova = self.db.session.scalar(select(Analise).where(Analise.mes_referencia == 2))
+        self.assertEqual(nova.id_plano_referencia, bronze_id)
+        self.client.post("/admin/analises/nova", data=base | {"tipo_analise": "QUINZENAL", "quinzena_referencia": "1",
+                                                              "periodo_fim": "2026-02-15"})
+        self.assertEqual(self.db.session.scalar(select(func.count(Analise.id_analise)).where(
+            Analise.tipo_analise == "QUINZENAL")), 0)
+
+    def test_reconciliacao_registra_quem_acionou(self):
+        self.contratar()
+        self.ativar_regras()
+        contrato = self.suspender()
+        self.relogio(contrato.suspensao_limite)
+        contract_admin.reconciliar_vencimentos(self.db.session, aplicar=True, acionado_por=self.admin)
+        self.db.session.commit()
+        ultimo = eventos(self.db, self.empresa_id)[-1]
+        self.assertEqual(json.loads(ultimo.detalhes)["acionado_por"], self.admin_id)
+        self.assertIsNone(ultimo.id_usuario_responsavel)
+
+    def test_exclusao_permanente_bloqueada_com_historico_contratual(self):
+        from models import Contrato, Empresa
+        self.contratar()
+        from company_security import excluir_empresa
+        excluir_empresa(self.db.session, self.empresa_id)
+        self.db.session.commit()
+        self.login("admin-test@example.invalid")
+        resposta = self.client.post(f"/admin/empresa/excluir-permanente/{self.empresa_id}",
+                                    data={"csrf_token": self.csrf_token("/admin/lixeira")})
+        self.assertEqual(resposta.status_code, 302)
+        self.db.session.expire_all()
+        self.assertIsNotNone(self.db.session.get(Empresa, self.empresa_id))
+        self.assertEqual(self.db.session.scalar(select(func.count(Contrato.id_contrato))), 1)
+        pagina = self.client.get("/admin/lixeira").get_data(as_text=True)
+        self.assertIn("possui histórico contratual", pagina)
+
+    def test_detalhes_no_regime_legado_mostram_as_acoes_do_contrato(self):
+        self.contratar()
+        self.login("admin-test@example.invalid")
+        html = self.client.get(f"/admin/empresas/{self.empresa_id}/detalhes").get_data(as_text=True)
+        for acao in ("Ativar regras contratuais", "Suspender", "Renovar", "Alterar plano", "Registrar período pago"):
+            self.assertIn(acao, html)
+        self.assertNotIn(f"/admin/empresas/{self.empresa_id}/contratos/novo", html)
+
+    def test_esquema_parcial_falha_fechado_como_erro_de_banco(self):
+        from sqlalchemy import text
+        from sqlalchemy.exc import SQLAlchemyError
+        self.login()
+        self.db.session.execute(text("DROP TABLE historico_preco_plano"))
+        self.db.session.commit()
+        contract_policy._esquema_por_engine.clear()
+        with self.assertRaises(SQLAlchemyError):
+            contract_policy.esquema_contratual_disponivel()
+        self.db.session.rollback()
+        resposta = self.client.get("/cliente/dashboard")
+        self.assertEqual(resposta.status_code, 503)
+        self.assertNotIn("Empresa fictícia", resposta.get_data(as_text=True))
 
 
 class MigracaoLegadoTests(ContratosCase):

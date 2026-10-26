@@ -148,6 +148,7 @@ def upgrade():
         sa.ForeignKeyConstraint(["id_empresa"], ["empresa.id_empresa"]),
         sa.ForeignKeyConstraint(["id_usuario_admin_confirmacao"], ["usuario.id_usuario"]),
         sa.ForeignKeyConstraint(["id_usuario_admin_revogacao"], ["usuario.id_usuario"]),
+        sa.UniqueConstraint("id_cobertura", "id_empresa", name="uq_cobertura_id_empresa"),
         sa.ForeignKeyConstraint(
             ["id_contrato", "id_empresa"],
             ["contrato.id_contrato", "contrato.id_empresa"],
@@ -182,8 +183,12 @@ def upgrade():
         sa.Column("detalhes", sa.Text(), nullable=True),
         sa.PrimaryKeyConstraint("id_evento"),
         sa.ForeignKeyConstraint(["id_empresa"], ["empresa.id_empresa"]),
-        sa.ForeignKeyConstraint(["id_cobertura"], ["cobertura_paga.id_cobertura"]),
         sa.ForeignKeyConstraint(["id_usuario_responsavel"], ["usuario.id_usuario"]),
+        sa.ForeignKeyConstraint(
+            ["id_cobertura", "id_empresa"],
+            ["cobertura_paga.id_cobertura", "cobertura_paga.id_empresa"],
+            name="fk_evento_cobertura_mesma_empresa",
+        ),
         sa.ForeignKeyConstraint(
             ["id_contrato", "id_empresa"],
             ["contrato.id_contrato", "contrato.id_empresa"],

@@ -35,7 +35,7 @@ import contract_admin as operacoes
 from blueprints.admin import _desconectar_revogados, _revogacoes_socket, admin_required
 from contract_policy import (
     EsquemaContratualIndisponivel, esquema_contratual_disponivel, formatar_instante,
-    obter_coberturas_pagas, obter_situacao_contratual, politica_prazos, utc,
+    obter_coberturas_pagas, obter_contrato_aplicavel, obter_situacao_contratual, politica_prazos, utc,
 )
 from extensions import db
 from models import CoberturaPaga, Contrato, Empresa, EventoContratual, Plano
@@ -70,6 +70,7 @@ _ROTULOS_DETALHES = {
     "periodo_inicio": "Período pago de", "periodo_fim": "Período pago até", "referencia": "Referência",
     "coberturas_vigentes": "Coberturas vigentes", "ativado_em": "Regras ativadas em",
     "ativado_por": "Ativadas pelo usuário nº",
+    "acionado_por": "Reconciliação acionada pelo usuário nº",
 }
 
 
@@ -99,6 +100,8 @@ def _instante_local(nome, obrigatorio=False):
         ingenuo = datetime.strptime(bruto, "%Y-%m-%dT%H:%M")
     except ValueError:
         raise operacoes.ErroContratual("Data e hora inválidas (use o seletor).") from None
+    if not operacoes.DATA_MINIMA.year <= ingenuo.year <= operacoes.DATA_MAXIMA.year:
+        raise operacoes.ErroContratual("Data e hora fora do intervalo permitido.")
     return utc(ingenuo.replace(tzinfo=politica_prazos().fuso))
 
 
@@ -238,6 +241,9 @@ def empresa_detalhe(id_empresa):
           .limit(200)).all()
         contexto.update(
             situacao=situacao,
+            # No regime legado a situação não carrega o contrato: as ações e o
+            # resumo usam sempre o contrato vigente registrado.
+            contrato_vigente=situacao.contrato or obter_contrato_aplicavel(empresa.id_empresa),
             contratos=db.session.scalars(select(Contrato).where(
                 Contrato.id_empresa == empresa.id_empresa,
             ).order_by(Contrato.id_contrato.desc())).all(),
@@ -456,7 +462,7 @@ def reconciliar():
     if not _exigir_esquema():
         return redirect(url_for("contratos.visao_geral"))
     try:
-        relatorio = operacoes.reconciliar_vencimentos(db.session, aplicar=True)
+        relatorio = operacoes.reconciliar_vencimentos(db.session, aplicar=True, acionado_por=current_user)
         revogacoes = _revogacoes_socket(relatorio.revogados)
         db.session.commit()
     except SQLAlchemyError as erro:

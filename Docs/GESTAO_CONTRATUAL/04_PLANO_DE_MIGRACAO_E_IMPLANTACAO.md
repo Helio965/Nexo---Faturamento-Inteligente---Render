@@ -30,10 +30,12 @@ Isso **não** dispensa a `e4c004a26b01`, que o código anterior a esta entrega j
   1. Localizar a documentação do acordo real (data, plano, valor, vigência).
   2. "Novo contrato", com a formalização e a referência do documento.
   3. "Registrar período pago", somente para os períodos com comprovante.
-  4. Se a empresa estiver suspensa de fato: "Suspender", informando o **instante real** da suspensão (o retroativo é permitido até o início do contrato ou a última alteração).
+  4. Se a empresa estiver suspensa de fato: "Suspender", informando o **instante real** da suspensão. O retroativo é permitido até o início da vigência do contrato; o cadastro do contrato não limita. Os prazos contam do instante real. Se o prazo já tiver terminado, o sistema recusa: nesse caso avalie o cancelamento.
   5. Conferir em Detalhes a situação calculada e os períodos consolidados.
   6. "Ativar regras contratuais", com justificativa.
-- **Empresas CANCELADAS:** continuam bloqueadas no regime legado. Se for necessário registrar o histórico contratual delas, crie o contrato e cancele-o. Atenção: criar um contrato **reativa** a empresa até o cancelamento, por isso faça os dois passos em sequência e fora do horário de uso.
+- **Empresas CANCELADAS:** continuam bloqueadas no regime legado. Se for necessário registrar o histórico contratual delas, crie o contrato e cancele-o. Atenção:
+  - Criar um contrato **reativa** a empresa até o cancelamento, por isso faça os dois passos em sequência e fora do horário de uso.
+  - Uma empresa com histórico contratual deixa de poder ser excluída permanentemente.
 - **A visão geral (Admin → Contratos)** lista as empresas ainda no regime legado e as pendências.
 
 ## 5. Procedimento de backup (antes de qualquer migração)
