@@ -42,7 +42,7 @@ DESTINOS = {
     "historico": Destino(
         "historico", "cliente.historico", "Histórico de Análises",
         "O Histórico, no menu lateral, lista as análises já publicadas para a sua "
-        "empresa. Cada uma pode ser aberta e exportada em PDF.",
+        "empresa. Cada uma pode ser aberta e, enquanto o contrato permitir, exportada em PDF.",
         "consultar as análises anteriores",
     ),
     "guia": Destino(

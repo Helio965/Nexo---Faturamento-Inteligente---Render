@@ -7,6 +7,7 @@
 
 {% block content %}
 {% set suspensa = empresa and empresa.status_conta == 'SUSPENSA' %}
+{% set suspensao_contratual = situacao and situacao.contratual and situacao.suspensa %}
 
 <div class="page-head">
     <div>
@@ -18,7 +19,19 @@
 {# ---------------- Barra de auditoria: origem dos dados ---------------- #}
 {{ audit.barra(auditoria) }}
 
-{% if suspensa %}
+{% if suspensao_contratual %}
+<div class="banner-suspensa" role="status">
+    <i class="bi bi-exclamation-octagon" aria-hidden="true"></i>
+    <div>
+        <strong>Conta suspensa: acesso histórico temporário às análises dos períodos contratados e efetivamente pagos.</strong>
+        {% if situacao.suspensao_limite %}
+        <p class="mb-0 mt-1">Consulta disponível até {{ situacao.suspensao_limite|instante_local }}.
+            {% if situacao.exportacao_pdf_aberta %}Exportação de PDFs até {{ situacao.pdf_limite|instante_local }}.{% else %}Seu prazo para exportação de relatórios foi encerrado.{% endif %}
+            Novas análises e envios fora dos períodos pagos estão bloqueados.</p>
+        {% endif %}
+    </div>
+</div>
+{% elif suspensa %}
 <div class="banner-suspensa">
     <i class="bi bi-exclamation-octagon"></i>
     <div>

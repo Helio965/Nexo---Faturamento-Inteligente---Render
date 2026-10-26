@@ -4,12 +4,11 @@ Fontes: models.py (Empresa, Plano, Segmento, Usuario), blueprints/admin.py
 (empresa_nova, empresa_editar, analise_nova, lixeira), seed.py,
 templates/cliente/dashboard.html.
 
-Divergência registrada (não corrigida aqui, por ser regra de negócio):
-o aviso de conta suspensa na Visão Geral diz que "novas entregas estão
-temporariamente bloqueadas", mas o código bloqueia apenas a ABERTURA de novas
-análises para empresas que não estão ATIVAS (admin.analise_nova); o envio de
-arquivos para uma análise já aberta continua possível. Os textos abaixo
-descrevem o comportamento implementado.
+Gestão contratual (contract_policy.py): empresas no regime contratual, com
+a conta suspensa, consultam só análises de períodos efetivamente pagos, por
+prazo limitado, e exportam PDF por prazo próprio; os prazos aparecem no aviso
+da Visão Geral. Empresas ainda no regime legado mantêm o comportamento
+anterior. Os textos não citam prazos nem valores comerciais (regra editorial).
 """
 
 from .modelo import registro
@@ -132,9 +131,10 @@ REGISTROS = (
         titulo="O que significa conta ativa, suspensa ou cancelada?",
         categoria="Empresa e cadastro",
         resumo=(
-            "ATIVA é a situação normal. SUSPENSA e CANCELADA são definidas pela equipe NEXO. Com a conta "
-            "SUSPENSA a equipe não abre novas análises, mas o histórico publicado continua acessível. Com a "
-            "conta CANCELADA os usuários da empresa não conseguem mais entrar no portal."
+            "ATIVA é a situação normal. SUSPENSA e CANCELADA são definidas pela equipe NEXO conforme o "
+            "contrato. Com a conta SUSPENSA a equipe não abre novas análises e o acesso ao histórico depende "
+            "da situação contratual. Com a conta CANCELADA os usuários da empresa não conseguem mais entrar "
+            "no portal e o login mostra a tela de conta encerrada."
         ),
         explicacao=(
             "O status aparece na Visão Geral, ao lado do plano. Com a conta suspensa, o portal exibe um aviso "
@@ -145,10 +145,11 @@ REGISTROS = (
             "login quando inativo; nenhuma tela do portal altera esse indicador."
         ),
         detalhes=(
-            "Regra implementada: a abertura de uma nova análise exige empresa ATIVA. Uma análise que já estava "
-            "aberta antes da suspensão continua aceitando arquivos enquanto estiver em Aguardando relatório ou "
-            "Relatório recebido. Com a conta CANCELADA, login, sessões, PDFs, notificações e conexões em tempo "
-            "real dos usuários da empresa ficam bloqueados."
+            "Regra implementada: a abertura de uma nova análise exige empresa ATIVA. Quando a empresa já está "
+            "sob as regras contratuais, a suspensão libera só as análises de períodos efetivamente pagos, por "
+            "prazo limitado, e a exportação de PDF tem prazo próprio; os prazos aparecem no aviso da Visão "
+            "Geral. Terminado o prazo da suspensão, ou com a conta CANCELADA, login, sessões, PDFs, "
+            "notificações e conexões em tempo real dos usuários da empresa ficam bloqueados."
         ),
         perguntas=(
             "O que é conta suspensa?", "O que é conta cancelada?", "Quais são os status da conta?",
@@ -159,15 +160,16 @@ REGISTROS = (
         relacionados=("nexo.empresas.conta_suspensa", "nexo.admin.status_contas"),
         destino="dashboard",
         fontes=("models.py", "blueprints/admin.py", "templates/cliente/dashboard.html", "session_security.py",
-                "company_security.py", "notifications.py"),
+                "company_security.py", "notifications.py", "contract_policy.py"),
     ),
     registro(
         id="nexo.empresas.conta_suspensa",
         titulo="Minha conta está suspensa. O que posso fazer?",
         categoria="Empresa e cadastro",
         resumo=(
-            "Com a conta suspensa você continua acessando o histórico de análises publicadas, mas a equipe "
-            "NEXO não abre novos períodos de análise. Para regularizar, fale com a equipe pelo Suporte."
+            "Com a conta suspensa a equipe NEXO não abre novos períodos de análise. O que continua disponível "
+            "depende do contrato: o aviso no topo da Visão Geral informa até quando você pode consultar o "
+            "histórico e exportar PDFs. Para regularizar, fale com a equipe pelo Suporte."
         ),
         perguntas=(
             "Conta suspensa, e agora?", "Por que minha conta foi suspensa?", "Como regularizo a conta suspensa?",
@@ -176,7 +178,7 @@ REGISTROS = (
         termos="suspensa suspensao conta bloqueada entregas bloqueadas regularizar",
         relacionados=("nexo.empresas.status_conta", "nexo.suporte.abrir_chamado"),
         destino="suporte",
-        fontes=("templates/cliente/dashboard.html", "blueprints/admin.py"),
+        fontes=("templates/cliente/dashboard.html", "blueprints/admin.py", "contract_policy.py"),
     ),
     registro(
         id="nexo.planos.quais",

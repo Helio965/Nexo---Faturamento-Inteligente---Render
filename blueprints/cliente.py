@@ -13,6 +13,10 @@ Rotas:
 
 Regras:
   - Acesso restrito a Usuario.role == 'CLIENTE' (via cliente_required).
+  - O que a empresa pode consultar, exportar e enviar é decidido por
+    contract_policy (regime legado ou contratual, cobertura paga, prazos da
+    suspensão), sempre no servidor: dados não autorizados não chegam ao
+    HTML nem ao JavaScript.
   - "Análise publicada" = status_analise == 'CONCLUIDO' (transição feita só
     quando o ADMIN publica a devolutiva, nunca automaticamente pelo ETL).
   - KPIs vêm de indicador_analise; o ranking ABC, de produto_curva_abc.
@@ -26,7 +30,7 @@ from functools import wraps
 
 from flask import (
     Blueprint, render_template, abort, request, redirect, url_for, flash, current_app,
-    Response,
+    Response, g,
 )
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
@@ -39,6 +43,10 @@ from extensions import db
 from models import (
     Analise, IndicadorAnalise, RelatorioAnalise, UploadRelatorio,
     ChamadoSuporte, MensagemSuporte, GuiaTopico,
+)
+from contract_policy import (
+    filtrar_analises_consultaveis, obter_situacao_contratual, pode_consultar_analise,
+    pode_enviar_relatorio, pode_exportar_pdf,
 )
 from insights import gerar_semaforos
 from notifications import notificar_admins
@@ -69,6 +77,31 @@ def cliente_required(f):
     return wrapper
 
 
+MENSAGEM_PDF_ENCERRADO = (
+    "Seu prazo para exportação de relatórios foi encerrado. As análises históricas "
+    "autorizadas continuam disponíveis para consulta durante o período de suspensão."
+)
+
+
+def _situacao_cliente():
+    """Situação contratual da empresa do CLIENTE, calculada uma vez por requisição.
+
+    A guarda de sessão já bloqueia empresas sem acesso ao portal; aqui a mesma
+    política é reavaliada para que nenhuma rota dependa só dessa guarda.
+    """
+    if "_nexo_situacao_cliente" not in g:
+        g._nexo_situacao_cliente = obter_situacao_contratual(current_user.empresa)
+    situacao = g._nexo_situacao_cliente
+    if not situacao.acesso_portal:
+        abort(403)
+    return situacao
+
+
+def _acesso_restrito(titulo: str, mensagem: str):
+    """Resposta 403 sem nenhum dado da análise solicitada."""
+    return render_template("cliente/acesso_restrito.html", titulo=titulo, mensagem=mensagem), 403
+
+
 # =====================================================================
 # Helpers de montagem dos dados de gráfico (Plotly)
 # =====================================================================
@@ -90,20 +123,17 @@ def _abc_chart(analise, limite: int = 10) -> dict | None:
     }
 
 
-def _historico_temporal(empresa) -> dict | None:
+def _historico_temporal(analises) -> dict | None:
     """
     Série temporal Vendas (faturamento) x Compras (volume comprado) ao longo das
-    análises CONCLUIDAS da empresa — alimenta o gráfico de linha comparativo.
-    Precisa de >= 2 pontos para fazer sentido como histórico.
+    análises CONCLUIDAS que a política permite consultar — alimenta o gráfico
+    de linha comparativo. Recebe só análises já autorizadas: nenhum período não
+    pago entra no agregado. Precisa de >= 2 pontos para fazer sentido.
     """
-    linhas = db.session.execute(
-        select(Analise, IndicadorAnalise)
-        .join(IndicadorAnalise, IndicadorAnalise.id_analise == Analise.id_analise)
-        .where(Analise.id_empresa == empresa.id_empresa)
-        .where(Analise.status_analise == "CONCLUIDO")
-        .order_by(Analise.ano_referencia.asc(), Analise.mes_referencia.asc(),
-                  Analise.id_analise.asc())
-    ).all()
+    linhas = sorted(
+        ((a, a.indicador) for a in analises if a.indicador is not None),
+        key=lambda par: (par[0].ano_referencia, par[0].mes_referencia, par[0].id_analise),
+    )
     if len(linhas) < 2:
         return None
     return {
@@ -140,23 +170,18 @@ def _auditoria(analise) -> dict | None:
 @cliente_required
 def dashboard():
     empresa = current_user.empresa  # garantido pelo CHECK do banco
+    situacao = _situacao_cliente()
 
-    # Última análise CONCLUIDA (devolutiva publicada) da empresa do cliente.
-    analise = db.session.execute(
+    # Análises publicadas (CONCLUIDO) que a política permite consultar: no
+    # regime contratual, só as de períodos integralmente pagos. A primeira é a
+    # "última devolutiva"; a lista alimenta o histórico recente e o gráfico.
+    analises = filtrar_analises_consultaveis(situacao, db.session.execute(
         select(Analise)
         .where(Analise.id_empresa == empresa.id_empresa)
         .where(Analise.status_analise == "CONCLUIDO")
         .order_by(Analise.data_conclusao.desc().nullslast(), Analise.data_criacao.desc())
-        .limit(1)
-    ).scalar_one_or_none()
-
-    # Lista de todas as análises publicadas (para "Histórico recente").
-    analises = db.session.execute(
-        select(Analise)
-        .where(Analise.id_empresa == empresa.id_empresa)
-        .where(Analise.status_analise == "CONCLUIDO")
-        .order_by(Analise.data_conclusao.desc().nullslast(), Analise.data_criacao.desc())
-    ).scalars().all()
+    ).scalars().all())
+    analise = analises[0] if analises else None
 
     # Análises em andamento (não-CONCLUIDO) para a empresa.
     analises_em_andamento = db.session.execute(
@@ -178,7 +203,7 @@ def dashboard():
             },
             "pressao_estoque": float(ind.saldo_estimado_compras_vendas or 0),
             "curva_abc": _abc_chart(analise),
-            "historico": _historico_temporal(empresa),
+            "historico": _historico_temporal(analises),
         }
         semaforos = gerar_semaforos(ind, analise.curva_abc)
 
@@ -194,6 +219,7 @@ def dashboard():
         dashboard_data=dashboard_data,
         semaforos=semaforos,
         auditoria=auditoria,
+        situacao=situacao,
     )
 
 
@@ -226,15 +252,17 @@ def historico():
     Ordenada por data_conclusao desc com tiebreak determinístico em id_analise desc.
     """
     empresa = current_user.empresa
-    analises = db.session.execute(
+    situacao = _situacao_cliente()
+    analises = filtrar_analises_consultaveis(situacao, db.session.execute(
         select(Analise)
         .join(RelatorioAnalise, RelatorioAnalise.id_analise == Analise.id_analise)
         .where(Analise.id_empresa == empresa.id_empresa)
         .where(Analise.status_analise == "CONCLUIDO")
         .where(RelatorioAnalise.publicado.is_(True))
         .order_by(Analise.data_conclusao.desc().nullslast(), Analise.id_analise.desc())
-    ).scalars().all()
-    return render_template("cliente/historico.html", empresa=empresa, analises=analises)
+    ).scalars().all())
+    return render_template("cliente/historico.html", empresa=empresa, analises=analises,
+                           situacao=situacao)
 
 
 @cliente_bp.route("/analise/<int:id_analise>")
@@ -257,6 +285,12 @@ def analise(id_analise):
         or not analise.relatorio.publicado
     ):
         abort(404)
+    situacao = _situacao_cliente()
+    if not pode_consultar_analise(situacao, analise):
+        return _acesso_restrito(
+            "Análise indisponível",
+            "O período desta análise não está coberto pelos períodos contratados e efetivamente pagos.",
+        )
 
     semaforos = gerar_semaforos(analise.indicador, analise.curva_abc) if analise.indicador else []
     abc_chart = _abc_chart(analise)
@@ -266,6 +300,9 @@ def analise(id_analise):
         semaforos=semaforos,
         abc_chart=abc_chart,
         auditoria=_auditoria(analise),
+        situacao=situacao,
+        pode_exportar_pdf=pode_exportar_pdf(situacao, analise),
+        mensagem_pdf_encerrado=MENSAGEM_PDF_ENCERRADO,
     )
 
 
@@ -311,13 +348,16 @@ def upload():
     """Preflight limitado e substituição serializada, sem executar ETL comercial."""
     try:
         empresa = current_user.empresa
-        analises_abertas = db.session.execute(
+        situacao = _situacao_cliente()
+        # Suspensa no regime contratual: só análises abertas de período pago.
+        analises_abertas = [a for a in db.session.execute(
             select(Analise).where(Analise.id_empresa == empresa.id_empresa)
             .where(Analise.status_analise.in_(STATUS_ACEITA_UPLOAD))
             .order_by(Analise.data_criacao.desc())
-        ).scalars().all()
+        ).scalars().all() if pode_enviar_relatorio(situacao, a)]
         if request.method != "POST":
-            return render_template("cliente/upload.html", empresa=empresa, analises=analises_abertas)
+            return render_template("cliente/upload.html", empresa=empresa, analises=analises_abertas,
+                                   situacao=situacao)
         try:
             id_analise = int(request.form.get("id_analise", ""))
         except ValueError:
@@ -327,6 +367,11 @@ def upload():
         if (analise is None or analise.id_empresa != empresa.id_empresa
                 or analise.status_analise not in STATUS_ACEITA_UPLOAD):
             abort(404)
+        if not pode_enviar_relatorio(situacao, analise):
+            return _acesso_restrito(
+                "Envio indisponível",
+                "Durante a suspensão, novos arquivos só podem ser enviados para análises de períodos já pagos.",
+            )
         tipo = (request.form.get("tipo_relatorio") or "").strip().upper()
         if tipo not in ("VENDAS", "COMPRAS"):
             flash("Tipo de relatório inválido (esperado VENDAS ou COMPRAS).", "danger")
@@ -349,6 +394,13 @@ def upload():
                 or analise.status_analise not in STATUS_ACEITA_UPLOAD):
             db.session.rollback()
             abort(404)
+        # A situação contratual pode ter mudado durante a validação do arquivo.
+        if not pode_enviar_relatorio(obter_situacao_contratual(empresa), analise):
+            db.session.rollback()
+            return _acesso_restrito(
+                "Envio indisponível",
+                "Durante a suspensão, novos arquivos só podem ser enviados para análises de períodos já pagos.",
+            )
         nome_final = f"analise_{id_analise}_{tipo}_{sha[:8]}.{ext}"
         existente = _buscar_upload(id_analise, tipo)
         caminho_final = storage.salvar(conteudo, nome_final)

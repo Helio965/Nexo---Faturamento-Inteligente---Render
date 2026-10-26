@@ -12,6 +12,13 @@
     </div>
 </div>
 
+{% if situacao and situacao.contratual and situacao.suspensa %}
+<div class="banner-suspensa" role="status">
+    <i class="bi bi-exclamation-octagon" aria-hidden="true"></i>
+    <div><strong>Conta suspensa: são exibidas apenas as análises dos períodos contratados e efetivamente pagos{% if situacao.suspensao_limite %}, disponíveis até {{ situacao.suspensao_limite|instante_local }}{% endif %}.</strong></div>
+</div>
+{% endif %}
+
 <div class="table-wrap">
     {% if analises %}
     <div class="table-responsive-x">
