@@ -19,7 +19,8 @@ Registro do andamento dos 27 prompts de ajuste do NEXO. Cada prompt executado de
 | Etapa 0.2A (backup e migrações) | Sim (24/10/2026) | Sim, na `main` pelo PR #24 (merge `d7eb7e4`) | Sim: verificador e ensaio isolado em PostgreSQL descartável | Aprovada (PR #24 e `main`, run 40324156855) | **Pendente**: nenhum backup ou restauração do Supabase real foi executado | Não se aplica (scripts e documentos operacionais) |
 | `NEXO-AJ-00` | Sim (25/10/2026) | Sim, documentos na `main` pelo PR #24 | Não se aplica (diagnóstico) | Não se aplica | Aprovação humana pendente | Não se aplica |
 | `NEXO-AJ-06.1` | Sim (25/10/2026) | Sim, na `main` pelo PR #24 (merge `d7eb7e4`) | Sim: SQLite e PostgreSQL descartável | Aprovada (PR #24 e `main`, run 40324156855) | **Pendente** | **Não confirmada**: não se sabe se o Render publicou `d7eb7e4`; em produção ela depende ainda de o Supabase estar na revisão `e4c004a26b01` (incidente HTTP 500, `RELATORIO_CORRECAO_MIGRACAO_SUPABASE_NEXO.md`) |
-| Demais 25 prompts `NEXO-AJ` | Não | Não | — | — | — | — |
+| Identidade visual com o cubo transparente (escopo da `NEXO-AJ-01`, pedido direto de 26/10/2026) | Não (feita no GitHub) | Pull Request de 26/10/2026 (ver `Docs/INTEGRACOES/RELATORIO_ATUALIZACAO_IDENTIDADE_VISUAL_NEXO.md`) | Sim: testes HTTP, navegador e capturas | Ver o PR | **Pendente** | **Não confirmada** |
+| Demais 24 prompts `NEXO-AJ` | Não | Não | — | — | — | — |
 
 ## Fonte oficial
 
@@ -225,6 +226,7 @@ Os outros 25 prompts ainda não têm registro de execução.
 | 25/10/2026 14:38 | 3 | NEXO-AJ-06.1 executada: linha 16 passou a "EXECUTADO / AGUARDANDO REVISÃO", com o registro de execução acrescentado; próximo prompt pela ordem recomendada passou a ser `NEXO-AJ-07.1`. A estrutura dos 27 prompts não mudou |
 | 26/10/2026 | 4 | Integração ao GitHub: registrada a mudança de metodologia (sequência dos 27 prompts deixa de ser obrigatória) e a situação por ambiente. Caminhos locais com o nome do usuário do Windows foram anonimizados como `%USERPROFILE%`, e nomes de projetos sem relação, generalizados. Os status e as aprovações da tabela de índice não mudaram: a aprovação continua dependendo de revisão humana |
 | 26/10/2026 | 5 | Merge do PR #24 pelo proprietário (`d7eb7e4`, CI aprovada na `main`): coluna "Integrada ao GitHub" e CI atualizadas. A implantação em produção continua não confirmada |
+| 26/10/2026 | 6 | Identidade visual com o cubo transparente executada por pedido direto do proprietário, fora da sequência de prompts; corresponde ao escopo da `NEXO-AJ-01` (usa as artes novas em PNG transparente, não o `nexo_cubo_centralizado.png` citado no mapa). A linha da `NEXO-AJ-01` no índice não foi alterada: a aprovação continua sendo humana |
 
 **Buscas pelo mapa feitas na versão 1** (preservadas da primeira entrega):
 

@@ -48,8 +48,10 @@ o runtime da aplicação Flask não depende dessas bibliotecas.
 
 A linguagem de movimento da referência enviada orientou escala tipográfica,
 contraste, perspectiva e ritmo. Nenhum frame, som ou marca de terceiros foi
-incorporado. O cubo SVG é uma interpretação animável do símbolo oficial em
-`static/img/nexo-logo.jpeg`; o roxo do projeto é `#a855f7`.
+incorporado. O cubo SVG é uma interpretação animável do símbolo oficial, na
+época em `static/img/nexo-logo.jpeg`; desde 26/10/2026 o símbolo do sistema é
+o cubo transparente de `static/img/nexo-cubo-brilho.png` e
+`static/img/nexo-cubo-transparente.png`. O roxo do projeto é `#a855f7`.
 O laranja coral expressivo é restrito à campanha. A landing preserva seus
 estilos e usa um player HTML5 na seção pública `#demonstracao`, sem autoplay.
 
