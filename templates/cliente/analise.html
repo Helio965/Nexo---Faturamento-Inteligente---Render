@@ -169,10 +169,10 @@
     type: 'bar',
     x: ['Faturamento', 'Total comprado'],
     y: [{{ (analise.indicador.faturamento_total or 0)|float }}, {{ (analise.indicador.total_comprado or 0)|float }}],
-    marker: { color: ['#22c55e', '#a855f7'] },
+    marker: { color: ['rgba(56,189,248,0.9)', 'rgba(245,158,11,0.9)'], line: { color: 'rgba(255,255,255,0.22)', width: 1 } },
     width: 0.5,
     hovertemplate: '%{x}: R$ %{y:,.2f}<extra></extra>'
-  }], { yaxis: { tickprefix: 'R$ ', rangemode: 'tozero' }, height: 240 });
+  }], { yaxis: { tickprefix: 'R$ ', tickformat: ',.0f', rangemode: 'tozero' }, height: 240 });
 </script>
 {% if abc_chart %}
 <script>

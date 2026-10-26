@@ -93,6 +93,14 @@
         </nav>
 
         <div class="sidebar-foot">
+            {# Sessão ativa: quem está conectado e com qual perfil, logo acima do "Sair". #}
+            <div class="sidebar-session">
+                <span class="user-avatar" aria-hidden="true">{{ (current_user.nome or '?')[:1]|upper }}</span>
+                <div class="session-meta">
+                    <strong>{{ current_user.nome }}</strong>
+                    <small><span class="session-dot" aria-hidden="true"></span> Sessão ativa · {{ 'Administrador' if current_user.is_admin else 'Cliente' }}</small>
+                </div>
+            </div>
             <a class="nav-item nav-logout" href="{{ url_for('auth.logout') }}">
                 <i class="bi bi-box-arrow-right"></i> Sair
             </a>
@@ -103,17 +111,17 @@
 
     <div class="main-area">
         <header class="topbar">
-            <button class="nav-toggle" id="navToggle" type="button" aria-label="Abrir menu">
-                <i class="bi bi-list"></i>
+            <button class="nav-toggle" id="navToggle" type="button" aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false">
+                <i class="bi bi-list" aria-hidden="true"></i>
             </button>
-            <div class="topbar-title">{% block page_title %}NEXO{% endblock %}</div>
+            <div class="topbar-title"><small>{{ 'Administração' if current_user.is_admin else 'Minha empresa' }}</small>{% block page_title %}NEXO{% endblock %}</div>
             <div class="topbar-right">
                 {# ---------------- Sininho de notificações ---------------- #}
                 <div class="dropdown nexo-bell">
-                    <button class="bell-btn" type="button" id="bellBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="Notificações">
-                        <i class="bi bi-bell"></i>
-                        {% set _c = notif_nao_lidas or 0 %}
-                        <span class="bell-badge" id="bellBadge" data-count="{{ _c }}" {% if _c == 0 %}style="display:none;"{% endif %}>{{ _c if _c < 100 else '99+' }}</span>
+                    {% set _c = notif_nao_lidas or 0 %}
+                    <button class="bell-btn" type="button" id="bellBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="Notificações{{ ' (%d não lidas)' % _c if _c else '' }}">
+                        <i class="bi bi-bell" aria-hidden="true"></i>
+                        <span class="bell-badge" id="bellBadge" aria-hidden="true" data-count="{{ _c }}" {% if _c == 0 %}style="display:none;"{% endif %}>{{ _c if _c < 100 else '99+' }}</span>
                     </button>
                     <div class="dropdown-menu dropdown-menu-end bell-menu" aria-labelledby="bellBtn">
                         <div class="bell-head">
@@ -202,12 +210,82 @@
         var shell = document.getElementById('appShell');
         var toggle = document.getElementById('navToggle');
         var overlay = document.getElementById('sidebarOverlay');
+        var sidebar = document.getElementById('sidebar');
+        var pagina = document.querySelector('.main-area');
+        var gaveta = window.matchMedia ? window.matchMedia('(max-width: 991.98px)') : null;
+        function definir(aberta, devolverFoco) {
+          if (!shell) return;
+          shell.classList.toggle('nav-open', aberta);
+          /* Com a gaveta aberta, o conteúdo atrás do véu sai do Tab e do leitor de tela. */
+          if (pagina) pagina.inert = !!(aberta && gaveta && gaveta.matches);
+          if (toggle) {
+            toggle.setAttribute('aria-expanded', aberta ? 'true' : 'false');
+            toggle.setAttribute('aria-label', aberta ? 'Fechar menu' : 'Abrir menu');
+          }
+          if (aberta && sidebar && gaveta && gaveta.matches) {
+            var alvo = sidebar.querySelector('.nav-item.active') || sidebar.querySelector('a[href]');
+            if (alvo) window.setTimeout(function () { alvo.focus({ preventScroll: true }); }, 0);
+          } else if (!aberta && devolverFoco && toggle) {
+            toggle.focus();
+          }
+        }
         if (toggle && shell) {
-          toggle.addEventListener('click', function () { shell.classList.toggle('nav-open'); });
+          toggle.addEventListener('click', function () { definir(!shell.classList.contains('nav-open')); });
         }
         if (overlay && shell) {
-          overlay.addEventListener('click', function () { shell.classList.remove('nav-open'); });
+          overlay.addEventListener('click', function () { definir(false, true); });
         }
+        document.addEventListener('keydown', function (e) {
+          if (e.key === 'Escape' && shell && shell.classList.contains('nav-open')) {
+            definir(false, true);
+          }
+        });
+        /* Voltando à largura de desktop com a gaveta aberta: estado limpo. */
+        if (gaveta && gaveta.addEventListener) {
+          gaveta.addEventListener('change', function (e) {
+            if (!e.matches && shell && shell.classList.contains('nav-open')) definir(false);
+          });
+        }
+        /* Item ativo anunciado como página atual para leitores de tela. */
+        document.querySelectorAll('.sidebar .nav-item.active').forEach(function (item) {
+          item.setAttribute('aria-current', 'page');
+        });
+      })();
+
+      /* ---- Valores dos KPIs: sempre numa linha; reduz a fonte só se não couber ---- */
+      (function () {
+        function ajustarKpis() {
+          document.querySelectorAll('.kpi-value').forEach(function (el) {
+            el.style.fontSize = '';
+            var tamanho = parseFloat(window.getComputedStyle(el).fontSize);
+            while (el.scrollWidth > el.clientWidth + 1 && tamanho > 16) {
+              tamanho -= 1;
+              el.style.fontSize = tamanho + 'px';
+            }
+          });
+        }
+        /* ---- Tabelas largas: coluna de ações fixa à direita durante a rolagem ---- */
+        function marcarTabelas() {
+          document.querySelectorAll('.table-responsive-x').forEach(function (caixa) {
+            var rola = caixa.scrollWidth > caixa.clientWidth + 1;
+            caixa.classList.toggle('tem-rolagem', rola);
+            var cabecalho = caixa.querySelector('thead tr');
+            var ultima = cabecalho && cabecalho.lastElementChild;
+            if (!ultima || !/^a[çc](ão|ões|ao|oes)$/i.test(ultima.textContent.trim())) return;
+            caixa.querySelectorAll('tr').forEach(function (linha) {
+              var celula = linha.lastElementChild;
+              if (celula && !celula.hasAttribute('colspan')) celula.classList.add('col-acoes');
+            });
+          });
+        }
+        function ajustar() { ajustarKpis(); marcarTabelas(); }
+        ajustar();
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(ajustar);
+        var espera;
+        window.addEventListener('resize', function () {
+          window.clearTimeout(espera);
+          espera = window.setTimeout(ajustar, 120);
+        });
       })();
 
       /* ---- Fecha automaticamente confirmações globais leves ---- */
@@ -227,32 +305,65 @@
            NEXO.plot('idDoDiv', [ {type:'bar', x:[...], y:[...]} ], { yaxis:{...} });
          Verifica se o elemento e a lib existem antes de desenhar. */
       window.NEXO = window.NEXO || {};
+      /* Respeita "reduzir movimento" do sistema nas animações dos gráficos. */
+      NEXO.reduzMovimento = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
       NEXO.colors = {
-        purple: '#a855f7', purpleSoft: '#7c3aed', green: '#22c55e',
+        purple: '#a855f7', purpleSoft: '#7c3aed', lilac: '#c4a0fb', green: '#22c55e',
         amber: '#f59e0b', red: '#ef4444', info: '#38bdf8',
-        grid: 'rgba(255,255,255,0.06)', text: '#9aa0b7'
+        grid: 'rgba(255,255,255,0.07)', axis: 'rgba(255,255,255,0.12)',
+        text: '#aaa6c8', textStrong: '#ece9f8', tooltip: 'rgba(17,13,32,0.96)'
       };
+      /* Fonte única do tema dos gráficos: grade pontilhada suave, eixos limpos,
+         barras com cantos arredondados, tooltip escura com borda lilás e legenda
+         horizontal. Os eixos e a tooltip de cada gráfico se fundem ao tema (não o
+         substituem), então os ajustes locais continuam valendo. */
       NEXO.plotlyLayout = function (extra) {
+        var c = NEXO.colors;
+        var eixo = {
+          gridcolor: c.grid, griddash: 'dot', zerolinecolor: c.axis, linecolor: c.axis,
+          tickfont: { color: c.text, size: 11 }, title: { font: { color: c.text, size: 11 } },
+          automargin: true, ticks: ''
+        };
         var base = {
           paper_bgcolor: 'rgba(0,0,0,0)',
           plot_bgcolor: 'rgba(0,0,0,0)',
-          font: { family: 'Inter, sans-serif', color: NEXO.colors.text, size: 12 },
+          font: { family: 'Inter, system-ui, sans-serif', color: c.text, size: 12 },
           margin: { l: 52, r: 18, t: 14, b: 42 },
-          xaxis: { gridcolor: NEXO.colors.grid, zerolinecolor: NEXO.colors.grid, automargin: true },
-          yaxis: { gridcolor: NEXO.colors.grid, zerolinecolor: NEXO.colors.grid, automargin: true },
-          colorway: [NEXO.colors.purple, NEXO.colors.green, NEXO.colors.amber, NEXO.colors.info, NEXO.colors.red],
+          xaxis: Object.assign({}, eixo, { showgrid: false, showline: true }),
+          yaxis: Object.assign({}, eixo, { zeroline: false }),
+          colorway: [c.purple, c.green, c.amber, c.info, c.red],
+          /* Números no padrão brasileiro em eixos, rótulos e tooltips: 1.234,56 */
+          separators: ',.',
+          barcornerradius: 7,
+          modebar: { bgcolor: 'rgba(0,0,0,0)', color: c.text, activecolor: c.lilac },
           showlegend: false,
-          hoverlabel: { bgcolor: '#181824', bordercolor: 'rgba(255,255,255,0.1)', font: { color: '#e8e9f0' } }
+          legend: { orientation: 'h', x: 0, y: 1.14, bgcolor: 'rgba(0,0,0,0)', font: { color: c.textStrong, size: 11.5 } },
+          hoverlabel: {
+            bgcolor: c.tooltip, bordercolor: 'rgba(196,160,251,0.55)', align: 'left',
+            font: { family: 'Inter, system-ui, sans-serif', color: c.textStrong, size: 12.5 }
+          }
         };
-        return Object.assign(base, extra || {});
+        var mesclar = ['xaxis', 'yaxis', 'yaxis2', 'hoverlabel', 'legend', 'font'];
+        var saida = Object.assign({}, base, extra || {});
+        mesclar.forEach(function (chave) {
+          if (extra && extra[chave] && base[chave]) {
+            saida[chave] = Object.assign({}, base[chave], extra[chave]);
+          } else if (extra && extra[chave] && chave === 'yaxis2') {
+            saida[chave] = Object.assign({}, eixo, { showgrid: false }, extra[chave]);
+          }
+        });
+        return saida;
       };
       NEXO.plot = function (id, traces, layout, config) {
         var el = document.getElementById(id);
         if (!el || typeof Plotly === 'undefined') return;
+        /* Com os dois eixos travados, zoom/pan/reset não fazem nada: sem toolbar. */
+        var travado = !!(layout && layout.xaxis && layout.xaxis.fixedrange &&
+                         layout.yaxis && layout.yaxis.fixedrange);
         var plotConfig = Object.assign({
           /* Toolbar do Plotly só aparece no hover -> look limpo do Hélio preservado,
              e o botão Reset (resetScale2d) destrava o zoom sem precisar F5. */
-          displayModeBar: 'hover',
+          displayModeBar: travado ? false : 'hover',
           displaylogo: false,
           modeBarButtons: [['zoom2d', 'pan2d', 'resetScale2d']],
           /* Double-click no fundo do gráfico também faz reset (default do Plotly,
@@ -293,73 +404,96 @@
         var values = data.values;
         var classes = data.classes || [];
         var acum = data.acumulado || [];
+        var el = document.getElementById(id);
+        var estreito = !!el && el.clientWidth < 560;
+        /* Nomes longos de produto: só o rótulo do eixo é encurtado (ticktext); a
+           categoria e a tooltip continuam com o nome completo. */
+        var limite = estreito ? 12 : 22;
+        var curtos = labels.map(function (t) {
+          t = String(t);
+          return t.length > limite ? t.slice(0, limite - 1) + '…' : t;
+        });
+        /* Classe ABC na própria barra: o mesmo roxo, mais intenso na classe A. */
+        var tom = { A: 'rgba(168, 85, 247, 0.92)', B: 'rgba(168, 85, 247, 0.6)', C: 'rgba(168, 85, 247, 0.34)' };
         NEXO.plot(id, [
           {
             type: 'bar', name: 'Faturamento',
             x: labels, y: values, yaxis: 'y',
             marker: {
-              color: '#7c3aed',
-              line: { color: 'rgba(168, 85, 247, 0.55)', width: 1 }
+              color: classes.length ? classes.map(function (c) { return tom[c] || tom.A; }) : tom.A,
+              line: { color: 'rgba(216, 194, 253, 0.55)', width: 1 }
             },
-            width: 0.62,
+            width: 0.6,
             customdata: classes,
             hovertemplate: 'Faturamento: <b>R$ %{y:,.2f}</b>  ·  Classe %{customdata}<extra></extra>'
           },
           {
             type: 'scatter', mode: 'lines+markers', name: '% acumulado',
             x: labels, y: acum, yaxis: 'y2',
-            line: { color: '#fbbf24', width: 3, shape: 'spline' },
-            marker: { color: '#fbbf24', size: 7, line: { color: '#0c0c14', width: 1 } },
+            line: { color: '#fbbf24', width: 2.5, shape: 'spline', smoothing: 0.6 },
+            marker: { color: '#fbbf24', size: 7, line: { color: 'rgba(17,13,32,0.95)', width: 2 } },
             hovertemplate: '% acumulado: <b>%{y:.1f}%</b><extra></extra>'
           }
         ], {
-          height: 300,
-          margin: { l: 66, r: 58, t: 28, b: 104 },
+          height: estreito ? 320 : 330,
+          margin: estreito ? { l: 8, r: 8, t: 36, b: 8 } : { l: 66, r: 58, t: 36, b: 96 },
           hovermode: 'x unified',
           showlegend: true,
-          legend: { orientation: 'h', y: 1.16, x: 0, font: { size: 11 }, bgcolor: 'rgba(0,0,0,0)' },
-          bargap: 0.35,
+          legend: { x: 0, y: 1.02, yanchor: 'bottom' },
+          bargap: 0.34,
+          /* Referência de 80% (fronteira da classe A) no eixo do acumulado. */
+          shapes: [{
+            type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y2', y0: 80, y1: 80,
+            line: { color: 'rgba(251, 191, 36, 0.45)', width: 1, dash: 'dot' }
+          }],
           xaxis: {
-            gridcolor: NEXO.colors.grid, zerolinecolor: NEXO.colors.grid,
-            tickangle: -38, automargin: true, tickfont: { size: 10 }, fixedrange: true
+            tickangle: -38, tickfont: { size: 10, color: NEXO.colors.text }, fixedrange: true,
+            tickmode: 'array', tickvals: labels, ticktext: curtos
           },
           yaxis: {
-            title: { text: 'Faturamento', font: { size: 11, color: NEXO.colors.text } },
-            gridcolor: NEXO.colors.grid, zerolinecolor: NEXO.colors.grid,
+            title: estreito ? { text: '' } : { text: 'Faturamento', font: { size: 11, color: NEXO.colors.text } },
             tickprefix: 'R$ ', tickformat: ',.0f', rangemode: 'tozero', fixedrange: true
           },
           yaxis2: {
-            title: { text: '% acumulado', font: { size: 11, color: '#fbbf24' } },
+            title: estreito ? { text: '' } : { text: '% acumulado', font: { size: 11, color: '#fbbf24' } },
             overlaying: 'y', side: 'right', range: [0, 100], ticksuffix: '%',
-            showgrid: false, zeroline: false, fixedrange: true, tickfont: { color: '#fbbf24' }
+            showgrid: false, zeroline: false, showline: false, fixedrange: true,
+            tickfont: { color: '#fbbf24', size: 11 }
           }
         });
       };
 
       /* ---- Gráfico de LINHA temporal Vendas x Compras ----
-         data = { labels:[...], vendas:[...], compras:[...] } */
+         data = { labels:[...], vendas:[...], compras:[...] }
+         Cores iguais às do comparativo da Visão Geral: Vendas em azul, Compras
+         em âmbar (par legível também para daltonismo vermelho-verde). */
       NEXO.plotLinhaTemporal = function (id, data) {
         if (!data || !data.labels || data.labels.length < 2) return;
+        /* Linhas suaves; só Vendas tem área translúcida (duas áreas sobrepostas
+           virariam um cinza turvo). */
         NEXO.plot(id, [
           {
             type: 'scatter', mode: 'lines+markers', name: 'Vendas',
             x: data.labels, y: data.vendas,
-            line: { color: '#22c55e', width: 3, shape: 'spline' },
-            marker: { size: 7, color: '#22c55e' },
+            line: { color: '#38bdf8', width: 2.5, shape: 'spline', smoothing: 0.7 },
+            marker: { size: 7, color: '#38bdf8', line: { color: 'rgba(17,13,32,0.95)', width: 2 } },
+            fill: 'tozeroy', fillcolor: 'rgba(56, 189, 248, 0.12)',
             hovertemplate: '<b>Vendas</b> %{x}<br>R$ %{y:,.2f}<extra></extra>'
           },
           {
             type: 'scatter', mode: 'lines+markers', name: 'Compras',
             x: data.labels, y: data.compras,
-            line: { color: '#f59e0b', width: 3, shape: 'spline' },
-            marker: { size: 7, color: '#f59e0b' },
+            line: { color: '#f59e0b', width: 2.5, shape: 'spline', smoothing: 0.7 },
+            /* Losango: distingue Compras de Vendas também sem depender da cor. */
+            marker: { size: 8, symbol: 'diamond', color: '#f59e0b', line: { color: 'rgba(17,13,32,0.95)', width: 2 } },
             hovertemplate: '<b>Compras</b> %{x}<br>R$ %{y:,.2f}<extra></extra>'
           }
         ], {
           showlegend: true,
-          legend: { orientation: 'h', y: 1.15, x: 0, font: { size: 12 } },
+          hovermode: 'x unified',
+          legend: { y: 1.16, font: { size: 12 } },
           yaxis: { tickprefix: 'R$ ', tickformat: ',.0f', rangemode: 'tozero', fixedrange: true },
-          xaxis: { fixedrange: true, tickfont: { size: 12 } },
+          xaxis: { fixedrange: true, tickfont: { size: 12, color: NEXO.colors.text } },
           height: 280, margin: { l: 64, r: 18, t: 36, b: 42 }
         });
       };
@@ -412,6 +546,8 @@
             var count = parseInt(badge.getAttribute('data-count') || '0', 10) + 1;
             badge.setAttribute('data-count', count);
             badge.textContent = count < 100 ? count : '99+';
+            var sino = document.getElementById('bellBtn');
+            if (sino) sino.setAttribute('aria-label', 'Notificações (' + count + ' não lidas)');
             badge.style.display = '';
             badge.classList.remove('pulse');
             void badge.offsetWidth;        // reinicia a animação

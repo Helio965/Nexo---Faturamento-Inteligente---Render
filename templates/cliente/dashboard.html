@@ -111,19 +111,19 @@
 </div>
 
 <div class="row g-3 mb-4">
-    <div class="col-12 col-lg-6">
+    <div class="col-12 col-xl-6">
         <div class="nexo-card h-100">
             <div class="nexo-card-head"><div><h2>Compras x Vendas</h2><p class="sub">Período mais recente</p></div></div>
             <div class="nexo-card-body"><div id="chartCliente" class="chart-box sm"></div></div>
         </div>
     </div>
-    <div class="col-12 col-lg-3">
+    <div class="col-12 col-md-6 col-xl-3">
         <div class="nexo-card h-100">
             <div class="nexo-card-head"><div><h2>Indicador de Pressão de Estoque</h2><p class="sub">Sinal gerencial estimado</p></div></div>
             <div class="nexo-card-body"><div id="chartPressaoCliente" class="chart-box sm"></div></div>
         </div>
     </div>
-    <div class="col-12 col-lg-3">
+    <div class="col-12 col-md-6 col-xl-3">
         <div class="nexo-card h-100">
             <div class="nexo-card-head"><div><h2>Relatório estratégico</h2><p class="sub">Última devolutiva</p></div></div>
             <div class="nexo-card-body">
@@ -139,7 +139,7 @@
 
 {# ---------------- Curva ABC (Pareto) + histórico temporal ---------------- #}
 <div class="row g-3 mb-4">
-    <div class="col-12 col-lg-7">
+    <div class="col-12 col-xl-7">
         <div class="nexo-card h-100">
             <div class="nexo-card-head"><div><h2>Gráfico de Pareto · Curva ABC</h2><p class="sub">Faturamento por produto + % acumulado (Top 10)</p></div></div>
             <div class="nexo-card-body">
@@ -149,7 +149,7 @@
             </div>
         </div>
     </div>
-    <div class="col-12 col-lg-5">
+    <div class="col-12 col-xl-5">
         <div class="nexo-card h-100">
             <div class="nexo-card-head"><div><h2>Histórico comparativo</h2><p class="sub">Vendas x Compras ao longo do tempo</p></div></div>
             <div class="nexo-card-body">
@@ -266,6 +266,11 @@
     var labels = dashboardData.comparativo.labels;
     var values = dashboardData.comparativo.values;
     var cores  = ['#f59e0b', '#38bdf8'];  /* compras = âmbar, vendas = azul neon */
+    /* Faixa do eixo fixada pelo maior valor: o gráfico nasce em zero e anima
+       (redraw: false não recalcula o eixo), então sem isso as barras estourariam
+       a faixa [0, 1] e os rótulos do eixo ficariam sem sentido. */
+    var topo = Math.max.apply(null, values.map(function (v) { return Number(v) || 0; }).concat([0]));
+    var faixa = [0, topo > 0 ? topo * 1.2 : 1];
 
     NEXO.plot('chartCliente', [{
       type: 'bar',
@@ -273,39 +278,35 @@
       y: labels.map(function () { return 0; }),   /* start at 0 para animar */
       marker: {
         color: cores,
-        line: { color: 'rgba(255,255,255,0.10)', width: 1 }
+        line: { color: 'rgba(255,255,255,0.22)', width: 1 }
       },
-      width: 0.55,
+      width: 0.5,
       /* customdata leva o valor já formatado em pt-BR para a tooltip */
       customdata: values.map(nexoFmtBRL),
       hovertemplate: '<b>%{x}</b><br>R$ %{customdata}<extra></extra>',
       text: values.map(function (v) { return 'R$ ' + nexoFmtBRLshort(v); }),
       textposition: 'outside',
-      textfont: { color: '#e8e9f0', size: 12, family: 'Inter, sans-serif' },
+      textfont: { color: '#ece9f8', size: 12.5, family: 'JetBrains Mono, monospace' },
       cliponaxis: false
     }], {
       yaxis: {
         tickprefix: 'R$ ', tickformat: ',.0f',
-        rangemode: 'tozero', fixedrange: true, automargin: true
+        range: faixa, fixedrange: true, automargin: true
       },
-      xaxis: { fixedrange: true, tickfont: { size: 13 } },
+      xaxis: { fixedrange: true, tickfont: { size: 13, color: '#ece9f8' } },
       height: 260,
       margin: { l: 64, r: 18, t: 32, b: 42 },
-      bargap: 0.45,
-      hoverlabel: {
-        bgcolor: '#181824',
-        bordercolor: '#a855f7',
-        font: { color: '#e8e9f0', family: 'Inter, sans-serif', size: 12 }
-      }
+      bargap: 0.45
     });
 
     if (typeof Plotly !== 'undefined') {
       window.setTimeout(function () {
+        var ms = NEXO.reduzMovimento ? 0 : 900;
         Plotly.animate('chartCliente', {
           data: [{ y: values }], traces: [0]
         }, {
-          transition: { duration: 900, easing: 'cubic-in-out' },
-          frame: { duration: 900, redraw: false }
+          transition: { duration: ms, easing: 'cubic-in-out' },
+          frame: { duration: ms, redraw: false }
         });
       }, 80);
     }
@@ -323,6 +324,10 @@
   (function () {
     var v = Number(dashboardData.pressao_estoque || 0);
     var cor, legenda;
+    var caixa = document.getElementById('chartPressaoCliente');
+    var largura = caixa ? caixa.clientWidth : 240;
+    var digitos = ('R$ ' + Math.abs(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + (v < 0 ? '-' : '')).length;
+    var tamanho = Math.max(16, Math.min(32, Math.floor(largura / (digitos * 0.64))));
     if (v > 0)      { cor = '#fbd07a'; legenda = 'Pressão de estoque'; }
     else if (v < 0) { cor = '#22c55e'; legenda = 'Giro saudável';      }
     else            { cor = '#9aa0b7'; legenda = 'Equilíbrio';          }
@@ -334,12 +339,13 @@
       number: {
         prefix: 'R$ ',
         valueformat: ',.2f',
-        font: { color: cor, size: 30, family: 'JetBrains Mono, monospace' }
+        /* Tamanho proporcional à caixa: o valor nunca estoura o cartão estreito. */
+        font: { color: cor, size: tamanho, family: 'JetBrains Mono, monospace' }
       },
       title: {
         text: '<span style="font-size:0.78rem;letter-spacing:0.04em;text-transform:uppercase;">'
               + legenda + '</span>',
-        font: { color: '#9aa0b7' }
+        font: { color: '#aaa6c8' }
       },
       domain: { x: [0, 1], y: [0, 1] }
     }], {
@@ -349,11 +355,12 @@
 
     if (typeof Plotly !== 'undefined') {
       window.setTimeout(function () {
+        var ms = NEXO.reduzMovimento ? 0 : 1100;
         Plotly.animate('chartPressaoCliente', {
           data: [{ value: v }], traces: [0]
         }, {
-          transition: { duration: 1100, easing: 'cubic-in-out' },
-          frame: { duration: 1100, redraw: false }
+          transition: { duration: ms, easing: 'cubic-in-out' },
+          frame: { duration: ms, redraw: false }
         });
       }, 150);
     }
