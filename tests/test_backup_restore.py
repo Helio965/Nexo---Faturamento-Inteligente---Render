@@ -9,7 +9,7 @@ seu próprio cluster temporário. Nenhum banco ou servidor existente é usado.
 """
 
 import contextlib
-from datetime import date
+from datetime import date, datetime, timezone
 import hashlib
 import io
 import json
@@ -115,7 +115,7 @@ class PostgreSQLBackupRestoreTests(unittest.TestCase):
                          f"Ensaio isolado falhou na etapa {report.get('stage', 'desconhecida')} "
                          f"({report.get('error_type', 'erro não identificado')}); saídas brutas omitidas.")
         self.assertEqual(report.get("status"), "ok")
-        self.assertEqual(report.get("tables"), 15)
+        self.assertEqual(report.get("tables"), 20)
         self.assertEqual(report.get("uploads"), 4)
         self.assertEqual(report.get("files"), 5)
         not_executed = report.get("not_executed", [])
@@ -205,7 +205,7 @@ class BackupDrillSafetyTests(unittest.TestCase):
             for tool in TOOLS:
                 _tool(Path(fake), tool).write_bytes(b"")
             for platform, approved, accepted in cases:
-                report = {"status": "ok", "tables": 15, "uploads": 4, "files": 5,
+                report = {"status": "ok", "tables": 20, "uploads": 4, "files": 5,
                           "checks": approved, "not_executed": ["etl"]}
                 completed = subprocess.CompletedProcess([], 0, stdout=json.dumps(report))
                 with self.subTest(platform=platform, checks=approved[-1:], accepted=accepted), \
@@ -293,8 +293,9 @@ class _PrivateDrill(unittest.TestCase):
 
     def fixture(self):
         from extensions import db
-        from models import (Analise, ChamadoSuporte, Empresa, GuiaTopico, IndicadorAnalise,
-                            MensagemSuporte, Notificacao, Plano, ProdutoCurvaABC,
+        from models import (Analise, ChamadoSuporte, CoberturaPaga, Contrato, Empresa,
+                            EventoContratual, GuiaTopico, HistoricoPrecoPlano, IndicadorAnalise,
+                            MensagemSuporte, Notificacao, Plano, ProdutoCurvaABC, RegimeContratual,
                             RelatorioAnalise, Segmento, UploadRelatorio, Usuario)
         import storage
 
@@ -354,6 +355,31 @@ class _PrivateDrill(unittest.TestCase):
             chamado.mensagens = [MensagemSuporte(id_usuario_remetente=cliente.id_usuario,
                                                   mensagem="Mensagem fictícia restaurada.")]
             db.session.add_all([chamado, Notificacao(id_usuario=cliente.id_usuario, texto="Aviso fictício")])
+        # Gestão contratual: toda tabela nova precisa de linha (sequências e
+        # pg_restore). A empresa 1 fica no regime contratual com janeiro pago.
+        instante = datetime(2026, 1, 2, 12, tzinfo=timezone.utc)
+        contrato = Contrato(id_empresa=self.company_ids[0], id_plano=plano.id_plano,
+                            valor_mensal_contratado=100, data_inicio=date(2026, 1, 1),
+                            data_fim=date(2026, 12, 31), situacao="ATIVO",
+                            id_usuario_admin_responsavel=admin.id_usuario, data_criacao=instante)
+        db.session.add(contrato)
+        db.session.flush()
+        cobertura = CoberturaPaga(id_contrato=contrato.id_contrato, id_empresa=self.company_ids[0],
+                                  periodo_inicio=date(2026, 1, 1), periodo_fim=date(2026, 1, 31),
+                                  referencia_confirmacao="Comprovante fictício", confirmado_em=instante,
+                                  id_usuario_admin_confirmacao=admin.id_usuario, data_criacao=instante)
+        db.session.add(cobertura)
+        db.session.flush()
+        db.session.add_all([
+            EventoContratual(id_empresa=self.company_ids[0], id_contrato=contrato.id_contrato,
+                             id_cobertura=cobertura.id_cobertura, tipo="COBERTURA_CONFIRMADA",
+                             ocorrido_em=instante, origem="ADMIN", id_usuario_responsavel=admin.id_usuario,
+                             situacao_anterior="ATIVO", situacao_posterior="ATIVO"),
+            RegimeContratual(id_empresa=self.company_ids[0], ativado_em=instante,
+                             id_usuario_admin_ativacao=admin.id_usuario),
+            HistoricoPrecoPlano(id_plano=plano.id_plano, valor_anterior=90, valor_novo=100,
+                                alterado_em=instante, origem="fixture-fictícia"),
+        ])
         guia_ref = storage.salvar(GUIA, "guia/imagem_ficticia.png")
         db.session.add(GuiaTopico(categoria="Teste", pergunta="Recuperação fictícia?",
                                  resposta="Conteúdo fictício restaurado.", imagem_url=guia_ref))
@@ -417,7 +443,8 @@ class _PrivateDrill(unittest.TestCase):
             # Confere todas as sequências numéricas, sem remover nenhuma linha.
             for table in db.metadata.sorted_tables:
                 pk = next(iter(table.primary_key.columns))
-                if pk.type.python_type is not int:
+                # Chave natural (regime_contratual.id_empresa) não tem sequência própria.
+                if pk.type.python_type is not int or pk.autoincrement is False:
                     continue
                 sequence = db.session.scalar(text("SELECT pg_get_serial_sequence(:table_name, :column_name)"),
                                              {"table_name": table.name, "column_name": pk.name})

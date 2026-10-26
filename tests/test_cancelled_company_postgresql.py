@@ -336,7 +336,7 @@ class _PrivateCluster:
                        and "/auth/login" in old.headers.get("Location", ""))
             relogin, response = login("client")
             self.check("cancelled_login_denied", response.status_code == 200
-                       and "desativada" in response.get_data(as_text=True)
+                       and "Conta encerrada" in response.get_data(as_text=True)
                        and relogin.get("/_aj061/protected").status_code == 302)
             other, response = login("other")
             self.check("other_company_kept", response.status_code == 302

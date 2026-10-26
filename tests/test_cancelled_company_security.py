@@ -133,9 +133,13 @@ class CancelledCompanySecurityTests(token_cases._TokenCase):
         self.assertNotIn("Location", response.headers)
         body = response.get_data(as_text=True)
         self.assertNotIn(PRIVATE_TEXT, body)
-        self.assertIn("desativada", body)
+        # NEXO-AJ-06.3: senha correta de empresa CANCELADA mostra a página própria
+        # de conta encerrada, sem criar sessão autenticada.
+        self.assertIn("Conta encerrada", body)
+        self.assertEqual(response.headers.get("Cache-Control"), "no-store")
         with client.session_transaction() as data:
             self.assertNotIn("_user_id", data)
+            self.assertNotIn("credential_fingerprint", data)
         self._assert_private_denied(client)
 
     def _assert_redirected_to_login(self, response):
@@ -237,6 +241,7 @@ class CancelledCompanySecurityTests(token_cases._TokenCase):
         body = response.get_data(as_text=True)
         self.assertIn("E-mail ou senha incorretos.", body)
         self.assertNotIn("desativada", body)
+        self.assertNotIn("Conta encerrada", body)
 
     def test_d_existing_session_loses_access_when_admin_cancels_company(self):
         client = self._login_client()

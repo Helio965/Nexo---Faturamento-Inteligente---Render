@@ -109,6 +109,7 @@ class IdentidadeVisualHTTPTests(DeployTestCase):
         analise.relatorio = RelatorioAnalise(titulo="Análise sintética", conclusao_estrategica="Conclusão sintética.",
                                              publicado=True)
         self.db.session.commit()
+        self.empresa_id = analise.id_empresa
 
     def pagina(self, caminho):
         resposta = self.client.get(caminho)
@@ -158,13 +159,15 @@ class IdentidadeVisualHTTPTests(DeployTestCase):
                 render_template("auth/resetar_senha.html", token="token-sintetico"),
                 render_template("auth/primeiro_acesso_token.html", token="token-sintetico", usuario=None),
                 render_template("auth/primeiro_acesso.html"),
+                render_template("auth/conta_encerrada.html"),
             )
         for html in paginas:
             self.assert_auth(html)
 
     def test_sidebar_do_admin_e_do_cliente_usam_o_cubo_sem_brilho(self):
         for email, caminhos in (
-            ("admin-test@example.invalid", ("/admin/dashboard", "/admin/guia")),
+            ("admin-test@example.invalid", ("/admin/dashboard", "/admin/guia", "/admin/contratos",
+                                            f"/admin/empresas/{self.empresa_id}/detalhes")),
             ("cliente-test@example.invalid", ("/cliente/dashboard", "/cliente/historico",
                                               f"/cliente/analise/{self.analise_id}", "/cliente/upload",
                                               "/cliente/guia", "/cliente/tickets")),
