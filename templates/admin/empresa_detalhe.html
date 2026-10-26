@@ -114,6 +114,9 @@
             <a class="btn-ghost" href="{{ url_for('contratos.contrato_renovar', id_empresa=empresa.id_empresa, id_contrato=c.id_contrato) }}"><i class="bi bi-arrow-repeat"></i> Renovar</a>
             <a class="btn-ghost" href="{{ url_for('contratos.contrato_alterar_plano', id_empresa=empresa.id_empresa, id_contrato=c.id_contrato) }}"><i class="bi bi-arrow-left-right"></i> Alterar plano</a>
             {% if c.situacao == 'ATIVO' %}
+            {% if empresa.status_conta == 'SUSPENSA' %}
+            <a class="btn-ghost" href="{{ url_for('contratos.contrato_acao', id_empresa=empresa.id_empresa, id_contrato=c.id_contrato, acao='reativar') }}"><i class="bi bi-play-circle"></i> Reativar empresa</a>
+            {% endif %}
             <a class="btn-ghost" href="{{ url_for('contratos.contrato_acao', id_empresa=empresa.id_empresa, id_contrato=c.id_contrato, acao='suspender') }}"><i class="bi bi-pause-circle"></i> Suspender</a>
             {% else %}
             <a class="btn-ghost" href="{{ url_for('contratos.contrato_acao', id_empresa=empresa.id_empresa, id_contrato=c.id_contrato, acao='prorrogar') }}"><i class="bi bi-calendar-plus"></i> Prorrogar suspensão</a>

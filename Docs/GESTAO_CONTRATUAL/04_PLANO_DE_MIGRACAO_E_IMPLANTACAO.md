@@ -30,7 +30,7 @@ Isso **não** dispensa a `e4c004a26b01`, que o código anterior a esta entrega j
   1. Localizar a documentação do acordo real (data, plano, valor, vigência).
   2. "Novo contrato", com a formalização e a referência do documento.
   3. "Registrar período pago", somente para os períodos com comprovante.
-  4. Se a empresa estiver suspensa de fato: "Suspender", informando o **instante real** da suspensão. O cadastro do contrato (passo 2) mantém a empresa SUSPENSA; a ativação das regras (passo 6) é recusada enquanto o contrato não estiver SUSPENSO também. O retroativo é permitido até o início da vigência do contrato; o cadastro do contrato não limita. Os prazos contam do instante real. Se o prazo já tiver terminado, o sistema recusa: nesse caso avalie o cancelamento.
+  4. Se a empresa estiver suspensa de fato: "Suspender", informando o **instante real** da suspensão. O cadastro do contrato (passo 2) mantém a empresa SUSPENSA; a ativação das regras (passo 6) é recusada enquanto o contrato não estiver SUSPENSO também. Se, ao contrário, a situação já foi regularizada, use "Reativar empresa" em Detalhes (justificativa obrigatória) para devolver a empresa a ATIVA antes do passo 6. O retroativo é permitido até o início da vigência do contrato; o cadastro do contrato não limita. Os prazos contam do instante real. Se o prazo já tiver terminado, o sistema recusa: nesse caso avalie o cancelamento.
   5. Conferir em Detalhes a situação calculada e os períodos consolidados.
   6. "Ativar regras contratuais", com justificativa.
 - **Empresas CANCELADAS:** continuam bloqueadas no regime legado. Se for necessário registrar o histórico contratual delas, crie o contrato e cancele-o. Atenção:

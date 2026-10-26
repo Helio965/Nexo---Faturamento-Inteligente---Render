@@ -736,6 +736,15 @@ class LoginContaEncerradaTests(PortalContratualCase):
         self._assert_login_negado(client, resposta, MENSAGEM_GENERICA_LOGIN)
         self.assertNotIn(MENSAGEM_DESATIVADA, self._texto(resposta))
 
+    def test_email_inexistente_paga_o_custo_do_hash_ficticio_e_conta_real_nao(self):
+        import blueprints.auth as rotas_auth
+        with patch.object(rotas_auth, "_conferir_senha_ficticia",
+                          wraps=rotas_auth._conferir_senha_ficticia) as ficticio:
+            self._tentar_login("nao-cadastrado@example.invalid")
+            self.assertEqual(ficticio.call_count, 1)
+            self._tentar_login(CLIENTE, senha="Senha-ficticia-errada-000!")
+            self.assertEqual(ficticio.call_count, 1)  # conta real: o hash verdadeiro já foi conferido
+
 
 # =============================================================================
 # (f) Isolamento
@@ -829,6 +838,22 @@ class UploadContratualTests(PortalContratualCase):
         self._assert_negado(recusa, titulo="Envio indisponível")
         self.assertEqual(self._uploads(self.fev), [])
         self._assert_enviado(self._enviar(self.jan), self.jan)
+
+    def test_envio_e_reverificado_apos_a_validacao_do_arquivo(self):
+        """O prazo pode vencer durante a leitura do arquivo: o relógio é relido antes de gravar."""
+        self.suspender()
+        import blueprints.cliente as rotas_cliente
+        original = rotas_cliente.ler_upload_validado
+
+        def lenta(arquivo, extensao):
+            resultado = original(arquivo, extensao)
+            self.relogio(SUSPENSAO_LIMITE + timedelta(hours=1))  # o limite passa durante a validação
+            return resultado
+
+        with patch.object(rotas_cliente, "ler_upload_validado", side_effect=lenta):
+            resposta = self._enviar(self.jan)
+        self._assert_negado(resposta, titulo="Envio indisponível")
+        self.assertEqual(self._uploads(self.jan), [])
 
     def test_ativa_envia_normalmente(self):
         listadas, _ = self._listadas()
@@ -981,6 +1006,93 @@ class AdministracaoContratualHttpTests(PortalContratualCase):
                        "Alteração de plano", "Período pago revogado", "Cancelamento"):
             self.assertIn(rotulo, corpo)
 
+    def test_datas_fora_do_intervalo_sao_recusadas_sem_erro_500(self):
+        c = self.contratar().id_contrato
+        antes = self._estado()
+        for campo, rota, extra in (
+            ("suspenso_em", "suspender", {}),
+            ("novo_limite", "prorrogar", {}),
+        ):
+            for valor in ("9999-12-31T23:00", "1999-12-31T23:00", "2101-01-01T00:00"):
+                with self.subTest(rota=rota, valor=valor):
+                    resposta = self._operar(f"{self.base}/contratos/{c}/{rota}", justificativa="x",
+                                            **{campo: valor}, **extra)
+                    self._assert_rerender(resposta, "Data e hora fora do intervalo permitido.")
+        self.assertEqual(self._estado(), antes)
+
+    def test_post_sem_token_csrf_e_recusado_e_nada_muda(self):
+        antes = self._estado()
+        c = self.contratar().id_contrato
+        depois_de_contratar = self._estado()
+        self.assertNotEqual(antes, depois_de_contratar)
+        for caminho, dados in (
+            (f"{self.base}/contratos/novo", dict(id_plano=str(self.bronze), valor_mensal="150,00",
+                                                 data_inicio="2026-01-01")),
+            (f"{self.base}/contratos/{c}/suspender", dict(justificativa="x", versao="1")),
+            (f"{self.base}/contratos/{c}/cancelar", dict(justificativa="x", confirmacao="CANCELAR", versao="1")),
+            (f"{self.base}/contratos/{c}/cobertura", dict(periodo_inicio="2026-01-01", periodo_fim="2026-01-31",
+                                                         referencia="x", versao="1")),
+            (f"{self.base}/regras-contratuais/ativar", dict(justificativa="x")),
+            ("/admin/contratos/reconciliar", {}),
+        ):
+            with self.subTest(caminho=caminho):
+                self.assertEqual(self.adm.post(caminho, data=dados).status_code, 400)
+        self.assertEqual(self._estado(), depois_de_contratar)
+
+    def test_conciliacao_de_empresa_suspensa_so_volta_a_ativa_pela_acao_explicita(self):
+        self._empresa().status_conta = "SUSPENSA"
+        self.db.session.commit()
+        contrato = self.contratar()
+        c = contrato.id_contrato
+        self.assertEqual(self._empresa().status_conta, "SUSPENSA")
+        detalhes = self._texto(self.adm.get(f"{self.base}/detalhes"))
+        self.assertIn("Reativar empresa", detalhes)
+        # Renovação e troca de plano históricas não reativam a empresa em silêncio.
+        resposta = self._operar(f"{self.base}/contratos/{c}/alterar-plano", id_plano=str(self.prata),
+                                valor_mensal="300,00", data_inicio="2026-02-01", data_fim="2026-12-31",
+                                justificativa="Troca histórica documentada")
+        self._assert_sucesso(resposta, "Alteração de plano registrada; o contrato anterior foi preservado "
+                             "como encerrado.", "ALTERACAO_PLANO")
+        self.assertEqual(self._empresa().status_conta, "SUSPENSA")
+        atual = self._vigente()
+        formulario = self._texto(self.adm.get(f"{self.base}/contratos/{atual.id_contrato}/renovar"))
+        self.assertIn("o registro não a reativa", formulario)
+        # As regras só podem ser ativadas com status e contrato coerentes.
+        resposta = self._operar(f"{self.base}/regras-contratuais/ativar", justificativa="Conciliação fictícia")
+        self._assert_rerender(resposta, "O status da empresa (SUSPENSA) difere do contrato (ATIVO)")
+        self.assertEqual(self.db.session.scalar(select(func.count()).select_from(
+            __import__("models").RegimeContratual)), 0)
+        geracao = self._geracao()
+        resposta = self._operar(f"{self.base}/contratos/{atual.id_contrato}/reativar",
+                                justificativa="Regularização fictícia")
+        evento = self._assert_sucesso(resposta, "Contrato reativado.", "REATIVACAO")
+        self.assertEqual((evento.situacao_anterior, evento.situacao_posterior), ("ATIVO", "ATIVO"))
+        self.assertEqual(json.loads(evento.detalhes)["status_conta_anterior"], "SUSPENSA")
+        self.assertEqual(self._empresa().status_conta, "ATIVA")
+        self.assertEqual(self._geracao(), geracao)  # ATIVA <-> SUSPENSA não revoga sessões
+        self._assert_sucesso(self._operar(f"{self.base}/regras-contratuais/ativar", justificativa="Conciliação fictícia"),
+                             "Regras contratuais ativadas para esta empresa.", "REGRAS_ATIVADAS")
+        # Sem empresa suspensa e sem contrato suspenso, reativar continua recusado.
+        resposta = self._operar(f"{self.base}/contratos/{atual.id_contrato}/reativar", justificativa="x")
+        self._assert_rerender(resposta, "Somente contratos suspensos, ou uma empresa SUSPENSA com contrato ativo")
+
+    def test_painel_do_admin_trata_suspensao_legada_como_pendencia_de_conciliacao(self):
+        from models import Empresa
+        self.contratar()
+        contrato = self.suspender()  # empresa e contrato suspensos, mas ainda no regime legado
+        pagina = self._texto(self.adm.get("/admin/dashboard"))
+        self.assertIn("0 suspensão(ões) vencida(s) aguardando reconciliação", pagina)
+        self.assertIn("0 terminando em breve", pagina)
+        self.relogio(contrato.suspensao_limite - timedelta(days=1))
+        pagina = self._texto(self.adm.get("/admin/dashboard"))
+        self.assertIn("0 terminando em breve", pagina)  # prazos só valem no regime contratual
+        self.relogio(contrato.suspensao_limite + timedelta(days=1))
+        pagina = self._texto(self.adm.get("/admin/dashboard"))
+        self.assertIn("0 suspensão(ões) vencida(s) aguardando reconciliação", pagina)
+        self.assertRegex(pagina, r"[1-9]\d* pendência\(s\)")  # aparece como pendência a conciliar
+        self.assertEqual(self._empresa().status_conta, "SUSPENSA")  # nada foi cancelado
+        self.assertIsNotNone(self.db.session.get(Empresa, self.empresa_id))
+
     def test_erros_de_validacao_rerenderizam_o_formulario(self):
         novo = f"{self.base}/contratos/novo"
         for campos, mensagem in (
@@ -1013,7 +1125,8 @@ class AdministracaoContratualHttpTests(PortalContratualCase):
              "Data e hora inválidas (use o seletor)."),
             (f"{rota}/prorrogar", dict(justificativa="x", novo_limite="2026-08-01T10:00"),
              "Somente suspensões registradas podem ser prorrogadas."),
-            (f"{rota}/reativar", dict(justificativa="x"), "Somente contratos suspensos podem ser reativados."),
+            (f"{rota}/reativar", dict(justificativa="x"),
+             "Somente contratos suspensos, ou uma empresa SUSPENSA com contrato ativo, podem ser reativados."),
             (f"{rota}/cancelar", dict(justificativa="Rescisão fictícia"),
              "Digite CANCELAR para confirmar o cancelamento."),
             (f"{rota}/cancelar", dict(justificativa="Rescisão fictícia", confirmacao="cancelar"),
@@ -1206,6 +1319,7 @@ class AdministracaoContratualHttpTests(PortalContratualCase):
         ultimo = self._eventos()[-1]
         self.assertEqual((ultimo.tipo, ultimo.origem, ultimo.id_usuario_responsavel),
                          ("CANCELAMENTO", "RECONCILIACAO", None))
+        self.assertEqual(json.loads(ultimo.detalhes)["acionado_por"], self.admin_id)  # quem clicou
         self._assert_para_login(self._replay(cookie).get("/cliente/dashboard"))
         self._assert_conta_encerrada(*self._tentar_login())
         self.assertIn("Nenhuma suspensão vencida.", self._texto(self.adm.get("/admin/contratos")))

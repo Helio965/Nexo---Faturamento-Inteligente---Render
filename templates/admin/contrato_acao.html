@@ -46,6 +46,11 @@
     <strong>A prorrogação não representa pagamento nem amplia o prazo de PDF.</strong>
     <p>O limite original continua gravado. As análises continuam dependendo dos períodos pagos. Ampliar a exportação exige autorização contratual específica, informada abaixo.</p>
 </div></div>
+{% elif acao == 'reativar' and contrato.situacao == 'ATIVO' %}
+<div class="aviso-contrato" role="note"><i class="bi bi-play-circle" aria-hidden="true"></i><div>
+    <strong>Regularização do status da empresa.</strong>
+    <p>O contrato já está ATIVO e a empresa continua SUSPENSA (por exemplo, depois de registrar o contrato numa conciliação). Esta ação devolve a empresa a ATIVA e fica registrada no histórico.</p>
+</div></div>
 {% elif acao == 'cancelar' %}
 <div class="aviso-contrato is-perigo" role="note"><i class="bi bi-x-octagon" aria-hidden="true"></i><div>
     <strong>O cancelamento bloqueia o portal e revoga as sessões dos usuários da empresa.</strong>

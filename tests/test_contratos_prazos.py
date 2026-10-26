@@ -36,6 +36,10 @@ class MesesDeCalendarioTests(unittest.TestCase):
         self.assertEqual(somar_meses_calendario(local(2026, 3, 31, 9), 3, SP), local(2026, 6, 30, 9))
         self.assertEqual(somar_meses_calendario(local(2026, 8, 31, 9), 3, SP), local(2026, 11, 30, 9))
 
+    def test_31_de_janeiro_em_ano_bissexto_chega_a_29_de_fevereiro(self):
+        self.assertEqual(somar_meses_calendario(local(2028, 1, 31, 9), 1, SP), local(2028, 2, 29, 9))
+        self.assertEqual(somar_meses_calendario(local(2028, 1, 31, 9), 2, SP), local(2028, 3, 31, 9))
+
     def test_ano_bissexto(self):
         self.assertEqual(somar_meses_calendario(local(2027, 11, 30, 8), 3, SP), local(2028, 2, 29, 8))
         self.assertEqual(somar_meses_calendario(local(2028, 2, 29, 8), 3, SP), local(2028, 5, 29, 8))

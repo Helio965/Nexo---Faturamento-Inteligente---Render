@@ -323,7 +323,10 @@ def renovar_contrato(sessao, id_empresa: int, id_contrato: int, versao: int, dad
     sessao.add(novo)
     sessao.flush()
     status_anterior = empresa.status_conta
-    revogados = _sincronizar_status(sessao, empresa, "ATIVA", instante)
+    # Contrato ATIVO com empresa SUSPENSA é a conciliação em andamento: a troca
+    # de plano ou a renovação históricas não reativam a empresa (use "Reativar").
+    conciliando = situacao_anterior == "ATIVO" and status_anterior == "SUSPENSA"
+    revogados = () if conciliando else _sincronizar_status(sessao, empresa, "ATIVA", instante)
     empresa.id_plano_atual = dados.id_plano
     evento = _evento(
         sessao, empresa, novo, "ALTERACAO_PLANO" if alteracao_plano else "RENOVACAO",
@@ -449,8 +452,21 @@ def reativar_contrato(sessao, id_empresa: int, id_contrato: int, versao: int, *,
     instante = _instante(instante)
     empresa = _bloquear(sessao, id_empresa)
     contrato = _contrato(sessao, empresa, id_contrato, versao)
+    if contrato.situacao == "ATIVO" and empresa.status_conta == "SUSPENSA":
+        # Conciliação: a empresa segue SUSPENSA com o contrato já ATIVO (criar_contrato
+        # não a reativa). Esta é a ação explícita e auditada que regulariza o status.
+        justificativa = texto(justificativa, "a justificativa", obrigatorio=True)
+        revogados = _sincronizar_status(sessao, empresa, "ATIVA", instante)
+        _tocar(contrato, instante)
+        evento = _evento(
+            sessao, empresa, contrato, "REATIVACAO", instante=instante, responsavel=responsavel,
+            anterior="ATIVO", posterior="ATIVO", justificativa=justificativa,
+            detalhes=_detalhes(status_conta_anterior="SUSPENSA", regularizacao_de_status=True),
+        )
+        return ResultadoOperacao(empresa, contrato, evento, revogados)
     if contrato.situacao != "SUSPENSO":
-        raise ErroContratual("Somente contratos suspensos podem ser reativados.")
+        raise ErroContratual("Somente contratos suspensos, ou uma empresa SUSPENSA com contrato "
+                             "ativo, podem ser reativados.")
     if instante >= contrato.suspensao_limite:
         raise ErroContratual("O prazo da suspensão já terminou: registre uma renovação ou nova "
                              "contratação (ou uma prorrogação acordada).")
@@ -600,7 +616,7 @@ def ativar_regras_contratuais(sessao, id_empresa: int, *, justificativa, respons
     if empresa.status_conta != esperado:
         raise ErroContratual(f"O status da empresa ({empresa.status_conta}) difere do contrato "
                              f"({contrato.situacao}): registre a suspensão com o instante real, ou "
-                             "reative, antes de ativar as regras.")
+                             "use \"Reativar empresa\" nos detalhes, antes de ativar as regras.")
     justificativa = texto(justificativa, "a justificativa", obrigatorio=True)
     status_anterior = empresa.status_conta
     revogados = _sincronizar_status(

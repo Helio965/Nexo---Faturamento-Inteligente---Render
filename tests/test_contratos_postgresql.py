@@ -639,7 +639,9 @@ class _PrivateCluster:
             ("cobertura_paga", "fk_cobertura_contrato_mesma_empresa", "f"),
             ("cobertura_paga", "ck_cobertura_periodo", "c"), ("cobertura_paga", "ck_cobertura_referencia", "c"),
             ("cobertura_paga", "ck_cobertura_revogacao", "c"),
+            ("cobertura_paga", "uq_cobertura_id_empresa", "u"),
             ("evento_contratual", "fk_evento_contrato_mesma_empresa", "f"),
+            ("evento_contratual", "fk_evento_cobertura_mesma_empresa", "f"),
             ("evento_contratual", "ck_evento_tipo", "c"), ("evento_contratual", "ck_evento_origem", "c"),
             ("historico_preco_plano", "ck_historico_preco_valor", "c"),
         }

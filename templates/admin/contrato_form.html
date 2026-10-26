@@ -26,6 +26,9 @@
     <div>
         <strong>Contrato atual nº {{ contrato.id_contrato }}: {{ contrato.plano.nome_plano }}, R$ {{ m.brl(contrato.valor_mensal_contratado) }}/mês, de {{ contrato.data_inicio.strftime('%d/%m/%Y') }} a {{ contrato.data_fim.strftime('%d/%m/%Y') if contrato.data_fim else 'prazo indeterminado' }}.</strong>
         <p>Ao salvar, ele passa a ENCERRADO e é preservado com plano, valor e período originais. As análises já produzidas mantêm o plano de referência.</p>
+        {% if empresa.status_conta == 'SUSPENSA' and contrato.situacao == 'ATIVO' %}
+        <p><strong>Empresa SUSPENSA:</strong> o registro não a reativa. Para regularizar o status, use "Reativar empresa" nos detalhes.</p>
+        {% endif %}
     </div>
 </div>
 {% elif empresa.status_conta == 'SUSPENSA' %}
@@ -33,7 +36,7 @@
     <i class="bi bi-pause-circle" aria-hidden="true"></i>
     <div>
         <strong>Empresa SUSPENSA: o contrato é registrado sem reativá-la.</strong>
-        <p>Em seguida, registre a suspensão no contrato com o instante real (ou reative-o, se a situação foi regularizada). As regras contratuais só podem ser ativadas quando o status da empresa e o do contrato coincidirem.</p>
+        <p>Em seguida, registre a suspensão no contrato com o instante real (ou use "Reativar empresa" nos detalhes, se a situação foi regularizada). As regras contratuais só podem ser ativadas quando o status da empresa e o do contrato coincidirem.</p>
     </div>
 </div>
 {% elif empresa.status_conta == 'CANCELADA' %}

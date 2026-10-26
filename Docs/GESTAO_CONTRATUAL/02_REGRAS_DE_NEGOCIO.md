@@ -19,7 +19,7 @@ O ADMIN só consegue ativar as regras se houver contrato ATIVO, ou SUSPENSO aind
   - **Formalização:** a data não pode ficar no futuro.
 - Só pode existir **um contrato vigente** (ATIVO ou SUSPENSO) por empresa; o banco garante essa regra.
 - A contratação deixa a empresa ATIVA e sincroniza `empresa.id_plano_atual`.
-- **Empresa SUSPENSA na conciliação:** a contratação **não** a reativa. Ela continua SUSPENSA, no regime legado, até o ADMIN registrar no contrato a suspensão com o instante real (ou reativá-la, se a situação foi regularizada). Enquanto o status da empresa e o do contrato divergirem, a ativação das regras é recusada.
+- **Empresa SUSPENSA na conciliação:** a contratação **não** a reativa. Ela continua SUSPENSA, no regime legado, até o ADMIN registrar no contrato a suspensão com o instante real ou, se a situação foi regularizada, usar **"Reativar empresa"** (Detalhes; disponível quando o contrato está ATIVO e a empresa SUSPENSA; exige justificativa, gera evento `REATIVACAO` e não revoga sessões). Enquanto o status da empresa e o do contrato divergirem, a ativação das regras é recusada.
 - **Reativação após cancelamento:** se a empresa estava CANCELADA, a nova contratação a reativa. As sessões antigas continuam inválidas, porque a geração de autorização sobe ao sair de CANCELADA, e é exigido novo login. Períodos não pagos continuam negados.
 - Assinatura eletrônica e armazenamento de documentos **não** existem: registra-se só a referência da formalização.
 - Contratos de empresas antigas **não** são criados automaticamente.
@@ -30,6 +30,7 @@ O ADMIN só consegue ativar as regras se houver contrato ATIVO, ou SUSPENSO aind
 - A nova vigência deve começar **depois** do início do contrato atual e **não pode começar no futuro**. Renovação ou troca de plano agendada não é suportada: o contrato atual passa a ENCERRADO no ato, então o registro deve ser feito a partir da data de início da nova vigência.
 - **Alteração de plano:** exige um plano diferente e uma justificativa. As análises já produzidas mantêm o próprio `id_plano_referencia`.
 - **Suspensão em curso:** a renovação pode ser feita a partir de um contrato SUSPENSO (*renovação antes do encerramento*), e a empresa volta a ATIVA.
+- **Conciliação (contrato ATIVO, empresa SUSPENSA):** a renovação e a troca de plano históricas **não** reativam a empresa; o status só muda por "Reativar empresa" ou pela suspensão registrada no contrato.
 
 ## 4. Coberturas pagas (períodos efetivamente pagos)
 

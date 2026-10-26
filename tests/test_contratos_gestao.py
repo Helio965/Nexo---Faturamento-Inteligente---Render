@@ -734,6 +734,22 @@ class CorrecoesRevisaoTests(ContratosCase):
         self.assertEqual(self.db.session.scalar(select(func.count(Analise.id_analise)).where(
             Analise.tipo_analise == "QUINZENAL")), 0)
 
+    def test_nova_analise_decide_com_a_empresa_bloqueada(self):
+        """A decisão contratual não pode correr em paralelo com suspensão ou cancelamento."""
+        from unittest.mock import patch
+        import blueprints.admin as rotas_admin
+        self.contratar()
+        self.pagar(date(2026, 2, 1), date(2026, 2, 28))
+        self.ativar_regras()
+        self.login("admin-test@example.invalid")
+        token = self.csrf_token("/admin/analises/nova")
+        dados = {"csrf_token": token, "id_empresa": str(self.empresa_id), "periodo_inicio": "2026-02-01",
+                 "periodo_fim": "2026-02-28", "mes_referencia": "2", "ano_referencia": "2026",
+                 "tipo_analise": "MENSAL"}
+        with patch.object(rotas_admin, "bloquear_empresa", wraps=rotas_admin.bloquear_empresa) as lock:
+            self.client.post("/admin/analises/nova", data=dados)
+        self.assertEqual([chamada.args[1] for chamada in lock.call_args_list], [self.empresa_id])
+
     def test_reconciliacao_registra_quem_acionou(self):
         self.contratar()
         self.ativar_regras()
@@ -805,6 +821,47 @@ class CorrecoesRevisaoTests(ContratosCase):
         self.assertTrue(situacao.contratual)
         self.assertTrue(situacao.suspensa)
         self.assertEqual(situacao.suspensao_limite, contrato.suspensao_limite)
+
+    def test_renovacao_de_contrato_ativo_de_empresa_suspensa_mantem_o_status_e_suspenso_reativa(self):
+        from models import Empresa
+        self.db.session.get(Empresa, self.empresa_id).status_conta = "SUSPENSA"
+        self.db.session.commit()
+        antigo = self.contratar()
+        contract_admin.renovar_contrato(self.db.session, self.empresa_id, antigo.id_contrato, antigo.versao,
+                                        self.dados(data_inicio=date(2026, 2, 1)), responsavel=self.admin,
+                                        instante=self.agora)
+        self.db.session.commit()
+        self.db.session.expire_all()
+        self.assertEqual(self.db.session.get(Empresa, self.empresa_id).status_conta, "SUSPENSA")
+        # Contrato SUSPENSO renovado antes do encerramento: a empresa volta a ATIVA (documento 02, §3).
+        contrato = self.suspender()
+        contract_admin.renovar_contrato(self.db.session, self.empresa_id, contrato.id_contrato, contrato.versao,
+                                        self.dados(data_inicio=date(2026, 3, 1)), responsavel=self.admin,
+                                        instante=self.agora)
+        self.db.session.commit()
+        self.db.session.expire_all()
+        self.assertEqual(self.db.session.get(Empresa, self.empresa_id).status_conta, "ATIVA")
+
+    def test_reativar_empresa_suspensa_exige_justificativa_e_contrato_ativo(self):
+        from models import Empresa
+        self.db.session.get(Empresa, self.empresa_id).status_conta = "SUSPENSA"
+        self.db.session.commit()
+        contrato = self.contratar()
+        with self.assertRaises(ErroContratual):
+            contract_admin.reativar_contrato(self.db.session, self.empresa_id, contrato.id_contrato,
+                                             contrato.versao, justificativa="  ", responsavel=self.admin,
+                                             instante=self.agora)
+        self.db.session.rollback()
+        resultado = contract_admin.reativar_contrato(self.db.session, self.empresa_id, contrato.id_contrato,
+                                                     contrato.versao, justificativa="Regularizada",
+                                                     responsavel=self.admin, instante=self.agora)
+        self.db.session.commit()
+        self.assertEqual(resultado.empresa.status_conta, "ATIVA")
+        self.assertEqual(eventos(self.db, self.empresa_id)[-1].tipo, "REATIVACAO")
+        with self.assertRaises(ErroContratual):  # empresa ATIVA e contrato ATIVO: nada a reativar
+            contract_admin.reativar_contrato(self.db.session, self.empresa_id, contrato.id_contrato,
+                                             self.vigente().versao, justificativa="x", responsavel=self.admin,
+                                             instante=self.agora)
 
     def test_alerta_do_painel_conta_so_suspensoes_vencidas_reconciliaveis(self):
         self.contratar()

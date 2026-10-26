@@ -102,13 +102,15 @@ def dashboard():
         ).scalar() or 0
         from contract_admin import visao_geral_contratual
         painel = visao_geral_contratual(db.session)
+        # Prazos e reconciliação valem só no regime contratual. A suspensão de uma
+        # empresa ainda no legado, já vencida, é pendência de conciliação ("atenção").
+        expiradas_legado = sum(1 for i in painel["suspensoes_expiradas"] if not i["contratual"])
         alertas_contratuais = {
-            # Só as do regime contratual são reconciliáveis; as do legado ficam
-            # na visão geral com rótulo próprio.
-            "suspensoes_expiradas": sum(1 for i in painel["suspensoes_expiradas"] if i["contratual"]),
-            "suspensoes_terminando": len(painel["suspensoes_terminando"]),
+            "suspensoes_expiradas": len(painel["suspensoes_expiradas"]) - expiradas_legado,
+            "suspensoes_terminando": sum(1 for i in painel["suspensoes_terminando"] if i["contratual"]),
             "vencendo": len(painel["vencendo"]),
-            "atencao": len(painel["vencidos"]) + len(painel["inconsistentes"]) + len(painel["sem_contrato"]),
+            "atencao": (len(painel["vencidos"]) + len(painel["inconsistentes"])
+                        + len(painel["sem_contrato"]) + expiradas_legado),
             "legado": len(painel["legado"]),
         }
 
