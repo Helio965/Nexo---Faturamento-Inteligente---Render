@@ -28,6 +28,14 @@
         <p>Ao salvar, ele passa a ENCERRADO e é preservado com plano, valor e período originais. As análises já produzidas mantêm o plano de referência.</p>
     </div>
 </div>
+{% elif empresa.status_conta == 'SUSPENSA' %}
+<div class="aviso-contrato is-alerta" role="note">
+    <i class="bi bi-pause-circle" aria-hidden="true"></i>
+    <div>
+        <strong>Empresa SUSPENSA: o contrato é registrado sem reativá-la.</strong>
+        <p>Em seguida, registre a suspensão no contrato com o instante real (ou reative-o, se a situação foi regularizada). As regras contratuais só podem ser ativadas quando o status da empresa e o do contrato coincidirem.</p>
+    </div>
+</div>
 {% elif empresa.status_conta == 'CANCELADA' %}
 <div class="aviso-contrato is-alerta" role="note">
     <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>

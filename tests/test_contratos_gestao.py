@@ -784,6 +784,79 @@ class CorrecoesRevisaoTests(ContratosCase):
         self.assertNotIn("Empresa fictícia", resposta.get_data(as_text=True))
 
 
+    # ---------------------------------------------------------------- revisão E
+    def test_contrato_de_empresa_suspensa_nao_a_reativa_e_ativacao_exige_status_coerente(self):
+        from models import Empresa
+        self.db.session.get(Empresa, self.empresa_id).status_conta = "SUSPENSA"
+        self.db.session.commit()
+        self.contratar()
+        self.db.session.expire_all()
+        self.assertEqual(self.db.session.get(Empresa, self.empresa_id).status_conta, "SUSPENSA")
+        with self.assertRaisesRegex(ErroContratual, "difere do contrato"):
+            self.ativar_regras()
+        self.db.session.rollback()
+        self.assertFalse(contract_policy.regime_contratual_ativo(self.empresa_id))
+        # Conciliação: a suspensão real, anterior ao cadastro, define os prazos.
+        real = T0 - timedelta(days=3)
+        contrato = self.suspender(suspenso_em=real)
+        self.assertEqual(contrato.suspenso_em, real)
+        self.ativar_regras()
+        situacao = self.situacao()
+        self.assertTrue(situacao.contratual)
+        self.assertTrue(situacao.suspensa)
+        self.assertEqual(situacao.suspensao_limite, contrato.suspensao_limite)
+
+    def test_alerta_do_painel_conta_so_suspensoes_vencidas_reconciliaveis(self):
+        self.contratar()
+        self.suspender()  # regime legado: a reconciliação não atua sobre ela
+        self.contratar(empresa_id=self.outra_empresa_id)
+        self.ativar_regras(self.outra_empresa_id)
+        contrato = self.suspender(empresa_id=self.outra_empresa_id)
+        self.relogio(contrato.suspensao_limite + timedelta(days=1))
+        self.assertEqual(len(contract_admin.reconciliar_vencimentos(self.db.session, aplicar=False).candidatos), 1)
+        self.db.session.rollback()
+        self.login("admin-test@example.invalid")
+        html = self.client.get("/admin/dashboard").get_data(as_text=True)
+        self.assertIn("1 suspensão(ões) vencida(s) aguardando reconciliação", html)
+
+    def _consultas(self, caminho):
+        from sqlalchemy import event
+        contagem = []
+
+        def contar(*_args):
+            contagem.append(1)
+
+        event.listen(self.db.engine, "before_cursor_execute", contar)
+        try:
+            resposta = self.client.get(caminho)
+        finally:
+            event.remove(self.db.engine, "before_cursor_execute", contar)
+        self.assertEqual(resposta.status_code, 200)
+        return len(contagem)
+
+    def test_dashboard_e_historico_nao_consultam_o_banco_por_analise(self):
+        self.publicar(self.analise_id, date(2026, 1, 1), date(2026, 1, 31))
+        self.login()
+        caminhos = ("/cliente/dashboard", "/cliente/historico")
+        for caminho in caminhos:
+            self._consultas(caminho)  # aquecimento (caches de esquema)
+        antes = {caminho: self._consultas(caminho) for caminho in caminhos}
+        for mes in (2, 3):
+            self.publicar(self.nova_analise(date(2026, mes, 1), date(2026, mes, 28)).id_analise)
+        depois = {caminho: self._consultas(caminho) for caminho in caminhos}
+        self.assertEqual(depois, antes)
+
+    def test_textos_do_nexobot_distinguem_regime_legado_e_contratual(self):
+        from nexobot.saber import empresas_planos, uploads
+        registros = {r.id: r for r in empresas_planos.REGISTROS + uploads.REGISTROS}
+        suspensa = registros["nexo.empresas.conta_suspensa"].resumo
+        self.assertIn("regras contratuais", suspensa)
+        self.assertIn("o histórico publicado continua acessível", suspensa)
+        envio = registros["nexo.uploads.bloqueado"].explicacao
+        self.assertIn("regras contratuais", envio)
+        self.assertIn("segue liberado", envio)
+        self.assertIn("continua acessível", registros["nexo.empresas.status_conta"].resumo)
+
 class MigracaoLegadoTests(ContratosCase):
     """Upgrade sobre dados legados: nenhum contrato, pagamento ou regime inventado."""
 

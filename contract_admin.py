@@ -263,6 +263,8 @@ def criar_contrato(sessao, id_empresa: int, dados: DadosContrato, *, responsavel
 
     Empresa CANCELADA volta a ATIVA: aplicar_status_conta revoga as sessões
     antigas e exige novo login; os direitos continuam dependendo da cobertura.
+    Empresa SUSPENSA continua SUSPENSA (conciliação): o ADMIN registra em
+    seguida a suspensão com o instante real, ou reativa explicitamente.
     """
     _exigir_admin(responsavel)
     instante = _instante(instante)
@@ -275,7 +277,8 @@ def criar_contrato(sessao, id_empresa: int, dados: DadosContrato, *, responsavel
     sessao.add(contrato)
     sessao.flush()
     status_anterior = empresa.status_conta
-    revogados = _sincronizar_status(sessao, empresa, "ATIVA", instante)
+    revogados = (() if status_anterior == "SUSPENSA"
+                 else _sincronizar_status(sessao, empresa, "ATIVA", instante))
     empresa.id_plano_atual = dados.id_plano
     evento = _evento(
         sessao, empresa, contrato, "CONTRATACAO", instante=instante, responsavel=responsavel,
@@ -593,6 +596,11 @@ def ativar_regras_contratuais(sessao, id_empresa: int, *, justificativa, respons
         raise ErroContratual("Registre um contrato vigente antes de ativar as regras contratuais.")
     if contrato.situacao == "SUSPENSO" and instante >= contrato.suspensao_limite:
         raise ErroContratual("A suspensão deste contrato já expirou: regularize-o antes de ativar as regras.")
+    esperado = "SUSPENSA" if contrato.situacao == "SUSPENSO" else "ATIVA"
+    if empresa.status_conta != esperado:
+        raise ErroContratual(f"O status da empresa ({empresa.status_conta}) difere do contrato "
+                             f"({contrato.situacao}): registre a suspensão com o instante real, ou "
+                             "reative, antes de ativar as regras.")
     justificativa = texto(justificativa, "a justificativa", obrigatorio=True)
     status_anterior = empresa.status_conta
     revogados = _sincronizar_status(

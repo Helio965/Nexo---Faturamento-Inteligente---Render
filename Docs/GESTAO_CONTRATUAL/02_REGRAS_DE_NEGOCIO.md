@@ -9,7 +9,7 @@
 | **Legado** | Empresa sem linha em `regime_contratual`. É o caso de **todas** as empresas existentes após a migração | Comportamento anterior preservado: ATIVA e SUSPENSA acessam o histórico publicado e o PDF; CANCELADA bloqueia (AJ-06.1) e agora vê a tela de conta encerrada |
 | **Contratual** | Ativado pelo ADMIN depois de registrar o contrato vigente e os períodos comprovadamente pagos | Valem as regras abaixo; acesso sem cobertura paga comprovada é negado |
 
-O ADMIN só consegue ativar as regras se houver contrato ATIVO, ou SUSPENSO ainda dentro do prazo. A desativação volta a empresa ao regime legado e fica registrada; é uma contingência de implantação.
+O ADMIN só consegue ativar as regras se houver contrato ATIVO, ou SUSPENSO ainda dentro do prazo, e se o status da empresa coincidir com o do contrato (ATIVA com ATIVO, SUSPENSA com SUSPENSO). A desativação volta a empresa ao regime legado e fica registrada; é uma contingência de implantação.
 
 ## 2. Contratação
 
@@ -19,6 +19,7 @@ O ADMIN só consegue ativar as regras se houver contrato ATIVO, ou SUSPENSO aind
   - **Formalização:** a data não pode ficar no futuro.
 - Só pode existir **um contrato vigente** (ATIVO ou SUSPENSO) por empresa; o banco garante essa regra.
 - A contratação deixa a empresa ATIVA e sincroniza `empresa.id_plano_atual`.
+- **Empresa SUSPENSA na conciliação:** a contratação **não** a reativa. Ela continua SUSPENSA, no regime legado, até o ADMIN registrar no contrato a suspensão com o instante real (ou reativá-la, se a situação foi regularizada). Enquanto o status da empresa e o do contrato divergirem, a ativação das regras é recusada.
 - **Reativação após cancelamento:** se a empresa estava CANCELADA, a nova contratação a reativa. As sessões antigas continuam inválidas, porque a geração de autorização sobe ao sair de CANCELADA, e é exigido novo login. Períodos não pagos continuam negados.
 - Assinatura eletrônica e armazenamento de documentos **não** existem: registra-se só a referência da formalização.
 - Contratos de empresas antigas **não** são criados automaticamente.

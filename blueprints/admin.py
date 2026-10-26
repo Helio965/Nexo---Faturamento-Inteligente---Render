@@ -103,7 +103,9 @@ def dashboard():
         from contract_admin import visao_geral_contratual
         painel = visao_geral_contratual(db.session)
         alertas_contratuais = {
-            "suspensoes_expiradas": len(painel["suspensoes_expiradas"]),
+            # Só as do regime contratual são reconciliáveis; as do legado ficam
+            # na visão geral com rótulo próprio.
+            "suspensoes_expiradas": sum(1 for i in painel["suspensoes_expiradas"] if i["contratual"]),
             "suspensoes_terminando": len(painel["suspensoes_terminando"]),
             "vencendo": len(painel["vencendo"]),
             "atencao": len(painel["vencidos"]) + len(painel["inconsistentes"]) + len(painel["sem_contrato"]),

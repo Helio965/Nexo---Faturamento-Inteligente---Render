@@ -132,8 +132,9 @@ REGISTROS = (
         categoria="Empresa e cadastro",
         resumo=(
             "ATIVA é a situação normal. SUSPENSA e CANCELADA são definidas pela equipe NEXO conforme o "
-            "contrato. Com a conta SUSPENSA a equipe não abre novas análises e o acesso ao histórico depende "
-            "da situação contratual. Com a conta CANCELADA os usuários da empresa não conseguem mais entrar "
+            "contrato. Com a conta SUSPENSA a equipe não abre novas análises; o histórico publicado continua "
+            "acessível, com limites de período e de prazo quando a empresa já está sob as regras "
+            "contratuais. Com a conta CANCELADA os usuários da empresa não conseguem mais entrar "
             "no portal e o login mostra a tela de conta encerrada."
         ),
         explicacao=(
@@ -167,9 +168,10 @@ REGISTROS = (
         titulo="Minha conta está suspensa. O que posso fazer?",
         categoria="Empresa e cadastro",
         resumo=(
-            "Com a conta suspensa a equipe NEXO não abre novos períodos de análise. O que continua disponível "
-            "depende do contrato: o aviso no topo da Visão Geral informa até quando você pode consultar o "
-            "histórico e exportar PDFs. Para regularizar, fale com a equipe pelo Suporte."
+            "Com a conta suspensa a equipe NEXO não abre novos períodos de análise. Se a sua empresa já está "
+            "sob as regras contratuais, o aviso no topo da Visão Geral informa até quando você pode consultar "
+            "o histórico dos períodos pagos e exportar PDFs; caso contrário, o histórico publicado continua "
+            "acessível. Para regularizar, fale com a equipe pelo Suporte."
         ),
         perguntas=(
             "Conta suspensa, e agora?", "Por que minha conta foi suspensa?", "Como regularizo a conta suspensa?",

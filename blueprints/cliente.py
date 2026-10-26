@@ -35,6 +35,7 @@ from flask import (
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 from sqlalchemy.exc import SQLAlchemyError
 from etl_inputs import ETLInputError
 from etl_uploads import ler_upload_validado, limitar_upload
@@ -180,6 +181,7 @@ def dashboard():
         .where(Analise.id_empresa == empresa.id_empresa)
         .where(Analise.status_analise == "CONCLUIDO")
         .order_by(Analise.data_conclusao.desc().nullslast(), Analise.data_criacao.desc())
+        .options(selectinload(Analise.indicador), selectinload(Analise.relatorio))
     ).scalars().all())
     analise = analises[0] if analises else None
 
@@ -260,6 +262,7 @@ def historico():
         .where(Analise.status_analise == "CONCLUIDO")
         .where(RelatorioAnalise.publicado.is_(True))
         .order_by(Analise.data_conclusao.desc().nullslast(), Analise.id_analise.desc())
+        .options(selectinload(Analise.indicador), selectinload(Analise.relatorio))
     ).scalars().all())
     return render_template("cliente/historico.html", empresa=empresa, analises=analises,
                            situacao=situacao)
