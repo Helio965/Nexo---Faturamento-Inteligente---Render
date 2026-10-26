@@ -319,6 +319,15 @@ def analise_pdf(id_analise):
         or not analise.relatorio.publicado
     ):
         abort(404)
+    # Autorização ANTES de gerar: fora do prazo nenhum byte do PDF é produzido.
+    situacao = _situacao_cliente()
+    if not pode_consultar_analise(situacao, analise):
+        return _acesso_restrito(
+            "Análise indisponível",
+            "O período desta análise não está coberto pelos períodos contratados e efetivamente pagos.",
+        )
+    if not pode_exportar_pdf(situacao, analise):
+        return _acesso_restrito("Exportação encerrada", MENSAGEM_PDF_ENCERRADO)
 
     semaforos = gerar_semaforos(analise.indicador, analise.curva_abc) if analise.indicador else []
     pdf_bytes = gerar_pdf_analise(analise, semaforos, analise.curva_abc)
