@@ -51,6 +51,7 @@
                     <td>{{ m.badge_conta(e.status_conta) }}</td>
                     <td class="t-mut">{{ e.email_contato }}</td>
                     <td class="text-end t-mut" style="white-space:nowrap;">
+                        <a href="{{ url_for('contratos.empresa_detalhe', id_empresa=e.id_empresa) }}" class="btn-ghost btn-sm-x" title="Detalhes, contratos e períodos pagos"><i class="bi bi-file-earmark-text"></i> Detalhes</a>
                         <a href="{{ url_for('admin.analises') }}" class="btn-ghost btn-sm-x"><i class="bi bi-clipboard-data"></i> Análises</a>
                         <a href="{{ url_for('admin.empresa_editar', id_empresa=e.id_empresa) }}" class="btn-ghost btn-sm-x" title="Editar empresa"><i class="bi bi-pencil"></i></a>
                         {# Trigger do modal central — o <form method=POST> real vive UMA única vez

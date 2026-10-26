@@ -84,6 +84,16 @@
                         {% endfor %}
                     </select>
                 </div>
+                {% if governada %}
+                <div class="col-12 col-md-8">
+                    <span class="nexo-label">Plano e status da conta</span>
+                    <p class="mb-1">{{ m.badge_plano(empresa.plano_atual.nome_plano if empresa.plano_atual else '—') }} {{ m.badge_conta(sc) }}</p>
+                    <p class="field-hint mb-0"><i class="bi bi-file-earmark-lock"></i> Geridos pelos contratos. Para alterar, use <a href="{{ url_for('contratos.empresa_detalhe', id_empresa=empresa.id_empresa) }}">Detalhes → Contratos</a>.</p>
+                    <input type="hidden" name="id_plano_atual" value="{{ empresa.id_plano_atual }}">
+                    <input type="hidden" name="status_conta" value="{{ sc }}">
+                    <input type="hidden" name="status_conta_exibido" value="{{ sc }}">
+                </div>
+                {% else %}
                 <div class="col-12 col-md-4">
                     <label class="nexo-label" for="id_plano_atual">Plano atual <span class="req">*</span></label>
                     <select class="form-select" id="id_plano_atual" name="id_plano_atual" required>
@@ -103,6 +113,7 @@
                     {# NEXO-AJ-06.1: status exibido; o servidor recusa salvar sobre uma troca feita por outra operação. #}
                     {% if ed %}<input type="hidden" name="status_conta_exibido" value="{{ sc }}">{% endif %}
                 </div>
+                {% endif %}
             </div>
         </div>
     </div>

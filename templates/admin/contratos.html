@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+
+{% block title %}Contratos — NEXO Admin{% endblock %}
+{% block page_title %}Contratos{% endblock %}
+
+{% block content %}
+{% macro linha_empresa(item, extra='') -%}
+<tr>
+    <td class="t-strong">{{ item.empresa.nome_fantasia or item.empresa.razao_social }}</td>
+    <td>{{ m.badge_conta(item.empresa.status_conta) }}</td>
+    <td class="t-mut">{{ extra }}</td>
+    <td class="text-end"><a class="btn-ghost btn-sm-x" href="{{ url_for('contratos.empresa_detalhe', id_empresa=item.empresa.id_empresa) }}"><i class="bi bi-box-arrow-up-right"></i> Detalhes</a></td>
+</tr>
+{%- endmacro %}
+
+{% macro secao(titulo, icone, itens, subtitulo, vazio) -%}
+<div class="nexo-card mb-4">
+    <div class="nexo-card-head"><div><h2><i class="bi {{ icone }} text-purple"></i> {{ titulo }} <span class="nexo-badge b-muted">{{ itens|length }}</span></h2><p class="sub">{{ subtitulo }}</p></div></div>
+    {% if itens %}
+    <div class="table-responsive-x"><table class="nexo-table">
+        <thead><tr><th>Empresa</th><th>Status</th><th>Detalhe</th><th class="text-end">Ações</th></tr></thead>
+        <tbody>{{ caller() }}</tbody>
+    </table></div>
+    {% else %}
+    <div class="nexo-card-body"><p class="field-hint mb-0">{{ vazio }}</p></div>
+    {% endif %}
+</div>
+{%- endmacro %}
+
+<div class="page-head">
+    <div>
+        <h1>Visão geral contratual</h1>
+        <p class="sub">Vigências, suspensões e pendências de conciliação. Prazos no fuso da política contratual.</p>
+    </div>
+    <div class="page-head-actions">
+        <a href="{{ url_for('admin.empresas') }}" class="btn-ghost"><i class="bi bi-buildings"></i> Empresas</a>
+    </div>
+</div>
+
+{% if not esquema_disponivel %}
+<div class="aviso-contrato is-alerta" role="status">
+    <i class="bi bi-database-exclamation" aria-hidden="true"></i>
+    <div>
+        <strong>Gestão contratual indisponível neste banco.</strong>
+        <p>A migração 81287c74387a ainda não foi aplicada. Todas as empresas seguem no regime legado, sem alteração de acesso.</p>
+    </div>
+</div>
+{% else %}
+<div class="row g-3 mb-4">
+    <div class="col-12 col-sm-4"><div class="kpi-tile"><div class="kpi-top"><span class="kpi-label">Empresas ativas</span><span class="kpi-icon is-green"><i class="bi bi-check2-circle"></i></span></div><div class="kpi-value">{{ painel.ativas }}</div></div></div>
+    <div class="col-12 col-sm-4"><div class="kpi-tile"><div class="kpi-top"><span class="kpi-label">Empresas suspensas</span><span class="kpi-icon is-amber"><i class="bi bi-pause-circle"></i></span></div><div class="kpi-value">{{ painel.suspensas }}</div></div></div>
+    <div class="col-12 col-sm-4"><div class="kpi-tile"><div class="kpi-top"><span class="kpi-label">Empresas canceladas</span><span class="kpi-icon is-red"><i class="bi bi-x-circle"></i></span></div><div class="kpi-value">{{ painel.canceladas }}</div></div></div>
+</div>
+
+<div class="nexo-card mb-4">
+    <div class="nexo-card-head"><div><h2><i class="bi bi-arrow-repeat text-purple"></i> Reconciliação de vencimentos</h2>
+        <p class="sub">Simulação em {{ simulacao.instante|instante_local }}: {{ simulacao.candidatos|length }} suspensão(ões) vencida(s) no regime contratual. O portal dessas empresas já está bloqueado; a reconciliação registra o cancelamento e revoga as sessões.</p></div></div>
+    <div class="nexo-card-body">
+        <form method="POST" action="{{ url_for('contratos.reconciliar') }}" class="d-flex flex-wrap gap-2 align-items-center">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-nexo" {{ 'disabled' if not simulacao.candidatos }}><i class="bi bi-check2-all"></i> Aplicar reconciliação</button>
+            <span class="field-hint">Idempotente e protegida contra execuções simultâneas. Também disponível por <code>flask contratos reconciliar</code> (simulação padrão).</span>
+        </form>
+    </div>
+</div>
+
+{% call secao('Suspensões encerradas aguardando reconciliação', 'bi-x-octagon', painel.suspensoes_expiradas, 'Prazo atingido sem renovação, nova contratação ou prorrogação.', 'Nenhuma suspensão vencida.') %}
+{% for item in painel.suspensoes_expiradas %}{{ linha_empresa(item, 'limite ' ~ (item.contrato.suspensao_limite|instante_local) ~ ('' if item.contratual else ' · regime legado (não reconciliada)')) }}{% endfor %}
+{% endcall %}
+
+{% call secao('Suspensões próximas do encerramento', 'bi-hourglass-split', painel.suspensoes_terminando, 'Terminam nos próximos ' ~ painel.politica.dias_alerta_suspensao ~ ' dias.', 'Nenhuma suspensão terminando no período.') %}
+{% for item in painel.suspensoes_terminando %}{{ linha_empresa(item, 'limite ' ~ (item.contrato.suspensao_limite|instante_local) ~ '; PDF até ' ~ (item.contrato.pdf_limite|instante_local)) }}{% endfor %}
+{% endcall %}
+
+{% call secao('Contratos próximos do vencimento', 'bi-calendar-event', painel.vencendo, 'Vigência termina nos próximos ' ~ painel.politica.dias_alerta_vencimento ~ ' dias.', 'Nenhum contrato vencendo no período.') %}
+{% for item in painel.vencendo %}{{ linha_empresa(item, 'termina em ' ~ item.contrato.data_fim.strftime('%d/%m/%Y') ~ ' (' ~ item.dias ~ ' dia(s))') }}{% endfor %}
+{% endcall %}
+
+{% call secao('Contratos que exigem atenção', 'bi-exclamation-triangle', painel.vencidos + painel.inconsistentes + painel.sem_contrato, 'Vigência encerrada sem renovação, status divergente do contrato ou regras ativas sem contrato.', 'Nenhuma pendência.') %}
+{% for item in painel.vencidos %}{{ linha_empresa(item, 'vigência encerrada há ' ~ item.dias ~ ' dia(s) sem renovação') }}{% endfor %}
+{% for item in painel.inconsistentes %}{{ linha_empresa(item, 'status da conta difere do contrato (esperado ' ~ item.esperado ~ ')') }}{% endfor %}
+{% for item in painel.sem_contrato %}{{ linha_empresa(item, 'regras ativas sem contrato vigente: portal bloqueado') }}{% endfor %}
+{% endcall %}
+
+{% call secao('Empresas no regime legado', 'bi-hourglass', painel.legado, 'Aguardando conciliação: registrar contrato e períodos pagos comprovados antes de ativar as regras.', 'Todas as empresas não canceladas estão no regime contratual.') %}
+{% for item in painel.legado %}{{ linha_empresa(item, ('contrato nº ' ~ item.contrato.id_contrato ~ ' registrado') if item.contrato else 'sem contrato registrado') }}{% endfor %}
+{% endcall %}
+{% endif %}
+{% endblock %}

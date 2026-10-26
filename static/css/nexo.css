@@ -1377,3 +1377,43 @@ input, textarea, select, option,
 .check-inline { display: inline-flex; align-items: center; gap: 7px; color: var(--text-muted); font-size: 0.88rem; cursor: pointer; }
 .check-inline input { accent-color: var(--primary); }
 .t-dim { color: var(--text-dim); }
+
+/* ========================= GESTÃO CONTRATUAL ========================= */
+.dados-contrato {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px 22px;
+  margin: 0;
+}
+.dados-contrato > div { min-width: 0; }
+.dados-contrato dt {
+  margin-bottom: 4px;
+  color: var(--text-dim);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.dados-contrato dd { margin: 0; color: var(--text); font-size: 0.92rem; overflow-wrap: anywhere; }
+.acoes-contrato { display: flex; flex-wrap: wrap; gap: 8px; }
+.aviso-contrato {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid rgba(168, 85, 247, 0.3);
+  border-radius: var(--radius);
+  color: #ddd0f7;
+  background: rgba(168, 85, 247, 0.1);
+}
+.aviso-contrato i { margin-top: 2px; color: var(--primary); font-size: 1.2rem; }
+.aviso-contrato p { margin: 0; color: var(--text-muted); font-size: 0.88rem; }
+.aviso-contrato strong { color: var(--text); }
+.aviso-contrato.is-alerta { border-color: rgba(245, 158, 11, 0.3); background: var(--warning-bg); }
+.aviso-contrato.is-alerta i { color: var(--warning); }
+.aviso-contrato.is-perigo { border-color: rgba(239, 68, 68, 0.3); background: var(--danger-bg); }
+.aviso-contrato.is-perigo i { color: var(--danger); }
+.evento-detalhes { margin: 6px 0 0; padding: 0; list-style: none; color: var(--text-muted); font-size: 0.8rem; }
+.evento-detalhes li { overflow-wrap: anywhere; }
+.conta-encerrada-texto { margin: 0 0 14px; color: var(--text-muted); font-size: 0.95rem; line-height: 1.6; }

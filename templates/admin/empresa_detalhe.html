@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+
+{% set nome = empresa.nome_fantasia or empresa.razao_social %}
+{% block title %}{{ nome }} — Detalhes — NEXO Admin{% endblock %}
+{% block page_title %}Detalhes da empresa{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>{{ nome }}</h1>
+        <p class="sub">{{ empresa.razao_social }} · <span class="t-mono">CNPJ {{ empresa.cnpj }}</span></p>
+    </div>
+    <div class="page-head-actions">
+        <a href="{{ url_for('admin.empresas') }}" class="btn-ghost"><i class="bi bi-arrow-left"></i> Empresas</a>
+        {% if empresa.deletado_em is none %}
+        <a href="{{ url_for('admin.empresa_editar', id_empresa=empresa.id_empresa) }}" class="btn-ghost"><i class="bi bi-pencil"></i> Editar cadastro</a>
+        {% endif %}
+        <a href="{{ url_for('contratos.visao_geral') }}" class="btn-ghost"><i class="bi bi-file-earmark-text"></i> Visão contratual</a>
+    </div>
+</div>
+
+<div class="nexo-card mb-4">
+    <div class="nexo-card-head">
+        <div>
+            <h2><i class="bi bi-buildings text-purple"></i> Dados cadastrais</h2>
+            <p class="sub">Cadastro da empresa (edição pelo botão "Editar cadastro")</p>
+        </div>
+    </div>
+    <div class="nexo-card-body">
+        <dl class="dados-contrato">
+            <div><dt>Status da conta</dt><dd>{{ m.badge_conta(empresa.status_conta) }}{% if empresa.deletado_em %} <span class="nexo-badge b-muted">NA LIXEIRA</span>{% endif %}</dd></div>
+            <div><dt>Plano atual</dt><dd>{{ m.badge_plano(empresa.plano_atual.nome_plano if empresa.plano_atual else '—') }}</dd></div>
+            <div><dt>Data de contratação (cadastro)</dt><dd>{{ empresa.data_contratacao.strftime('%d/%m/%Y') if empresa.data_contratacao else '—' }}</dd></div>
+            <div><dt>E-mail de contato</dt><dd>{{ empresa.email_contato }}</dd></div>
+        </dl>
+    </div>
+</div>
+
+{% if not esquema_disponivel %}
+<div class="aviso-contrato is-alerta" role="status">
+    <i class="bi bi-database-exclamation" aria-hidden="true"></i>
+    <div>
+        <strong>Gestão contratual indisponível neste banco.</strong>
+        <p>A migração 81287c74387a ainda não foi aplicada. Todas as empresas seguem no regime legado, sem alteração de acesso.</p>
+    </div>
+</div>
+{% else %}
+{% set c = situacao.contrato %}
+
+<div class="nexo-card mb-4">
+    <div class="nexo-card-head">
+        <div>
+            <h2><i class="bi bi-file-earmark-check text-purple"></i> Situação contratual</h2>
+            <p class="sub">Calculada no servidor pela política contratual, no instante {{ situacao.instante|instante_local }} ({{ politica.fuso.key }})</p>
+        </div>
+    </div>
+    <div class="nexo-card-body">
+        {% if not situacao.contratual %}
+        <div class="aviso-contrato" role="status">
+            <i class="bi bi-hourglass-split" aria-hidden="true"></i>
+            <div>
+                <strong>Regime legado (regras contratuais inativas).</strong>
+                <p>O acesso do cliente segue o comportamento anterior. Para ativar as regras: registre o contrato vigente e os períodos efetivamente pagos comprovados, depois use "Ativar regras contratuais". Sem cobertura paga registrada, o cliente perde o acesso às análises.</p>
+            </div>
+        </div>
+        {% elif situacao.estado == 'SUSPENSAO_EXPIRADA' %}
+        <div class="aviso-contrato is-perigo" role="status">
+            <i class="bi bi-x-octagon" aria-hidden="true"></i>
+            <div>
+                <strong>Prazo da suspensão encerrado.</strong>
+                <p>O portal já está bloqueado para esta empresa. A reconciliação registrará o cancelamento, salvo renovação, nova contratação ou prorrogação acordada.</p>
+            </div>
+        </div>
+        {% elif situacao.estado == 'SEM_CONTRATO' %}
+        <div class="aviso-contrato is-perigo" role="status">
+            <i class="bi bi-x-octagon" aria-hidden="true"></i>
+            <div>
+                <strong>Regras ativas sem contrato vigente.</strong>
+                <p>O portal está bloqueado até o registro de uma nova contratação.</p>
+            </div>
+        </div>
+        {% endif %}
+
+        <dl class="dados-contrato mb-3">
+            <div><dt>Regime</dt><dd>{{ 'Contratual' if situacao.contratual else 'Legado' }}</dd></div>
+            <div><dt>Estado efetivo</dt><dd>{{ situacao.estado|replace('_', ' ') }}</dd></div>
+            {% if c %}
+            <div><dt>Contrato vigente</dt><dd>nº {{ c.id_contrato }} · {{ m.badge_contrato(c.situacao) }}</dd></div>
+            <div><dt>Plano contratado</dt><dd>{{ m.badge_plano(c.plano.nome_plano) }}</dd></div>
+            <div><dt>Valor mensal contratado</dt><dd>R$ {{ m.brl(c.valor_mensal_contratado) }}</dd></div>
+            <div><dt>Vigência</dt><dd>{{ c.data_inicio.strftime('%d/%m/%Y') }} a {{ c.data_fim.strftime('%d/%m/%Y') if c.data_fim else 'prazo indeterminado' }}{% if situacao.vigencia_encerrada %} <span class="nexo-badge b-amber">vigência encerrada</span>{% endif %}</dd></div>
+            {% if c.situacao == 'SUSPENSO' %}
+            <div><dt>Suspensão desde</dt><dd>{{ c.suspenso_em|instante_local }}</dd></div>
+            <div><dt>Limite original</dt><dd>{{ c.suspensao_limite_original|instante_local }}</dd></div>
+            <div><dt>Limite vigente</dt><dd>{{ c.suspensao_limite|instante_local }}{% if situacao.suspensao_prorrogada %} <span class="nexo-badge b-purple">prorrogado</span>{% endif %}</dd></div>
+            <div><dt>Exportação de PDF até</dt><dd>{{ c.pdf_limite|instante_local }}</dd></div>
+            <div><dt>Motivo da suspensão</dt><dd>{{ c.suspensao_motivo }}</dd></div>
+            {% endif %}
+            {% endif %}
+            {% if situacao.contratual %}
+            <div><dt>Períodos pagos (consolidados)</dt><dd>
+                {% for inicio, fim in situacao.intervalos_pagos %}{{ inicio.strftime('%d/%m/%Y') }} a {{ fim.strftime('%d/%m/%Y') }}{% if not loop.last %}; {% endif %}{% else %}nenhum{% endfor %}
+            </dd></div>
+            {% endif %}
+        </dl>
+
+        {% if empresa.deletado_em is none %}
+        <div class="acoes-contrato">
+            {% if not c %}
+            <a class="btn-nexo" href="{{ url_for('contratos.contrato_novo', id_empresa=empresa.id_empresa) }}"><i class="bi bi-plus-lg"></i> Novo contrato</a>
+            {% else %}
+            <a class="btn-ghost" href="{{ url_for('contratos.cobertura_nova', id_empresa=empresa.id_empresa, id_contrato=c.id_contrato) }}"><i class="bi bi-cash-coin"></i> Registrar período pago</a>
+            <a class="btn-ghost" href="{{ url_for('contratos.contrato_renovar', id_empresa=empresa.id_empresa, id_contrato=c.id_contrato) }}"><i class="bi bi-arrow-repeat"></i> Renovar</a>
+            <a class="btn-ghost" href="{{ url_for('contratos.contrato_alterar_plano', id_empresa=empresa.id_empresa, id_contrato=c.id_contrato) }}"><i class="bi bi-arrow-left-right"></i> Alterar plano</a>
+            {% if c.situacao == 'ATIVO' %}
+            <a class="btn-ghost" href="{{ url_for('contratos.contrato_acao', id_empresa=empresa.id_empresa, id_contrato=c.id_contrato, acao='suspender') }}"><i class="bi bi-pause-circle"></i> Suspender</a>
+            {% else %}
+            <a class="btn-ghost" href="{{ url_for('contratos.contrato_acao', id_empresa=empresa.id_empresa, id_contrato=c.id_contrato, acao='prorrogar') }}"><i class="bi bi-calendar-plus"></i> Prorrogar suspensão</a>
+            {% if situacao.estado != 'SUSPENSAO_EXPIRADA' %}
+            <a class="btn-ghost" href="{{ url_for('contratos.contrato_acao', id_empresa=empresa.id_empresa, id_contrato=c.id_contrato, acao='reativar') }}"><i class="bi bi-play-circle"></i> Reativar</a>
+            {% endif %}
+            {% endif %}
+            <a class="btn-ghost is-danger" href="{{ url_for('contratos.contrato_acao', id_empresa=empresa.id_empresa, id_contrato=c.id_contrato, acao='cancelar') }}"><i class="bi bi-x-circle"></i> Cancelar contrato</a>
+            {% endif %}
+            {% if situacao.contratual %}
+            <a class="btn-ghost" href="{{ url_for('contratos.regras_contratuais', id_empresa=empresa.id_empresa, acao='desativar') }}"><i class="bi bi-toggle-on"></i> Desativar regras contratuais</a>
+            {% elif c %}
+            <a class="btn-nexo" href="{{ url_for('contratos.regras_contratuais', id_empresa=empresa.id_empresa, acao='ativar') }}"><i class="bi bi-toggle-off"></i> Ativar regras contratuais</a>
+            {% endif %}
+        </div>
+        {% else %}
+        <p class="field-hint mb-0"><i class="bi bi-trash"></i> Empresa na lixeira: restaure-a para alterar contratos.</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="nexo-card mb-4">
+    <div class="nexo-card-head">
+        <div>
+            <h2><i class="bi bi-files text-purple"></i> Contratos</h2>
+            <p class="sub">Histórico completo: renovações e trocas de plano preservam os contratos anteriores</p>
+        </div>
+    </div>
+    {% if contratos %}
+    <div class="table-responsive-x">
+        <table class="nexo-table">
+            <thead><tr><th>Nº</th><th>Plano</th><th>Valor contratado</th><th>Vigência</th><th>Situação</th><th>Formalização</th><th>Anterior</th><th class="text-end">Ações</th></tr></thead>
+            <tbody>
+                {% for k in contratos %}
+                <tr>
+                    <td class="t-mono">{{ k.id_contrato }}</td>
+                    <td>{{ m.badge_plano(k.plano.nome_plano) }}</td>
+                    <td class="t-mono">R$ {{ m.brl(k.valor_mensal_contratado) }}</td>
+                    <td class="t-mut">{{ k.data_inicio.strftime('%d/%m/%Y') }} a {{ k.data_fim.strftime('%d/%m/%Y') if k.data_fim else 'indeterminado' }}</td>
+                    <td>{{ m.badge_contrato(k.situacao) }}</td>
+                    <td class="t-mut">{{ k.data_formalizacao.strftime('%d/%m/%Y') if k.data_formalizacao else '—' }}{% if k.referencia_formalizacao %}<br><small>{{ k.referencia_formalizacao }}</small>{% endif %}</td>
+                    <td class="t-mono t-mut">{{ k.id_contrato_anterior or '—' }}</td>
+                    <td class="text-end">
+                        {% if empresa.deletado_em is none %}
+                        <a class="btn-ghost btn-sm-x" href="{{ url_for('contratos.cobertura_nova', id_empresa=empresa.id_empresa, id_contrato=k.id_contrato) }}" title="Registrar período pago deste contrato"><i class="bi bi-cash-coin"></i></a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state"><div class="es-icon"><i class="bi bi-file-earmark"></i></div><h3>Nenhum contrato registrado.</h3><p>Contratos antigos não são criados automaticamente: registre-os a partir de documentos comprovados.</p></div>
+    {% endif %}
+</div>
+
+<div class="nexo-card mb-4">
+    <div class="nexo-card-head">
+        <div>
+            <h2><i class="bi bi-cash-stack text-purple"></i> Coberturas pagas</h2>
+            <p class="sub">Somente períodos confirmados administrativamente geram direito às análises</p>
+        </div>
+    </div>
+    {% if coberturas %}
+    <div class="table-responsive-x">
+        <table class="nexo-table">
+            <thead><tr><th>Período</th><th>Contrato</th><th>Referência</th><th>Confirmado</th><th>Situação</th><th class="text-end">Ações</th></tr></thead>
+            <tbody>
+                {% for cob in coberturas %}
+                <tr>
+                    <td>{{ cob.periodo_inicio.strftime('%d/%m/%Y') }} a {{ cob.periodo_fim.strftime('%d/%m/%Y') }}</td>
+                    <td class="t-mono">{{ cob.id_contrato }}</td>
+                    <td class="t-mut">{{ cob.referencia_confirmacao }}</td>
+                    <td class="t-mut">{{ cob.confirmado_em|instante_local }}<br><small>{{ cob.confirmado_por.nome if cob.confirmado_por else '—' }}</small></td>
+                    <td>{% if cob.revogada_em %}<span class="nexo-badge b-red">REVOGADA</span><br><small class="t-mut">{{ cob.revogacao_motivo }}</small>{% else %}<span class="nexo-badge b-green">VIGENTE</span>{% endif %}</td>
+                    <td class="text-end">
+                        {% if not cob.revogada_em and empresa.deletado_em is none %}
+                        <a class="btn-ghost is-danger btn-sm-x" href="{{ url_for('contratos.cobertura_revogar', id_empresa=empresa.id_empresa, id_cobertura=cob.id_cobertura) }}" title="Revogar cobertura"><i class="bi bi-x-lg"></i></a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state"><div class="es-icon"><i class="bi bi-cash-stack"></i></div><h3>Nenhum período pago registrado.</h3><p>Pagamentos não são presumidos: registre somente o que tiver comprovação.</p></div>
+    {% endif %}
+</div>
+
+<div class="nexo-card mb-4">
+    <div class="nexo-card-head">
+        <div>
+            <h2><i class="bi bi-clock-history text-purple"></i> Histórico contratual</h2>
+            <p class="sub">Trilha de auditoria (somente inclusão) — últimos 200 eventos</p>
+        </div>
+    </div>
+    {% if eventos %}
+    <div class="table-responsive-x">
+        <table class="nexo-table">
+            <thead><tr><th>Data</th><th>Evento</th><th>Responsável</th><th>Situação</th><th>Justificativa e detalhes</th></tr></thead>
+            <tbody>
+                {% for ev, detalhes in eventos %}
+                <tr>
+                    <td class="t-mut" style="white-space:nowrap;">{{ ev.ocorrido_em|instante_local }}</td>
+                    <td class="t-strong">{{ rotulos_evento.get(ev.tipo, ev.tipo) }}{% if ev.id_contrato %}<br><small class="t-mut">contrato nº {{ ev.id_contrato }}</small>{% endif %}</td>
+                    <td class="t-mut">{{ ev.responsavel.nome if ev.responsavel else 'Reconciliação automática' }}</td>
+                    <td class="t-mut">{{ ev.situacao_anterior or '—' }} → {{ ev.situacao_posterior or '—' }}</td>
+                    <td>
+                        {{ ev.justificativa or '' }}
+                        {% if detalhes %}
+                        <ul class="evento-detalhes">
+                            {% for rotulo, valor in detalhes %}<li>{{ rotulo }}: {{ valor }}</li>{% endfor %}
+                        </ul>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state"><div class="es-icon"><i class="bi bi-clock-history"></i></div><h3>Sem eventos contratuais.</h3></div>
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

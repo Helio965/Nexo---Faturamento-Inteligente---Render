@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+
+{% set titulos = {'novo': 'Novo contrato', 'renovar': 'Renovar contrato', 'plano': 'Alterar plano'} %}
+{% set titulo = titulos[modo] %}
+{% set nome = empresa.nome_fantasia or empresa.razao_social %}
+{% set plano_sel = (form.get('id_plano') or (contrato.id_plano if contrato else ''))|string %}
+
+{% block title %}{{ titulo }} — {{ nome }} — NEXO Admin{% endblock %}
+{% block page_title %}{{ titulo }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>{{ titulo }}</h1>
+        <p class="sub">{{ nome }} · <span class="t-mono">CNPJ {{ empresa.cnpj }}</span></p>
+    </div>
+    <div class="page-head-actions">
+        <a href="{{ url_for('contratos.empresa_detalhe', id_empresa=empresa.id_empresa) }}" class="btn-ghost"><i class="bi bi-arrow-left"></i> Voltar</a>
+    </div>
+</div>
+
+{% if contrato %}
+<div class="aviso-contrato" role="note">
+    <i class="bi bi-info-circle" aria-hidden="true"></i>
+    <div>
+        <strong>Contrato atual nº {{ contrato.id_contrato }}: {{ contrato.plano.nome_plano }}, R$ {{ m.brl(contrato.valor_mensal_contratado) }}/mês, de {{ contrato.data_inicio.strftime('%d/%m/%Y') }} a {{ contrato.data_fim.strftime('%d/%m/%Y') if contrato.data_fim else 'prazo indeterminado' }}.</strong>
+        <p>Ao salvar, ele passa a ENCERRADO e é preservado com plano, valor e período originais. As análises já produzidas mantêm o plano de referência.</p>
+    </div>
+</div>
+{% elif empresa.status_conta == 'CANCELADA' %}
+<div class="aviso-contrato is-alerta" role="note">
+    <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+    <div>
+        <strong>Empresa CANCELADA: este contrato a reativa.</strong>
+        <p>As sessões antigas continuam invalidadas e será exigido novo login. O acesso às análises continua dependendo dos períodos pagos.</p>
+    </div>
+</div>
+{% endif %}
+
+<form method="POST" class="relatorio-doc" style="max-width:980px;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if contrato %}<input type="hidden" name="versao" value="{{ contrato.versao }}">{% endif %}
+    <div class="nexo-card mb-4">
+        <div class="nexo-card-head">
+            <div>
+                <h2><i class="bi bi-file-earmark-text text-purple"></i> Condições contratadas</h2>
+                <p class="sub">O valor contratado é um snapshot: mudanças futuras no catálogo não o alteram</p>
+            </div>
+        </div>
+        <div class="nexo-card-body">
+            <div class="row g-3">
+                <div class="col-12 col-md-6">
+                    <label class="nexo-label" for="id_plano">Plano <span class="req">*</span></label>
+                    <select class="form-select" id="id_plano" name="id_plano" required>
+                        <option value="" disabled {{ 'selected' if not plano_sel }}>Selecione…</option>
+                        {% for p in planos %}
+                        <option value="{{ p.id_plano }}" data-valor="{{ '%.2f'|format(p.valor_mensal|float) }}" {{ 'selected' if p.id_plano|string == plano_sel }}>{{ p.nome_plano }} — catálogo R$ {{ m.brl(p.valor_mensal) }}/mês</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="nexo-label" for="valor_mensal">Valor mensal contratado <span class="req">*</span></label>
+                    <div class="input-group">
+                        <span class="input-group-text">R$</span>
+                        <input type="text" inputmode="decimal" class="form-control" id="valor_mensal" name="valor_mensal" required
+                               value="{{ form.get('valor_mensal') if form.get('valor_mensal') else ('%.2f'|format(contrato.valor_mensal_contratado|float) if contrato and modo == 'renovar' else '') }}" placeholder="0,00">
+                    </div>
+                    <p class="field-hint mt-1 mb-0">Preenchido com o preço de catálogo ao escolher o plano; ajuste se houver condição negociada.</p>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="nexo-label" for="data_inicio">Início da vigência <span class="req">*</span></label>
+                    <input type="date" class="form-control" id="data_inicio" name="data_inicio" required value="{{ form.get('data_inicio', '') }}">
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="nexo-label" for="data_fim">Término previsto</label>
+                    <input type="date" class="form-control" id="data_fim" name="data_fim" value="{{ form.get('data_fim', '') }}">
+                    <p class="field-hint mt-1 mb-0">Em branco = prazo indeterminado.</p>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="nexo-label" for="meses_suspensao">Prazo de suspensão (meses)</label>
+                    <select class="form-select" id="meses_suspensao" name="meses_suspensao">
+                        <option value="">Padrão da política ({{ politica.meses_suspensao }})</option>
+                        {% for n in range(1, politica.meses_suspensao) %}
+                        <option value="{{ n }}" {{ 'selected' if form.get('meses_suspensao') == n|string }}>{{ n }} {{ 'mês' if n == 1 else 'meses' }} (previsto em contrato)</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="nexo-label" for="data_formalizacao">Data da formalização</label>
+                    <input type="date" class="form-control" id="data_formalizacao" name="data_formalizacao" value="{{ form.get('data_formalizacao', '') }}">
+                </div>
+                <div class="col-12 col-md-8">
+                    <label class="nexo-label" for="referencia_formalizacao">Referência da formalização</label>
+                    <input type="text" class="form-control" id="referencia_formalizacao" name="referencia_formalizacao" maxlength="200"
+                           value="{{ form.get('referencia_formalizacao', '') }}" placeholder="Ex.: contrato assinado em papel, arquivo nº 12">
+                    <p class="field-hint mt-1 mb-0"><i class="bi bi-shield-lock"></i> Não há assinatura eletrônica nem armazenamento de documentos no sistema; registre apenas a referência.</p>
+                </div>
+                <div class="col-12">
+                    <label class="nexo-label" for="observacoes">Observações</label>
+                    <textarea class="form-control" id="observacoes" name="observacoes" rows="2" maxlength="2000">{{ form.get('observacoes', '') }}</textarea>
+                </div>
+                <div class="col-12">
+                    <label class="nexo-label" for="justificativa">Justificativa{% if modo == 'plano' %} <span class="req">*</span>{% endif %}</label>
+                    <textarea class="form-control" id="justificativa" name="justificativa" rows="2" maxlength="2000" {{ 'required' if modo == 'plano' }}>{{ form.get('justificativa', '') }}</textarea>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="d-flex gap-2 justify-content-end">
+        <a href="{{ url_for('contratos.empresa_detalhe', id_empresa=empresa.id_empresa) }}" class="btn-ghost">Cancelar</a>
+        <button type="submit" class="btn-nexo"><i class="bi bi-check2-circle"></i> Salvar contrato</button>
+    </div>
+</form>
+
+<script>
+  (function () {
+    var plano = document.getElementById('id_plano');
+    var valor = document.getElementById('valor_mensal');
+    if (!plano || !valor) return;
+    plano.addEventListener('change', function () {
+      var opcao = plano.options[plano.selectedIndex];
+      if (opcao && opcao.dataset.valor) { valor.value = opcao.dataset.valor; }
+    });
+  })();
+</script>
+{% endblock %}
