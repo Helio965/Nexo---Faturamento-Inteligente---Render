@@ -252,7 +252,14 @@
         /* Voltando à largura de desktop com a gaveta aberta: estado limpo. */
         if (gaveta && gaveta.addEventListener) {
           gaveta.addEventListener('change', function (e) {
-            if (!e.matches && shell && shell.classList.contains('nav-open')) definir(false);
+            if (!e.matches && shell && shell.classList.contains('nav-open')) {
+              var focoNoFechar = document.activeElement === fechar;
+              definir(false);
+              if (focoNoFechar && sidebar) {
+                var item = sidebar.querySelector('.nav-item.active') || sidebar.querySelector('a[href]');
+                if (item) item.focus({ preventScroll: true });
+              }
+            }
           });
         }
         /* Item ativo anunciado como página atual para leitores de tela. */
@@ -285,14 +292,21 @@
             var ultima = cabecalho && cabecalho.lastElementChild;
             var ehAcoes = !!ultima && /^a[çc](ão|ões|ao|oes)$/i.test(ultima.textContent.trim());
             var rola = caixa.scrollWidth > caixa.clientWidth + 1;
-            /* Só fixa a coluna se ela for estreita: os dados mantêm ao menos 70% da
-               largura (senão ela cobriria status e e-mail, como em Empresas). */
-            var estreita = ehAcoes && ultima.getBoundingClientRect().width <= caixa.clientWidth * 0.3;
+            /* Só fixa a coluna se os dados mantiverem ao menos metade da largura
+               (em Empresas no celular ela ocuparia ~90% e cobriria a tabela inteira). */
+            var estreita = ehAcoes && ultima.getBoundingClientRect().width <= caixa.clientWidth * 0.5;
             caixa.classList.toggle('tem-rolagem', rola && estreita);
             marcarDica(caixa);
             if (!caixa.dataset.dica) {
               caixa.dataset.dica = '1';
               caixa.addEventListener('scroll', function () { marcarDica(caixa); }, { passive: true });
+              /* Foco pelo teclado num botão meio escondido: traz o botão inteiro para a vista. */
+              caixa.addEventListener('focusin', function (e) {
+                var alvo = e.target;
+                if (alvo && alvo.scrollIntoView && alvo.matches && alvo.matches(':focus-visible')) {
+                  alvo.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+                }
+              });
             }
             if (!ehAcoes) return;
             caixa.querySelectorAll('tr').forEach(function (linha) {
@@ -528,9 +542,10 @@
           hovermode: 'x unified',
           legend: { y: 1.02, yanchor: 'bottom', font: { size: 12 } },
           yaxis: { tickprefix: 'R$ ', tickformat: ',.0f', rangemode: 'tozero', fixedrange: true },
-          /* Folga nas pontas para os marcadores não colarem nas bordas. */
+          /* Folga nas pontas para os marcadores não colarem nas bordas. A conta usa
+             categorias distintas: duas quinzenas do mesmo mês repetem o rótulo. */
           xaxis: Object.assign({
-            type: 'category', range: [-0.25, data.labels.length - 0.75],
+            type: 'category', range: [-0.25, new Set(data.labels).size - 0.75],
             fixedrange: true, tickfont: { size: 12, color: NEXO.colors.text }
           }, NEXO.spike),
           height: 280, margin: { l: 64, r: 18, t: 36, b: 42 }

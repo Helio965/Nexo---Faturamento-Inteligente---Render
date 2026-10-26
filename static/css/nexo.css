@@ -980,6 +980,13 @@ a { text-decoration: none; }
   -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 72px), rgba(0, 0, 0, 0.18));
   mask-image: linear-gradient(90deg, #000 calc(100% - 72px), rgba(0, 0, 0, 0.18));
 }
+/* Navegando pelo teclado dentro da tabela, nada fica esmaecido. */
+.table-responsive-x.rola-mais:has(:focus-visible) { -webkit-mask-image: none; mask-image: none; }
+.table-responsive-x :is(a, button) { scroll-margin-inline: 6px; }
+
+/* Texto solto direto sobre o fundo (fora de cartão): claro e com sombra, como
+   o subtítulo dos cabeçalhos de seção. */
+.app-shell .texto-solto { color: #e2dff2; text-shadow: 0 1px 10px rgba(8, 6, 18, 0.85); }
 
 /* Linha de 3 KPIs exibida 2 a 2 (576–1199 px): o terceiro ocupa a linha toda
    em vez de ficar órfão pela metade. */
