@@ -118,10 +118,10 @@
             <div class="topbar-right">
                 {# ---------------- Sininho de notificações ---------------- #}
                 <div class="dropdown nexo-bell">
-                    <button class="bell-btn" type="button" id="bellBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="Notificações">
-                        <i class="bi bi-bell"></i>
-                        {% set _c = notif_nao_lidas or 0 %}
-                        <span class="bell-badge" id="bellBadge" data-count="{{ _c }}" {% if _c == 0 %}style="display:none;"{% endif %}>{{ _c if _c < 100 else '99+' }}</span>
+                    {% set _c = notif_nao_lidas or 0 %}
+                    <button class="bell-btn" type="button" id="bellBtn" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="Notificações{{ ' (%d não lidas)' % _c if _c else '' }}">
+                        <i class="bi bi-bell" aria-hidden="true"></i>
+                        <span class="bell-badge" id="bellBadge" aria-hidden="true" data-count="{{ _c }}" {% if _c == 0 %}style="display:none;"{% endif %}>{{ _c if _c < 100 else '99+' }}</span>
                     </button>
                     <div class="dropdown-menu dropdown-menu-end bell-menu" aria-labelledby="bellBtn">
                         <div class="bell-head">
@@ -210,29 +210,81 @@
         var shell = document.getElementById('appShell');
         var toggle = document.getElementById('navToggle');
         var overlay = document.getElementById('sidebarOverlay');
-        function definir(aberta) {
+        var sidebar = document.getElementById('sidebar');
+        var pagina = document.querySelector('.main-area');
+        var gaveta = window.matchMedia ? window.matchMedia('(max-width: 991.98px)') : null;
+        function definir(aberta, devolverFoco) {
           if (!shell) return;
           shell.classList.toggle('nav-open', aberta);
+          /* Com a gaveta aberta, o conteúdo atrás do véu sai do Tab e do leitor de tela. */
+          if (pagina) pagina.inert = !!(aberta && gaveta && gaveta.matches);
           if (toggle) {
             toggle.setAttribute('aria-expanded', aberta ? 'true' : 'false');
             toggle.setAttribute('aria-label', aberta ? 'Fechar menu' : 'Abrir menu');
+          }
+          if (aberta && sidebar && gaveta && gaveta.matches) {
+            var alvo = sidebar.querySelector('.nav-item.active') || sidebar.querySelector('a[href]');
+            if (alvo) window.setTimeout(function () { alvo.focus({ preventScroll: true }); }, 0);
+          } else if (!aberta && devolverFoco && toggle) {
+            toggle.focus();
           }
         }
         if (toggle && shell) {
           toggle.addEventListener('click', function () { definir(!shell.classList.contains('nav-open')); });
         }
         if (overlay && shell) {
-          overlay.addEventListener('click', function () { definir(false); });
+          overlay.addEventListener('click', function () { definir(false, true); });
         }
         document.addEventListener('keydown', function (e) {
           if (e.key === 'Escape' && shell && shell.classList.contains('nav-open')) {
-            definir(false);
-            if (toggle) toggle.focus();
+            definir(false, true);
           }
         });
+        /* Voltando à largura de desktop com a gaveta aberta: estado limpo. */
+        if (gaveta && gaveta.addEventListener) {
+          gaveta.addEventListener('change', function (e) {
+            if (!e.matches && shell && shell.classList.contains('nav-open')) definir(false);
+          });
+        }
         /* Item ativo anunciado como página atual para leitores de tela. */
         document.querySelectorAll('.sidebar .nav-item.active').forEach(function (item) {
           item.setAttribute('aria-current', 'page');
+        });
+      })();
+
+      /* ---- Valores dos KPIs: sempre numa linha; reduz a fonte só se não couber ---- */
+      (function () {
+        function ajustarKpis() {
+          document.querySelectorAll('.kpi-value').forEach(function (el) {
+            el.style.fontSize = '';
+            var tamanho = parseFloat(window.getComputedStyle(el).fontSize);
+            while (el.scrollWidth > el.clientWidth + 1 && tamanho > 16) {
+              tamanho -= 1;
+              el.style.fontSize = tamanho + 'px';
+            }
+          });
+        }
+        /* ---- Tabelas largas: coluna de ações fixa à direita durante a rolagem ---- */
+        function marcarTabelas() {
+          document.querySelectorAll('.table-responsive-x').forEach(function (caixa) {
+            var rola = caixa.scrollWidth > caixa.clientWidth + 1;
+            caixa.classList.toggle('tem-rolagem', rola);
+            var cabecalho = caixa.querySelector('thead tr');
+            var ultima = cabecalho && cabecalho.lastElementChild;
+            if (!ultima || !/^a[çc](ão|ões|ao|oes)$/i.test(ultima.textContent.trim())) return;
+            caixa.querySelectorAll('tr').forEach(function (linha) {
+              var celula = linha.lastElementChild;
+              if (celula && !celula.hasAttribute('colspan')) celula.classList.add('col-acoes');
+            });
+          });
+        }
+        function ajustar() { ajustarKpis(); marcarTabelas(); }
+        ajustar();
+        if (document.fonts && document.fonts.ready) document.fonts.ready.then(ajustar);
+        var espera;
+        window.addEventListener('resize', function () {
+          window.clearTimeout(espera);
+          espera = window.setTimeout(ajustar, 120);
         });
       })();
 
@@ -352,12 +404,23 @@
         var values = data.values;
         var classes = data.classes || [];
         var acum = data.acumulado || [];
+        var el = document.getElementById(id);
+        var estreito = !!el && el.clientWidth < 560;
+        /* Nomes longos de produto: só o rótulo do eixo é encurtado (ticktext); a
+           categoria e a tooltip continuam com o nome completo. */
+        var limite = estreito ? 12 : 22;
+        var curtos = labels.map(function (t) {
+          t = String(t);
+          return t.length > limite ? t.slice(0, limite - 1) + '…' : t;
+        });
+        /* Classe ABC na própria barra: o mesmo roxo, mais intenso na classe A. */
+        var tom = { A: 'rgba(168, 85, 247, 0.92)', B: 'rgba(168, 85, 247, 0.6)', C: 'rgba(168, 85, 247, 0.34)' };
         NEXO.plot(id, [
           {
             type: 'bar', name: 'Faturamento',
             x: labels, y: values, yaxis: 'y',
             marker: {
-              color: 'rgba(168, 85, 247, 0.82)',
+              color: classes.length ? classes.map(function (c) { return tom[c] || tom.A; }) : tom.A,
               line: { color: 'rgba(216, 194, 253, 0.55)', width: 1 }
             },
             width: 0.6,
@@ -372,19 +435,27 @@
             hovertemplate: '% acumulado: <b>%{y:.1f}%</b><extra></extra>'
           }
         ], {
-          height: 300,
-          margin: { l: 66, r: 58, t: 30, b: 104 },
+          height: estreito ? 320 : 330,
+          margin: estreito ? { l: 8, r: 8, t: 36, b: 8 } : { l: 66, r: 58, t: 36, b: 96 },
           hovermode: 'x unified',
           showlegend: true,
-          legend: { y: 1.17 },
+          legend: { x: 0, y: 1.02, yanchor: 'bottom' },
           bargap: 0.34,
-          xaxis: { tickangle: -38, tickfont: { size: 10, color: NEXO.colors.text }, fixedrange: true },
+          /* Referência de 80% (fronteira da classe A) no eixo do acumulado. */
+          shapes: [{
+            type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y2', y0: 80, y1: 80,
+            line: { color: 'rgba(251, 191, 36, 0.45)', width: 1, dash: 'dot' }
+          }],
+          xaxis: {
+            tickangle: -38, tickfont: { size: 10, color: NEXO.colors.text }, fixedrange: true,
+            tickmode: 'array', tickvals: labels, ticktext: curtos
+          },
           yaxis: {
-            title: { text: 'Faturamento', font: { size: 11, color: NEXO.colors.text } },
+            title: estreito ? { text: '' } : { text: 'Faturamento', font: { size: 11, color: NEXO.colors.text } },
             tickprefix: 'R$ ', tickformat: ',.0f', rangemode: 'tozero', fixedrange: true
           },
           yaxis2: {
-            title: { text: '% acumulado', font: { size: 11, color: '#fbbf24' } },
+            title: estreito ? { text: '' } : { text: '% acumulado', font: { size: 11, color: '#fbbf24' } },
             overlaying: 'y', side: 'right', range: [0, 100], ticksuffix: '%',
             showgrid: false, zeroline: false, showline: false, fixedrange: true,
             tickfont: { color: '#fbbf24', size: 11 }
@@ -475,6 +546,8 @@
             var count = parseInt(badge.getAttribute('data-count') || '0', 10) + 1;
             badge.setAttribute('data-count', count);
             badge.textContent = count < 100 ? count : '99+';
+            var sino = document.getElementById('bellBtn');
+            if (sino) sino.setAttribute('aria-label', 'Notificações (' + count + ' não lidas)');
             badge.style.display = '';
             badge.classList.remove('pulse');
             void badge.offsetWidth;        // reinicia a animação

@@ -34,6 +34,9 @@
   --primary-glow:  rgba(168, 85, 247, 0.45);
   --grad:          linear-gradient(135deg, #7c3aed 0%, #a855f7 100%);
   --grad-hover:    linear-gradient(135deg, #6d28d9 0%, #9333ea 100%);
+  /* Botões de ação: roxo um tom mais fundo, para o texto branco passar AA em todo o gradiente. */
+  --grad-cta:      linear-gradient(135deg, #6d28d9 0%, #9333ea 100%);
+  --grad-cta-hover: linear-gradient(135deg, #5b21b6 0%, #7e22ce 100%);
 
   /* Estados */
   --success:    #22c55e;  --success-bg: rgba(34, 197, 94, 0.13);
@@ -423,6 +426,7 @@ a { text-decoration: none; }
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-glass), var(--glass-shine);
   z-index: 1020;
+  max-width: 1440px;
 }
 .topbar-title { font-size: 1.12rem; font-weight: 700; flex: 1; min-width: 0; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-title small { display: block; font-size: 0.68rem; font-weight: 600; color: #a49cc4; letter-spacing: 0.12em; text-transform: uppercase; }
@@ -460,7 +464,7 @@ a { text-decoration: none; }
 .user-meta small { font-size: 0.7rem; color: #a49cc4; }
 
 /* Conteúdo */
-.page { padding: 26px var(--shell-gap) 40px 4px; flex: 1; max-width: 1440px; width: 100%; }
+.page { padding: 26px var(--shell-gap) 40px 0; flex: 1; max-width: calc(1440px + var(--shell-gap)); width: 100%; }
 
 /* Cabeçalho de página interno */
 .page-head {
@@ -574,10 +578,9 @@ a { text-decoration: none; }
   text-shadow: 0 2px 18px rgba(var(--kpi-accent, 168, 85, 247), 0.28);
   /* Dígitos de largura igual no JetBrains Mono evitam "respiração" entre valores. */
   font-variant-numeric: tabular-nums;
-  /* Última linha de defesa contra valores grotescos: quebra controlada
-     em vez de estourar a borda do .kpi-tile (que tem overflow: hidden). */
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  /* Valor sempre numa linha ("R$" junto do número). Quando não cabe, o script
+     do shell reduz a fonte desse valor; sem JS, o overflow do .kpi-tile corta. */
+  white-space: nowrap;
   min-width: 0;
 }
 .kpi-value small { font-family: var(--font-sans); font-size: 0.95rem; font-weight: 600; color: #b7b2d3; text-shadow: none; }
@@ -641,7 +644,7 @@ a { text-decoration: none; }
 .b-red    { background: var(--danger-bg);  color: #fca5a5; border-color: rgba(239, 68, 68, 0.25); }
 .b-info   { background: var(--info-bg);    color: #93d9f8; border-color: rgba(56, 189, 248, 0.25); }
 .b-purple { background: var(--primary-soft); color: #cbabfb; border-color: rgba(168, 85, 247, 0.25); }
-.b-muted  { background: rgba(255,255,255,0.05); color: var(--text-muted); border-color: var(--border); }
+.b-muted  { background: rgba(255,255,255,0.05); color: #b2adcf; border-color: var(--border); }
 
 /* Planos */
 .plan-badge { font-weight: 700; letter-spacing: 0.04em; }
@@ -651,7 +654,7 @@ a { text-decoration: none; }
 
 /* ===================== BOTÕES =================================== */
 .btn-nexo {
-  background: var(--grad);
+  background: var(--grad-cta);
   border: 1px solid rgba(255, 255, 255, 0.14); color: #fff; font-weight: 600;
   border-radius: 14px;
   padding: 10px 18px;
@@ -660,7 +663,7 @@ a { text-decoration: none; }
   display: inline-flex; align-items: center; gap: 8px;
 }
 .btn-nexo:focus-visible, .btn-ghost:focus-visible { outline: 2px solid #d8c2fd; outline-offset: 2px; }
-.btn-nexo:hover { background: var(--grad-hover); color: #fff; transform: translateY(-1px); box-shadow: 0 12px 26px -8px var(--primary-glow); }
+.btn-nexo:hover { background: var(--grad-cta-hover); color: #fff; transform: translateY(-1px); box-shadow: 0 12px 26px -8px var(--primary-glow); }
 .btn-nexo:active { transform: translateY(0); }
 .btn-nexo:disabled, .btn-nexo.disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; transform: none; }
 
@@ -761,7 +764,9 @@ a { text-decoration: none; }
 /* Aviso do Indicador de Pressão de Estoque (regra de negócio) */
 .nota-pressao {
   display: flex; gap: 12px; align-items: flex-start;
-  background: var(--warning-bg);
+  background: linear-gradient(var(--warning-bg), var(--warning-bg)), var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   border: 1px solid rgba(245, 158, 11, 0.25);
   border-radius: var(--radius-sm);
   padding: 12px 15px;
@@ -808,7 +813,9 @@ a { text-decoration: none; }
   border: 1px solid rgba(168, 85, 247, 0.3);
   border-radius: var(--radius);
   color: #ddd0f7;
-  background: rgba(168, 85, 247, 0.1);
+  background: linear-gradient(rgba(168, 85, 247, 0.1), rgba(168, 85, 247, 0.1)), var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
 }
 .roadmap-notice i { color: var(--primary); font-size: 1.2rem; }
 .roadmap-notice p { margin: 0; color: var(--text-muted); font-size: 0.88rem; }
@@ -893,6 +900,8 @@ a { text-decoration: none; }
 .fw-num { font-family: var(--font-mono); font-weight: 700; }
 .divider { height: 1px; background: var(--border); border: none; margin: 22px 0; }
 .search-box { position: relative; max-width: 340px; width: 100%; }
+.page-head-actions { align-items: center; }
+.page-head-actions .search-box { flex: 0 1 300px; width: 300px; }
 .search-box i { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); color: var(--text-dim); }
 .search-box .form-control { padding-left: 38px; }
 .mock-tag {
@@ -901,6 +910,57 @@ a { text-decoration: none; }
   border: 1px dashed var(--border-strong); border-radius: 999px;
   padding: 3px 10px;
 }
+
+/* ===================== PAINEL: LEITURA E NAVEGAÇÃO =============== */
+/* Tons de texto reforçados só no painel (o login não muda): sobre o vidro roxo,
+   o cinza antigo de --text-dim ficava abaixo de 4,5:1. Links no lilás da marca
+   (o Bootstrap usa --bs-link-color-rgb, não --bs-link-color). */
+.app-shell {
+  --text-dim: #9d98ba;
+  --bs-link-color-rgb: 196, 160, 251;
+  --bs-link-hover-color-rgb: 216, 194, 253;
+}
+
+/* Cabeçalho de seção solto sobre o fundo (fora de cartão): um degrau acima do
+   título de cartão, ícone no mesmo contêiner da sidebar e subtítulo claro o
+   bastante para a faixa luminosa do horizonte. */
+.nexo-card-head.px-0 { padding-top: 8px; padding-bottom: 14px; }
+.nexo-card-head.px-0 h2 { display: flex; align-items: center; gap: 10px; font-size: 1.16rem; letter-spacing: -0.015em; }
+.nexo-card-head.px-0 h2 > .bi:first-child {
+  flex: 0 0 auto; width: 32px; height: 32px; display: grid; place-items: center;
+  border-radius: 10px; font-size: 0.95rem; color: #e4d2ff;
+  background: var(--primary-soft); border: 1px solid rgba(168, 85, 247, 0.26);
+}
+.nexo-card-head.px-0 .sub { color: #e2dff2; text-shadow: 0 1px 10px rgba(8, 6, 18, 0.85); }
+.nexo-card-head.px-0:has(h2 > .bi:first-child) .sub { margin-left: 42px; }
+
+/* Tabelas: datas não quebram; respiro menor em telas estreitas. Quando a tabela
+   rola na horizontal, a coluna de ações fica fixa à direita (o script do shell
+   marca o contêiner com .tem-rolagem e a coluna com .col-acoes). */
+.nexo-table td.t-mono { white-space: nowrap; }
+.table-responsive-x.tem-rolagem .nexo-table .col-acoes {
+  position: sticky; right: 0; z-index: 1;
+  background: rgb(21, 16, 39);
+  box-shadow: inset 1px 0 0 var(--glass-border), -16px 0 18px -14px rgba(3, 0, 12, 0.9);
+}
+.table-responsive-x.tem-rolagem .nexo-table thead .col-acoes { background: rgb(27, 22, 47); }
+@media (max-width: 1199.98px) {
+  .nexo-table thead th, .nexo-table tbody td { padding-left: 16px; padding-right: 16px; }
+}
+@media (max-width: 575.98px) {
+  .nexo-table thead th, .nexo-table tbody td { padding: 12px 14px; }
+  .nexo-table td.t-mono { font-size: 0.82rem; }
+  .page-head-actions .search-box { flex: 1 1 100%; width: 100%; max-width: none; }
+}
+
+/* NexoBot: some com a gaveta aberta; o fim da página não fica sob o botão. */
+.nexobot { transition: opacity 0.2s ease, visibility 0.2s ease; }
+.app-shell.nav-open ~ .nexobot { opacity: 0; visibility: hidden; pointer-events: none; }
+body:has(> .nexobot) .app-shell .page { padding-bottom: 104px; }
+
+/* Foco visível nos itens do sino (a rolagem da lista cortava o anel externo). */
+.bell-item:focus-visible { outline: 2px solid #c4a0fb; outline-offset: -2px; background: rgba(168, 85, 247, 0.12); }
+.bell-foot .bell-mark:focus-visible { outline: 2px solid #c4a0fb; outline-offset: 2px; }
 
 /* ===================== RESPONSIVO ============================== */
 @media (max-width: 991.98px) {
@@ -913,8 +973,12 @@ a { text-decoration: none; }
     transform: translateX(calc(-100% - 24px));
     background: linear-gradient(180deg, rgba(24, 17, 46, 0.92) 0%, rgba(14, 10, 28, 0.94) 100%);
     box-shadow: var(--shadow-lg);
+    /* Fechada, sai da ordem de Tab e da árvore de acessibilidade; o atraso no
+       visibility deixa a animação de saída terminar. */
+    visibility: hidden;
+    transition: transform 0.32s var(--ease-out), visibility 0s linear 0.32s;
   }
-  .app-shell.nav-open .sidebar { transform: translateX(0); }
+  .app-shell.nav-open .sidebar { transform: translateX(0); visibility: visible; transition-delay: 0s; }
   .app-shell.nav-open .sidebar-overlay { display: block; }
   .main-area { margin-left: 0; }
   .nav-toggle { display: grid; place-items: center; }
@@ -933,8 +997,11 @@ a { text-decoration: none; }
 /* Movimento reduzido: sem surgimento dos gráficos e sem "lift" nos cartões. */
 @media (prefers-reduced-motion: reduce) {
   .chart-box { animation: none; }
-  .kpi-tile, .nav-item, .nav-item i, .sidebar, .semaforo-card { transition: none; }
-  .kpi-tile:hover, .nav-item:hover i, .semaforo-card:hover { transform: none; }
+  .kpi-tile, .nav-item, .nav-item i, .sidebar, .semaforo-card,
+  .btn-nexo, .btn-ghost, .bell-btn, .nexo-toast, .nexobot { transition: none; }
+  .kpi-tile:hover, .nav-item:hover i, .semaforo-card:hover,
+  .btn-nexo:hover, .bell-btn:hover, .nexo-toast, .nexo-toast.show { transform: none; }
+  .bell-badge.pulse { animation: none; }
 }
 
 /* Sem suporte a backdrop-filter, ou com transparência reduzida pedida pelo
@@ -955,6 +1022,7 @@ a { text-decoration: none; }
   }
   .sidebar { background: #140f27; }
   .app-shell::before { background: var(--bg); }
+  .bell-menu { background: #140f27; }
 }
 
 @media (max-width: 575.98px) {
@@ -1002,7 +1070,7 @@ input, textarea, select, option,
 .abc-b { background: var(--warning-bg); color: #fbd07a; border-color: rgba(245, 158, 11, 0.35); }
 .abc-c { background: rgba(154, 160, 183, 0.14); color: #c2c7d8; border-color: rgba(154, 160, 183, 0.3); }
 .abc-muted { background: var(--surface-3); color: var(--text-muted); }
-.nota-abc { background: var(--primary-soft); border-color: rgba(168, 85, 247, 0.25); }
+.nota-abc { background: linear-gradient(var(--primary-soft), var(--primary-soft)), var(--glass-strong); border-color: rgba(168, 85, 247, 0.25); }
 .nota-abc i { color: var(--primary); }
 
 /* ===================================================================
@@ -1068,9 +1136,9 @@ input, textarea, select, option,
 .bell-btn[aria-expanded="true"] { border-color: var(--primary); color: #d8c2fd; }
 .bell-badge {
   position: absolute; top: -5px; right: -5px; min-width: 18px; height: 18px;
-  padding: 0 5px; border-radius: 9px; background: var(--danger); color: #fff;
+  padding: 0 5px; border-radius: 9px; background: #dc2626; color: #fff;
   font-size: 0.66rem; font-weight: 800; line-height: 18px; text-align: center;
-  border: 2px solid var(--bg-2); box-shadow: 0 0 0 1px rgba(239,68,68,0.4);
+  border: 2px solid var(--bg-2); box-shadow: 0 0 0 1px rgba(220,38,38,0.45);
 }
 .bell-menu {
   width: 340px; max-width: 92vw; padding: 0; overflow: hidden;
@@ -1189,9 +1257,9 @@ input, textarea, select, option,
    =================================================================== */
 .bell-menu {
   padding: 0;
-  background: rgba(16, 16, 24, 0.72);
-  -webkit-backdrop-filter: blur(16px) saturate(150%);
-  backdrop-filter: blur(16px) saturate(150%);
+  /* Dentro da topbar (que já desfoca) o backdrop-filter do menu não enxerga a
+     página; o fundo quase opaco garante a leitura. */
+  background: rgba(17, 13, 32, 0.96);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 24px 60px -18px rgba(0,0,0,0.78), 0 0 0 1px rgba(168,85,247,0.07);
 }
@@ -1231,9 +1299,9 @@ input, textarea, select, option,
    BARRA DE AUDITORIA — origem/transparência dos dados (premium)
    =================================================================== */
 .audit-bar {
-  background: rgba(20, 20, 30, 0.55);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  backdrop-filter: blur(14px) saturate(140%);
+  background: var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-left: 3px solid var(--primary);
   border-radius: var(--radius-sm);
@@ -1259,11 +1327,11 @@ input, textarea, select, option,
 .audit-v.t-mono { font-family: var(--font-mono); font-size: 0.82rem; font-weight: 500; }
 .audit-sep { width: 1px; align-self: stretch; background: var(--border); }
 .audit-foot {
-  display: flex; align-items: center; gap: 7px;
+  display: block;
   padding: 9px 20px; font-size: 0.76rem; color: var(--text-muted);
   background: rgba(168, 85, 247, 0.06); border-top: 1px solid var(--border);
 }
-.audit-foot .bi-shield-check { color: #6ee7a8; font-size: 0.9rem; }
+.audit-foot .bi-shield-check { color: #6ee7a8; font-size: 0.9rem; margin-right: 6px; vertical-align: -1px; }
 @media (max-width: 720px) {
   .audit-sep { display: none; }
   .audit-row { gap: 12px; }
@@ -1314,9 +1382,9 @@ input, textarea, select, option,
    =================================================================== */
 .guia-accordion { display: flex; flex-direction: column; gap: 12px; }
 .guia-item.accordion-item {
-  background: rgba(19, 19, 29, 0.6);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  backdrop-filter: blur(14px) saturate(140%);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: var(--radius-sm) !important;
   overflow: hidden;
@@ -1331,6 +1399,7 @@ input, textarea, select, option,
   box-shadow: inset 0 -1px 0 var(--border);
 }
 .guia-item .accordion-button:focus { box-shadow: none; border-color: transparent; }
+.guia-item .accordion-button:focus-visible { outline: 2px solid #c4a0fb; outline-offset: -3px; }
 .guia-item .accordion-button::after { filter: invert(0.7) sepia(1) saturate(4) hue-rotate(230deg); }
 .guia-ico {
   flex: 0 0 auto; width: 34px; height: 34px; border-radius: 10px; margin-right: 12px;
@@ -1367,7 +1436,7 @@ input, textarea, select, option,
   display: inline-flex; align-items: center; justify-content: center; gap: 8px;
   min-width: 56px; height: 56px; padding: 0 16px 0 14px; border-radius: 999px; border: none; cursor: pointer;
   color: #fff; font: 600 0.9rem/1 var(--font-sans);
-  background: var(--grad); box-shadow: 0 12px 30px -8px var(--primary-glow), 0 4px 12px rgba(0,0,0,0.4);
+  background: var(--grad-cta); box-shadow: 0 12px 30px -8px var(--primary-glow), 0 4px 12px rgba(0,0,0,0.4);
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
 .nexobot-launcher .bi { font-size: 1.35rem; }
@@ -1601,16 +1670,18 @@ input, textarea, select, option,
   margin-bottom: 18px;
   padding: 14px 16px;
   border: 1px solid rgba(168, 85, 247, 0.3);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   color: #ddd0f7;
-  background: rgba(168, 85, 247, 0.1);
+  background: linear-gradient(rgba(168, 85, 247, 0.12), rgba(168, 85, 247, 0.12)), var(--glass-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
 }
 .aviso-contrato i { margin-top: 2px; color: var(--primary); font-size: 1.2rem; }
 .aviso-contrato p { margin: 0; color: var(--text-muted); font-size: 0.88rem; }
 .aviso-contrato strong { color: var(--text); }
-.aviso-contrato.is-alerta { border-color: rgba(245, 158, 11, 0.3); background: var(--warning-bg); }
+.aviso-contrato.is-alerta { border-color: rgba(245, 158, 11, 0.3); background: linear-gradient(var(--warning-bg), var(--warning-bg)), var(--glass-strong); }
 .aviso-contrato.is-alerta i { color: var(--warning); }
-.aviso-contrato.is-perigo { border-color: rgba(239, 68, 68, 0.3); background: var(--danger-bg); }
+.aviso-contrato.is-perigo { border-color: rgba(239, 68, 68, 0.3); background: linear-gradient(var(--danger-bg), var(--danger-bg)), var(--glass-strong); }
 .aviso-contrato.is-perigo i { color: var(--danger); }
 .evento-detalhes { margin: 6px 0 0; padding: 0; list-style: none; color: var(--text-muted); font-size: 0.8rem; }
 .evento-detalhes li { overflow-wrap: anywhere; }
