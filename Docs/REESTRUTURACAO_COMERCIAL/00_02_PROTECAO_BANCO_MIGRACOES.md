@@ -1,1200 +1,954 @@
-# NEXO - Faturamento Inteligente | Proteção do Banco e Preparação das Migrações
+# NEXO - Faturamento Inteligente | Proteção do Banco de Dados e Preparação das Migrações
 
-**Etapa 0.2 — Proteção do banco de dados e preparação das migrações**
+**Etapa 0.2A — Auditoria, proteção do banco de dados e preparação das migrações**
 
-Este documento prepara o NEXO para futuras alterações estruturais no banco PostgreSQL/Supabase.
-Ele registra o inventário do esquema conforme o código e as migrações, a auditoria da cadeia
-Alembic, a auditoria do sistema de backup existente, os testes locais executados, o procedimento
-para o backup real do Supabase (a ser executado depois, com autorização) e a estratégia para as
-migrações das próximas etapas da reestruturação comercial.
+> **Nota de integração (26/10/2026).** Documento da Etapa 0.2A, produzido localmente e recebido
+> no ZIP do proprietário. É a versão citada pelos demais documentos (`OPERACAO_BACKUP_RESTAURACAO.md`,
+> `PREPARACAO_RENDER.md`, `Docs/AJUSTES_NEXO_2026/`), inclusive por seção (B.1, E15, G, G.10, H, K).
+> Em paralelo, a Etapa 0.2 foi executada no GitHub (PR #22) com outra estrutura de seções; esse
+> registro foi preservado em
+> [00_02_PROTECAO_BANCO_MIGRACOES_ETAPA_0_2_PR22.md](00_02_PROTECAO_BANCO_MIGRACOES_ETAPA_0_2_PR22.md).
+> As menções abaixo a "pasta sem `.git`", "commit não verificado" e "repositório oficial de destino"
+> descrevem a execução local de 24/10/2026: o repositório oficial é
+> `Helio965/Nexo---Faturamento-Inteligente---Render`, e a base `ff8c2d8` foi confirmada na
+> integração ([relatório](../INTEGRACOES/RELATORIO_INTEGRACAO_GITHUB_ZIP_2026_10_26.md)). Fato
+> posterior: o HTTP 500 do login e a migração `e4c004a26b01` pendente no Supabase estão em
+> [RELATORIO_CORRECAO_MIGRACAO_SUPABASE_NEXO.md](../../RELATORIO_CORRECAO_MIGRACAO_SUPABASE_NEXO.md).
 
-Complementa `Docs/REESTRUTURACAO_COMERCIAL/00_01_BASELINE_GITHUB.md` (Etapa 0.1) e não o substitui.
+Este documento é a referência da Etapa 0.2A. Registra a auditoria dos mecanismos de
+persistência, migração, backup e recuperação do NEXO, os testes executados, as correções
+locais feitas e o planejamento das alterações estruturais das próximas etapas. Continua a
+[Etapa 0.1](00_01_BASELINE_GITHUB.md), cujos riscos foram reconferidos aqui (confirmados,
+corrigidos ou complementados).
 
-## Escopo, limites e convenções
+Nada nesta etapa tocou produção. Não houve acesso ao Supabase, ao painel ou às URLs do
+Render, não houve migração em banco existente, commit, push, deploy nem envio de dados a
+serviços externos. Toda execução com banco usou bancos **descartáveis** (SQLite em diretório
+temporário ou cluster PostgreSQL 18 criado e destruído pelo próprio teste) com dados
+**fictícios**.
 
-**O que esta etapa fez:** leitura do código, das migrações e da documentação; execução de testes
-locais com PostgreSQL privado e dados exclusivamente sintéticos; consulta à documentação oficial do
-Supabase, do PostgreSQL e do GitHub; criação deste documento e um ajuste preventivo no `.gitignore`.
+Legenda de situação usada em todo o documento:
 
-**O que esta etapa NÃO fez:**
-
-- Não acessou o Supabase de produção nem qualquer banco real. Nenhuma credencial real foi usada.
-- Não executou `flask db upgrade`, `downgrade`, `stamp` ou `current` contra banco real; não alterou
-  `alembic_version`.
-- Não gerou backup real, não exportou dados de clientes, não restaurou nada no Supabase.
-- Não acessou nem alterou o Render (painel, variáveis, deploy).
-- Não alterou configurações administrativas do GitHub (proteção de branch, Actions).
-- Não alterou modelos, migrações, autenticação, regras de planos, funcionalidades ou dependências.
-- Não executou `criar_cliente_demo.py` nem testou a conta de demonstração.
-
-**Classificação das evidências** (usada em todo o documento):
-
-| Marca | Significado |
+| Situação | Significado |
 |---|---|
-| **[VALIDADO LOCALMENTE]** | Executado nesta etapa, em ambiente local isolado, com dados sintéticos |
-| **[CÓDIGO]** | Verificado por leitura do código versionado (`arquivo:linha`) |
-| **[MIGRAÇÕES]** | Previsto pelas revisões Alembic (o que um banco migrado até a head deve conter) |
-| **[DOC]** | Verificado em documentação (do repositório ou oficial externa, com a fonte indicada) |
-| **[PENDENTE NO SUPABASE REAL]** | Só pode ser confirmado no projeto real, com autorização; nada é afirmado sobre ele |
-| **[PENDENTE NO RENDER]** / **[PENDENTE]** | Depende de acesso autorizado (Render, GitHub ou Supabase) ou de decisão do proprietário; nada é afirmado sobre o estado real |
+| **IMPLEMENTADO** | Alteração feita nos arquivos locais desta pasta. |
+| **TESTADO LOCALMENTE** | Comprovado por execução nesta máquina: testes, banco descartável ou utilitário local. Não equivale a homologação de produção. |
+| **DOCUMENTADO** | Registrado em documento; não depende de execução. |
+| **PENDENTE DE VALIDAÇÃO** | Depende de acesso autorizado (Supabase, Render) ou de decisão do responsável. |
+| **NÃO VERIFICADO** | Não foi possível comprovar nesta etapa. |
 
-Nenhum valor de segredo, credencial, e-mail, telefone ou nome de pessoa é reproduzido. Quando um
-dado sensível existe no repositório, registra-se apenas a sua localização.
+Nos riscos, **Comprovado** significa verificado no código (arquivo:linha) ou reproduzido por
+experimento; **Potencial** depende de condição externa ou de execução não realizada.
 
 ---
 
 ## A. Identificação
 
-### A.1 Dados da execução
-
 | Item | Valor |
 |---|---|
 | Projeto | NEXO - Faturamento Inteligente |
-| Repositório | https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render (privado) |
-| Branch principal | `main` |
-| Branch de integração | `feature/reestruturacao-comercial-nexo` |
-| Branch de trabalho desta etapa | `feature/nexo-etapa-0-2-protecao-banco` |
-| Commit de referência | `c919b1d17e6cbf4bf9dac09e29cefca67d908d06` (merge da PR #19, Etapa 0.1) |
-| Commit da Etapa 0.1 | `ca166cfb59052fa1596d69782a5703eb457d78a7` |
-| Commit de referência da Etapa 0.1 (`origin/main` à época; merge da PR #18, SEC-005) | `8233c5bddbd1f6c67a4d95c7b0a2a470724738c8` |
+| Etapa | 0.2A — Auditoria, proteção do banco de dados e preparação das migrações |
 | Data da execução | 2026-10-24 |
+| Pasta de trabalho | Pasta local extraída de ZIP, **sem `.git`**. Nenhum comando Git foi executado nesta pasta; apenas `git init` e `git check-ignore` em repositórios temporários fora dela (E12). Não houve clone, commit, push, PR nem alteração de branch ou `origin`. |
+| Repositório de referência técnica e histórica | `https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render` (commit histórico informado: `ff8c2d8009c4889648a357fb5488a2a004cb7fe8`; **não verificado** localmente, pois não há `.git`) |
+| Repositório oficial de destino | `https://github.com/nexofaturamentointeligente-coder/Nexo-Faturamento-Inteligente` (o proprietário fará o commit manual) |
+| Ambiente | Windows 11 Pro; PowerShell e Git Bash; Python 3.12.10 |
+| Pacotes locais divergentes de `requirements.txt` | Flask 3.0.3 (fixado 3.1.3), Werkzeug 3.0.4 (3.1.9), Flask-SocketIO 5.4.1 (5.6.1), Pillow 12.2.0 (13.0.0), python-dotenv 1.0.1 (1.2.4); `gunicorn` (de `requirements.txt`) e `PyYAML`/`playwright` (de `requirements-dev.txt`) ausentes. SQLAlchemy 2.0.51, Alembic 1.18.4, Flask-Migrate 4.0.7, Flask-SQLAlchemy 3.1.1 e psycopg2-binary 2.9.9 instalados. Nada foi instalado ou atualizado. |
+| PostgreSQL local | Binários 18.1 em `C:\Program Files\PostgreSQL\18\bin`, **fora do `PATH`**. Existe um serviço PostgreSQL 18 **preexistente** na porta 5432: não foi usado nem acessado. |
+| Finais de linha | Os 231 arquivos de texto desta pasta (critério: UTF-8 sem byte nulo; 4 vazios), 232 com este documento, usam **LF** (0 arquivos CRLF). A Etapa 0.1 (C.3) descreve CRLF no repositório Git; isso não vale para esta cópia. Todas as edições preservaram LF. |
+| Preservação do estado original | Antes de qualquer alteração foi gravado, fora da pasta, um inventário SHA-256 dos 258 arquivos, idêntico ao ZIP de origem, que permaneceu intacto. Os originais dos 7 arquivos alterados foram conferidos por hash; a comparação final com o inventário mostra só esses 7 arquivos modificados e este documento criado (seção F). |
 
-### A.2 Situação do GitHub (Subetapa 0.2.1)
+**Método.** Leitura direta dos componentes centrais e auditoria paralela em seis
+dimensões: modelos e exclusões, migrações, ferramentas de backup, arquivos armazenados,
+vazamento de dados e consistência da documentação. Cada achado passou por verificação
+adversarial independente, que tentou refutá-lo relendo o código e reproduzindo os
+experimentos. Uma sétima frente levantou a documentação oficial do Supabase e do
+PostgreSQL, com fonte e trecho citado (extraído por ferramenta que resume páginas; reconferir
+na página antes da execução). Dos 90 achados, os verificadores refutaram nenhum, corrigiram
+detalhes de 9 (parciais) e acrescentaram omissões. Depois das correções, uma segunda revisão
+adversarial independente das alterações (código e testes, documentação e conformidade), com
+verificação de cada achado, não encontrou achado de severidade alta. Os achados confirmados
+foram corrigidos e revalidados: ramos novos sem teste, entrada do `PATH` sem letra de
+unidade aceita pelo Python 3.12, restauração com políticas RLS, ordenação dependente da
+collation e imprecisões de texto e de contagem neste documento. Uma verificação final
+independente das correções, também com refutação adversarial, considerou todos esses
+achados resolvidos e confirmou 7 ajustes menores de teste e de redação, igualmente
+aplicados. A consolidação abaixo já incorpora as três rodadas.
 
-| Verificação | Resultado | Evidência |
-|---|---|---|
-| Diretório pertence ao repositório oficial | Sim | `git remote -v`: `origin` fetch/push para o repositório da tabela A.1 |
-| Referências atualizadas | Sim | `git fetch origin --prune` |
-| Commit atual da `main` | `c919b1d17e6cbf4bf9dac09e29cefca67d908d06` (merge da PR #19), o mesmo identificado ao fim da Etapa 0.1. Desde o commit de referência da Etapa 0.1 (`8233c5b`), a `main` avançou apenas por esse merge (`git rev-list 8233c5b..c919b1d` = `ca166cf`, `c919b1d`) | `git log origin/main`; API do GitHub |
-| Branch de integração antes da sincronização | Em `ca166cf`: 0 commits exclusivos, 1 commit atrás da `main` (o merge da PR #19) | `git rev-list --left-right --count origin/feature/reestruturacao-comercial-nexo...origin/main` = `0 1` |
-| Sincronização da branch de integração | **Fast-forward** para `c919b1d` e push simples (sem `--force`) | `git merge --ff-only origin/main`; push `ca166cf..c919b1d` |
-| Documento da Etapa 0.1 | Presente em `main` e na integração (mesmo blob) | `git ls-tree` |
-| Alterações locais não commitadas | Nenhuma no início | `git status`, `git stash list`, `git worktree list` |
-| Branch de trabalho | `feature/nexo-etapa-0-2-protecao-banco` criada da integração sincronizada (`c919b1d`), sem tracking | `git switch --no-track -c` |
-| GitHub Actions recentes | "NEXO Security CI" **success** no push de `c919b1d` (run 40099609684) e na PR #19 (run 40099603218); runs anteriores na `main` também verdes | API `actions/runs` |
-| Proteção da `main` | **Inexistente**: `protected: false` | API `list_branches` (2026-10-24) |
-| `main` ao fim desta etapa | Avançou para `4b7073bc15e2b13dfc76f371e399b85e325fe046` (merge da PR #21, COM-001, landing comercial), feito pelo proprietário durante a execução, fora desta etapa. Não altera `models.py`, `migrations/`, `scripts/`, `tests/test_backup_restore.py`, `tests/postgresql_support.py`, `Docs/OPERACAO_BACKUP_RESTAURACAO.md`, `.gitignore` nem `criar_cliente_demo.py`; altera `.github/workflows/nexo-security-ci.yml` (navegador e diagnóstico do job `security-sqlite-browser`). A integração e esta branch continuam em `c919b1d`; **as referências `arquivo:linha` deste documento valem para `c919b1d`** (as do workflow mudaram de linha na `main`) | `git fetch origin main`; `git diff --stat c919b1d origin/main` |
-
-### A.3 Proteção da `main`: diagnóstico e proposta
-
-**Diagnóstico [DOC]:**
-
-- A `main` não tem proteção (`protected: false`). Um merge ou push na `main` pode disparar deploy
-  se o Auto-Deploy estiver ativo no Render, conforme relato registrado em
-  `Docs/PREPARACAO_RENDER.md:81` (estado real **[PENDENTE NO RENDER]**).
-- A auditoria anterior registrou `GET /rulesets` com HTTP 403 "Upgrade to GitHub Pro or make this
-  repository public to enable this feature" e leitura da proteção clássica negada à integração
-  (`Docs/PLANO_PUBLICACAO_SEGURA.md:9-17`).
-- Pela documentação do GitHub, branches protegidas e rulesets estão disponíveis em repositórios
-  **públicos** no GitHub Free, e em repositórios **privados** apenas com GitHub Pro, Team ou
-  Enterprise. A restrição de quem pode fazer push vale só para repositórios de organização.
-  Fontes: [Managing protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches),
-  [GitHub's plans](https://docs.github.com/get-started/learning-about-github/githubs-products),
-  [About rulesets](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-rulesets/about-rulesets),
-  [About protected branches](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches).
-
-**Proposta para aplicação pelo proprietário** (nenhuma configuração foi alterada nesta etapa):
-
-1. **Decisão de plano.** Manter o repositório privado. Tornar o repositório público **não** é
-   recomendado: o histórico contém uma credencial de demonstração (seção H.2) e código comercial.
-   A proteção técnica para repositório privado exige GitHub Pro (conta pessoal) ou superior.
-2. **Regra para `main`**, quando disponível (branch protection clássica ou ruleset):
-   - exigir Pull Request antes do merge;
-   - exigir os checks obrigatórios `security-sqlite-browser` e `security-postgresql` (nomes exatos
-     dos jobs em `.github/workflows/nexo-security-ci.yml:33, 63`), com branch atualizada;
-   - exigir resolução das conversas;
-   - bloquear force push e exclusão da branch;
-   - **não** exigir histórico linear (o projeto usa merge commits);
-   - aprovações: com um único mantenedor, uma aprovação obrigatória bloquearia todo merge (o autor
-     não aprova a própria PR). Definir 0 aprovações obrigatórias enquanto não houver segundo
-     revisor, mantendo PR e checks obrigatórios; elevar para 1 quando houver.
-3. **Merges automáticos:** manter desativado "Allow auto-merge" nas configurações do repositório;
-   não habilitar merge queue.
-4. **Recuperação administrativa:** manter o proprietário como administrador com possibilidade de
-   editar/desativar a regra (bypass de administrador) e registrar, em local privado, quem é o
-   responsável substituto e o procedimento de recuperação. Se optar por "Do not allow bypassing",
-   documentar antes como desfazer a regra.
-5. **Render:** desligar o Auto-Deploy no painel (coerente com `autoDeployTrigger: 'off'` em
-   `render.yaml:18`) para que um merge na `main` nunca implante código antes da migração.
-6. **Enquanto não houver proteção técnica:** política manual obrigatória — nenhum push direto na
-   `main`; todo merge via PR com CI verde; nenhuma PR com migração mesclada sem o procedimento da
-   seção G.4. Essa política **não equivale** a proteção técnica.
+**Inventário inicial dos arquivos a modificar (Subetapa 0.2A.1).** Planejados e efetivamente
+alterados: `scripts/verificar_prontidao_backup.py`, `tests/test_backup_readiness.py`,
+`tests/test_backup_restore.py`, `.gitignore`, `Docs/OPERACAO_BACKUP_RESTAURACAO.md`,
+`Docs/PREPARACAO_RENDER.md` e `Docs/PLANO_PUBLICACAO_SEGURA.md`, além deste documento
+(novo). A relação completa está na seção F.
 
 ---
 
-## B. Estado do banco no código
+## B. Diagnóstico do banco
 
-### B.1 Fontes de esquema e contagens
+### B.1 Modelos e tabelas (Comprovado)
 
-| Fonte | Tabelas | Papel | Evidência |
-|---|---|---|---|
-| `models.py` | **14** modelos (`db.Model`), confirmados diretamente no código | Metadata da aplicação | 14 `__tablename__` em `models.py:38-549` [CÓDIGO] |
-| `migrations/versions/` | 14 tabelas + `alembic_version` (criada pelo Alembic) | Única fonte válida para criar o esquema PostgreSQL | 12 `create_table` na raiz, mais `guia_topico` e `arquivo_armazenado` [MIGRAÇÕES] |
-| Banco PostgreSQL 16.15 local migrado até a head | **15** tabelas em `public` (14 + `alembic_version`) | Prova de que as migrações produzem o esquema esperado | [VALIDADO LOCALMENTE] — catálogo lido após `flask_migrate.upgrade` (seção E) |
-| `schema_nexo_mvp_v4.sql` (raiz) | 14 (12 em comum + `avaliacao_analise` e `fatura_cobranca`) | DDL SQLite histórico; **não** cria nem restaura o banco | [CÓDIGO] |
-| `Docs/schema_nexo_mvp_v4 (1).sql` | 12 | DDL SQLite mais antigo | [CÓDIGO] |
-| `init_db.py` | 14 via `create_all` | Só SQLite de desenvolvimento; recusa PostgreSQL; não grava `alembic_version` | `init_db.py:44-55` [CÓDIGO] |
+`models.py` mapeia **14 modelos em 14 tabelas**; com `alembic_version`, o banco migrado tem
+15 tabelas. A docstring de `models.py:1-16` ainda fala em "8 tabelas" e diz que
+`chamado_suporte`/`mensagem_suporte` não têm modelo: é uma divergência interna (o arquivo
+não pode ser alterado nesta etapa).
 
-Totais do esquema produzido pelas migrações [VALIDADO LOCALMENTE em PostgreSQL 16.15]:
-142 colunas de aplicação (143 com `alembic_version.version_num`), 15 PK, 16 FK, 8 UNIQUE,
-20 CHECK, 5 índices nomeados, 28 índices no total (incluindo os de PK/UNIQUE) e 13 sequências.
-
-### B.2 Inventário por tabela
-
-PK inteira = `Integer` com sequência `<tabela>_<pk>_seq` no PostgreSQL [VALIDADO LOCALMENTE].
-"Default só ORM" = valor aplicado pelo SQLAlchemy, sem `DEFAULT` no banco [MIGRAÇÕES].
-
-| Tabela (modelo) | PK | FKs | UNIQUE | CHECK | Índices nomeados | Observações |
+| # | Modelo → tabela | PK | FKs (alvo; nulidade) | UNIQUE / índices | CHECK | Observações |
 |---|---|---|---|---|---|---|
-| `plano` (`Plano`) | `id_plano` | — | `nome_plano` | 5: `nome_plano` ∈ {BRONZE, PRATA, OURO}; `tipo_analise_permitida`; `nivel_entrega_analise`; `nivel_dashboard`; `nivel_atendimento` | — | Campos de nível existem mas não são lidos pela aplicação (Etapa 0.1, C.4); `ativo` default só ORM |
-| `segmento` (`Segmento`) | `id_segmento` | — | `nome_segmento` | — | — | `ativo` default só ORM |
-| `empresa` (`Empresa`) | `id_empresa` | `id_segmento` → segmento; `id_plano_atual` → plano | `cnpj` | `status_conta` ∈ {ATIVA, SUSPENSA, CANCELADA} | — | `deletado_em` = soft delete (lixeira); `status_conta` default só ORM |
-| `usuario` (`Usuario`) | `id_usuario` | `id_empresa` → empresa (anulável) | `email` (sensível a maiúsculas) | `role` ∈ {ADMIN, CLIENTE}; `ck_usuario_role_empresa`; `ck_usuario_geracao_autorizacao` | — | `senha_hash`; `primeiro_acesso` DEFAULT false no banco, mas default ORM `True` (inserção fora do ORM não força a troca de senha); `geracao_autorizacao` DEFAULT 0; `ativo` default só ORM; `ultimo_acesso` nunca é gravado |
-| `analise` (`Analise`) | `id_analise` | `id_empresa` → empresa; `id_plano_referencia` → plano; `id_usuario_admin_responsavel` → usuario | — | `mes_referencia` 1..12; `tipo_analise`; `status_analise`; `ck_analise_tipo_quinzena` | — | Cascade ORM `all, delete-orphan` para 4 filhos (`models.py:219-241`); `status_analise` default só ORM (`AGUARDANDO_RELATORIO`) |
-| `upload_relatorio` (`UploadRelatorio`) | `id_upload` | `id_analise` → analise; `id_usuario_admin` → usuario (anulável) | `uq_upload_analise_tipo` (id_analise, tipo_relatorio) | `tipo_relatorio`; `extensao_arquivo`; `status_processamento` | — | `caminho_arquivo` = `db:<chave>` sem FK para `arquivo_armazenado`; `hash_arquivo` SHA-256; `status_processamento` default só ORM (`PENDENTE`) |
-| `indicador_analise` (`IndicadorAnalise`) | `id_indicador` | `id_analise` → analise | `id_analise` (1:1) | — | — | KPIs `Numeric`; `periodo_base_inicio/fim`; `versao_processamento` default só ORM |
-| `relatorio_analise` (`RelatorioAnalise`) | `id_relatorio` | `id_analise` → analise | `id_analise` (1:1) | — | — | `publicado` default só ORM; `gerado_por_ia` DEFAULT false |
-| `produto_curva_abc` (`ProdutoCurvaABC`) | `id_produto_abc` | `id_analise` → analise | `uq_abc_analise_posicao` | `classe_abc` ∈ {A, B, C} | `ix_abc_analise` | Top 20 por análise |
-| `chamado_suporte` (`ChamadoSuporte`) | `id_chamado` | `id_empresa` → empresa; `id_usuario_cliente` → usuario | — | `categoria`; `status_chamado`; `prioridade` | `ix_chamado_empresa` | Defaults de status/prioridade só ORM |
-| `mensagem_suporte` (`MensagemSuporte`) | `id_mensagem` | `id_chamado` → chamado_suporte; `id_usuario_remetente` → usuario | — | — | `ix_mensagem_chamado` | Sem cascade; `lida` default só ORM |
-| `notificacao` (`Notificacao`) | `id_notificacao` | `id_usuario` → usuario | — | — | `ix_notificacao_usuario` | `link_destino` textual; `lida` default só ORM |
-| `guia_topico` (`GuiaTopico`) | `id` | — | — | — | `ix_guia_topico_categoria` | `imagem_url` = `db:guia/<hash>` sem FK; `ativo` DEFAULT true |
-| `arquivo_armazenado` (`ArquivoArmazenado`) | `chave` `String(255)` (natural, sem sequência) | — | — | — | — | `conteudo` `LargeBinary` (BYTEA) `deferred`; planilhas dos clientes e imagens do Guia |
+| 1 | `Plano` → `plano` | `id_plano` | — | `nome_plano` | 5 sem nome (nome BRONZE/PRATA/OURO e níveis) | Campos de nível persistidos e não lidos pela aplicação (Etapa 0.1, F2.1) |
+| 2 | `Segmento` → `segmento` | `id_segmento` | — | `nome_segmento` | — | |
+| 3 | `Empresa` → `empresa` | `id_empresa` | `segmento`; `plano` (ambas NOT NULL) | `cnpj` | `status_conta` | `deletado_em` = lixeira (soft delete) |
+| 4 | `Usuario` → `usuario` | `id_usuario` | `empresa` (nula para ADMIN) | `email` (sensível a maiúsculas) | `role`; `ck_usuario_geracao_autorizacao`; `ck_usuario_role_empresa` | `geracao_autorizacao` (SEC-004); `primeiro_acesso` |
+| 5 | `Analise` → `analise` | `id_analise` | `empresa`, `plano` (snapshot), `usuario` responsável (todas NOT NULL) | — | 3 sem nome + `ck_analise_tipo_quinzena` | Único modelo com `cascade="all, delete-orphan"` (uploads, indicador, relatório, curva ABC) |
+| 6 | `UploadRelatorio` → `upload_relatorio` | `id_upload` | `analise` (NOT NULL); `usuario` homologador (nula) | `uq_upload_analise_tipo` | 3 sem nome | `caminho_arquivo` = `'db:<chave>'`, sem FK |
+| 7 | `IndicadorAnalise` → `indicador_analise` | `id_indicador` | `analise` (NOT NULL, UNIQUE: 1:1) | `id_analise` | — | KPIs e período da base |
+| 8 | `RelatorioAnalise` → `relatorio_analise` | `id_relatorio` | `analise` (NOT NULL, UNIQUE: 1:1) | `id_analise` | — | `conclusao_estrategica` NOT NULL; `gerado_por_ia` |
+| 9 | `ProdutoCurvaABC` → `produto_curva_abc` | `id_produto_abc` | `analise` (NOT NULL) | `uq_abc_analise_posicao`; `ix_abc_analise` (redundante com a coluna líder da UNIQUE) | `classe_abc` | Top 20 persistido |
+| 10 | `ChamadoSuporte` → `chamado_suporte` | `id_chamado` | `empresa`; `usuario` cliente (ambas NOT NULL) | `ix_chamado_empresa` | 3 sem nome | Relação `mensagens` sem cascade |
+| 11 | `MensagemSuporte` → `mensagem_suporte` | `id_mensagem` | `chamado_suporte`; `usuario` remetente (ambas NOT NULL) | `ix_mensagem_chamado` | — | |
+| 12 | `Notificacao` → `notificacao` | `id_notificacao` | `usuario` (NOT NULL) | `ix_notificacao_usuario` | — | `link_destino` textual, sem FK |
+| 13 | `GuiaTopico` → `guia_topico` | `id` | — | `ix_guia_topico_categoria` | — | `imagem_url` = `'db:guia/<hash>'` ou caminho legado |
+| 14 | `ArquivoArmazenado` → `arquivo_armazenado` | `chave` (varchar 255) | — | — | — | `conteudo` BYTEA (`deferred`); referenciado só por convenção |
 
-Inserções fora do ORM (SQL direto ou `sa.table` em migração de dados) devem informar explicitamente
-todas as colunas NOT NULL com default só ORM, sob pena de falha por NOT NULL ou de estado incorreto.
+Totais verificados no DDL PostgreSQL gerado offline e em PostgreSQL 18.1 descartável
+(TESTADO LOCALMENTE): 20 CHECK (17 sem nome), 16 FK (todas sem nome e **nenhuma com
+`ON DELETE`**), 15 PK, 8 UNIQUE (6 sem nome), 5 índices explícitos, 13 PKs `SERIAL`. Nove
+colunas de FK não têm índice (três de `analise`, duas de `empresa`,
+`chamado_suporte.id_usuario_cliente`, `mensagem_suporte.id_usuario_remetente`,
+`upload_relatorio.id_usuario_admin` e `usuario.id_empresa`). No PostgreSQL 18,
+`pg_constraint` também lista 100 restrições NOT NULL (tipo `n`), que não existem nessa
+forma em versões anteriores; contagens por tipo devem ser comparadas entre servidores da
+mesma versão.
 
-Colunas FK **sem índice** [MIGRAÇÕES; VALIDADO LOCALMENTE]: `empresa.id_segmento`,
-`empresa.id_plano_atual`, `usuario.id_empresa`, `analise.id_empresa`, `analise.id_plano_referencia`,
-`analise.id_usuario_admin_responsavel`, `upload_relatorio.id_usuario_admin`,
-`chamado_suporte.id_usuario_cliente`, `mensagem_suporte.id_usuario_remetente`. O PostgreSQL não cria
-índice automático para FK. Os `idx_*` do `.sql` histórico nunca entraram nas migrações.
+**Nomes gerados pelo PostgreSQL para as constraints sem nome** (TESTADO LOCALMENTE em PG
+18.1 após `upgrade` até a head). Existem porque `extensions.py:20-26` cria
+`db = SQLAlchemy(model_class=Base)` sem `MetaData(naming_convention=...)`; vale só o padrão
+do SQLAlchemy para índices. Seguem os padrões `<tabela>_<coluna>_check|fkey|key` e
+`<tabela>_pkey` (a PK de `alembic_version` chama-se `alembic_version_pkc`, nome dado pelo
+Alembic), por exemplo `plano_nome_plano_check`, `empresa_status_conta_check`,
+`usuario_role_check`, `analise_status_analise_check`, `upload_relatorio_tipo_relatorio_check`,
+`chamado_suporte_status_chamado_check`, `empresa_cnpj_key`, `usuario_email_key`,
+`analise_id_empresa_fkey` e `usuario_pkey`. Em produção os nomes são **PENDENTE DE
+VALIDAÇÃO**: só coincidem se o schema foi criado por estas migrações.
 
-### B.3 Nomes das constraints no PostgreSQL
+### B.1.1 Campos obrigatórios por modelo (Comprovado)
 
-`extensions.py:20-26` define a `Base` declarativa **sem** `naming_convention`. Só 5 constraints têm
-nome explícito no código: `ck_usuario_role_empresa`, `ck_usuario_geracao_autorizacao`,
-`ck_analise_tipo_quinzena`, `uq_upload_analise_tipo`, `uq_abc_analise_posicao`.
+Colunas NOT NULL além de PK e FK, lidas da metadata do SQLAlchemy (`models.py`), sem banco.
+"Com valor padrão" indica default no ORM ou no banco.
 
-**[VALIDADO LOCALMENTE]** As migrações versionadas, aplicadas a um PostgreSQL 16.15 vazio, geram estes
-nomes para as constraints sem nome explícito:
+| Modelo | Obrigatórios sem valor padrão | Obrigatórios com valor padrão |
+|---|---|---|
+| `Plano` | `nome_plano`, `valor_mensal`, `qtd_analises_mes`, `tipo_analise_permitida`, `nivel_entrega_analise`, `nivel_dashboard`, `nivel_atendimento` | `ativo`, `data_criacao` |
+| `Segmento` | `nome_segmento` | `ativo`, `data_criacao` |
+| `Empresa` | `cnpj`, `razao_social`, `email_contato`, `data_contratacao` | `status_conta`, `data_criacao` |
+| `Usuario` | `nome`, `email`, `senha_hash`, `role` | `ativo`, `geracao_autorizacao`, `primeiro_acesso`, `data_criacao` |
+| `Analise` | `periodo_inicio`, `periodo_fim`, `mes_referencia`, `ano_referencia`, `tipo_analise` | `status_analise`, `data_criacao` |
+| `UploadRelatorio` | `tipo_relatorio`, `nome_arquivo_original`, `caminho_arquivo`, `extensao_arquivo` | `data_upload`, `status_processamento` |
+| `IndicadorAnalise` | — | `versao_processamento`, `data_geracao` |
+| `RelatorioAnalise` | `titulo`, `conclusao_estrategica` | `publicado`, `gerado_por_ia` |
+| `ProdutoCurvaABC` | `posicao_ranking`, `produto_nome`, `faturamento`, `percentual_individual`, `percentual_acumulado`, `classe_abc` | `data_geracao` |
+| `ChamadoSuporte` | `assunto`, `categoria` | `status_chamado`, `prioridade`, `data_abertura` |
+| `MensagemSuporte` | `mensagem` | `data_envio`, `lida` |
+| `Notificacao` | `texto` | `lida`, `data_criacao` |
+| `GuiaTopico` | `categoria`, `pergunta`, `resposta` | `ativo`, `data_criacao` |
+| `ArquivoArmazenado` | `conteudo`, `tamanho` | `data_criacao` |
 
-- **CHECK (17):** `plano_nome_plano_check`, `plano_tipo_analise_permitida_check`,
-  `plano_nivel_entrega_analise_check`, `plano_nivel_dashboard_check`, `plano_nivel_atendimento_check`,
-  `empresa_status_conta_check`, `usuario_role_check`, `analise_mes_referencia_check`,
-  `analise_tipo_analise_check`, `analise_status_analise_check`, `upload_relatorio_tipo_relatorio_check`,
-  `upload_relatorio_extensao_arquivo_check`, `upload_relatorio_status_processamento_check`,
-  `chamado_suporte_categoria_check`, `chamado_suporte_status_chamado_check`,
-  `chamado_suporte_prioridade_check`, `produto_curva_abc_classe_abc_check`.
-- **UNIQUE (6):** `plano_nome_plano_key`, `segmento_nome_segmento_key`, `empresa_cnpj_key`,
-  `usuario_email_key`, `indicador_analise_id_analise_key`, `relatorio_analise_id_analise_key`.
-- **FK (16), todas `ON DELETE NO ACTION`:** padrão `<tabela>_<coluna>_fkey` (ex.:
-  `usuario_id_empresa_fkey`, `analise_id_empresa_fkey`, `upload_relatorio_id_analise_fkey`).
-- **PK (15):** padrão `<tabela>_pkey`; `alembic_version_pkc` para o Alembic.
-- **RLS:** `relrowsecurity = false` em todas as 15 tabelas.
+São 71 colunas; somadas às 14 FKs NOT NULL e às 15 colunas de PK (com a de
+`alembic_version`), dão as 100 restrições NOT NULL que o PostgreSQL 18 lista (B.1). Os
+relacionamentos ORM acompanham as FKs da tabela B.1; coleções, `back_populates` e cascades
+estão na B.2.
 
-**[PENDENTE NO SUPABASE REAL]** Os nomes reais em produção só são iguais a estes se o banco de
-produção tiver sido criado por estas migrações. Antes de qualquer migração que altere uma constraint
-existente (por exemplo, o CHECK de `nome_plano`), os nomes devem ser lidos em `pg_constraint` do
-banco real com consulta somente leitura (Apêndice A, consulta A-2).
+### B.2 Integridade dos vínculos principais
 
-### B.4 Relacionamentos
-
-```
-segmento 1 ──< N empresa              (empresa.id_segmento NOT NULL)
-plano    1 ──< N empresa              (empresa.id_plano_atual NOT NULL)
-plano    1 ──< N analise              (analise.id_plano_referencia NOT NULL — snapshot do plano)
-empresa  1 ──< 0..N usuario           (usuario.id_empresa; CHECK: CLIENTE exige, ADMIN proíbe)
-empresa  1 ──< 0..N analise
-empresa  1 ──< 0..N chamado_suporte
-usuario  1 ──< 0..N analise           (admin responsável; "é ADMIN" só a aplicação garante)
-usuario  1 ──< 0..N upload_relatorio  (id_usuario_admin anulável: NULL = enviado pelo cliente)
-usuario  1 ──< 0..N chamado_suporte / mensagem_suporte / notificacao
-analise  1 ──< 0..2 upload_relatorio  [cascade ORM]
-analise  1 ──  0..1 indicador_analise [cascade ORM]
-analise  1 ──  0..1 relatorio_analise [cascade ORM]
-analise  1 ──< 0..N produto_curva_abc [cascade ORM]
-chamado_suporte 1 ──< 0..N mensagem_suporte (sem cascade)
-upload_relatorio.caminho_arquivo ┄┄ 'db:<chave>' (SEM FK) ┄┄> arquivo_armazenado.chave
-guia_topico.imagem_url           ┄┄ 'db:guia/<hash>' (SEM FK) ┄┄> arquivo_armazenado.chave
-```
-
-Invariantes garantidas só pela aplicação [CÓDIGO]: admin responsável é ADMIN; cliente do chamado
-pertence à empresa do chamado; `status_analise = 'CONCLUIDO'` implica `relatorio_analise.publicado =
-true` (os dois mudam juntos só em `blueprints/admin.py:820-822, 836-837`). O dashboard do cliente
-(`blueprints/cliente.py:99-106, 144-159`) filtra só CONCLUIDO e depende desse acoplamento; histórico,
-detalhe e PDF (`blueprints/cliente.py:229-236, 251-259, 272-283`) conferem os dois. Nenhuma migração
-de dados pode alterar um sem o outro.
-
-### B.5 Mecanismos de exclusão [CÓDIGO]
-
-| Mecanismo | Tabelas | Onde | Reversível |
+| Vínculo | Garantia no banco | Comportamento do ORM | Fluxos e riscos (Comprovado salvo indicação) |
 |---|---|---|---|
-| Soft delete (lixeira) | `empresa.deletado_em`; incrementa `usuario.geracao_autorizacao` dos CLIENTE | `company_security.py:49-61`; rota em `blueprints/admin.py:447-483` | Sim (`restaurar_empresa`, `company_security.py:64-72`, sem reativar contas) |
-| Flags | `plano.ativo`, `segmento.ativo`, `usuario.ativo`, `guia_topico.ativo`, `empresa.status_conta` | `models.py` | Sim |
-| Cascade ORM | 4 filhos de `analise` | `models.py:219-241` | Não |
-| Exclusão permanente de empresa | Enumeração manual: curva ABC, uploads + arquivos, indicador, relatório, análises, mensagens, chamados, notificações, usuários CLIENTE, empresa — uma transação, rollback em erro para as linhas do banco (incluindo `arquivo_armazenado`); arquivos **legados** em disco são apagados antes do commit (`admin.py:566-567` → `storage.py:208-213`) e não voltam em caso de rollback | `blueprints/admin.py:523-612` | **Não** |
-| Exclusão de análise | `analise` + filhos via cascade ORM + arquivos (legados em disco apagados antes do commit, `admin.py:993-994`); aceita análise publicada; **sem teste automatizado** | `blueprints/admin.py:961-1010` | **Não** |
-| Substituição de upload / reprocessamento ETL | `upload_relatorio`, `arquivo_armazenado`, `produto_curva_abc` | `blueprints/cliente.py:352-386`; `blueprints/admin.py:667-700`; `etl_processor.py` | Não |
-| `ON DELETE` no banco | **Nenhum** (16 FKs `NO ACTION`) | [VALIDADO LOCALMENTE] catálogo | — |
+| Empresa → Usuario | FK `usuario.id_empresa`, sem `ON DELETE`; `ck_usuario_role_empresa` exige empresa para CLIENTE e proíbe para ADMIN | `back_populates`, sem cascade de exclusão | A lixeira não altera usuários além da geração de autorização; a restauração não reativa contas; o hard delete apaga os CLIENTE explicitamente. O banco não impede que um ADMIN seja convertido em CLIENTE; `criar_cliente_demo.py` faz isso quando o e-mail coincide (reproduzido em SQLite descartável). |
+| Empresa → Analise | FK NOT NULL, sem `ON DELETE` | sem cascade a partir de `Empresa` | O hard delete enumera as análises à mão. Com a empresa na lixeira, o ADMIN ainda cria análise, publica devolutiva e resolve chamado, com e-mail à empresa (amplia F4.6 da Etapa 0.1). |
+| Analise → UploadRelatorio, IndicadorAnalise, RelatorioAnalise, ProdutoCurvaABC | FKs NOT NULL; 1:1 por UNIQUE para indicador e relatório | `cascade="all, delete-orphan"` (`models.py:224-241`) | A exclusão de análise depende desse cascade. No hard delete, indicador e relatório recebem DELETE duas vezes (enumeração manual + cascade), com `SAWarning`; se avisos virarem erro, a rota quebra. |
+| ChamadoSuporte → MensagemSuporte | FK NOT NULL | relação sem cascade | O hard delete apaga as mensagens antes do chamado, inclusive as enviadas por ADMIN. |
+| ArquivoArmazenado ↔ referências | **Nenhuma FK**: `upload_relatorio.caminho_arquivo` e `guia_topico.imagem_url` guardam `'db:'+chave` | `storage.py` é o ponto único | O banco aceita referência quebrada e blob órfão sem erro. Exclusões apagam o blob sem a checagem de compartilhamento que o upload faz. `migrar_arquivos_para_db.py` usa o nome-base como chave e pode sobrescrever bytes de outro upload. |
 
-Consequência: excluir um pai com filhos remanescentes falha com `IntegrityError` (falha segura).
-Toda nova tabela filha exige atualizar a enumeração manual e/ou o cascade ORM (seção G).
+Qualquer FK nova (Etapas E4 a E7) sem tratamento explícito faz a exclusão de análise e a
+exclusão permanente de empresa falharem por `IntegrityError`, com rollback total e
+mensagem genérica (F6.2 da Etapa 0.1, agora reproduzido em SQLite descartável).
 
-### B.6 Armazenamento de arquivos [CÓDIGO]
+### B.3 Matriz real de exclusão e resíduos (Comprovado; DOCUMENTADO)
 
-- Os bytes das planilhas dos clientes e das imagens do Guia ficam em `arquivo_armazenado.conteudo`
-  (BYTEA), via `storage.py`: `salvar` (sem commit; sobrescreve a mesma chave), `obter`, `resolver`,
-  `materializar_para_etl` (cópia privada 0600 com limite de bytes), `remover`, `url_midia`.
-- Referências `db:<chave>` em `upload_relatorio.caminho_arquivo` e `guia_topico.imagem_url` não têm
-  FK: o banco não impede órfãos nem referências quebradas.
-- Referências **legadas** (sem prefixo `db:`) apontam para disco (`UPLOAD_FOLDER` ou `static/`).
-  O disco do Render é efêmero; esses arquivos **não entram** num dump do banco.
-  `migrar_arquivos_para_db.py` copia legados para o banco (dry-run por padrão, `--apply` grava).
-- Cache em `tempfile.gettempdir()/nexo_arquivos` é regenerável e não é fonte de recuperação.
-- `/midia/<chave>` exige login e só serve o prefixo `guia/` (`app.py:261-277`).
-
-**Cobertura do backup [VALIDADO LOCALMENTE]:** o ensaio isolado comprovou que um `pg_dump` custom
-preserva integralmente o BYTEA de `arquivo_armazenado`: bytes, tamanho, MIME e SHA-256 dos uploads
-conferidos após a restauração, e ETL recalculado sobre os bytes restaurados (seção E).
-
-### B.7 Estratégia de criação e atualização do esquema [CÓDIGO]
-
-- Flask-Migrate/Alembic é a **única autoridade** de esquema em PostgreSQL: `Migrate()` sem argumentos
-  (`extensions.py:29`), `migrate.init_app(app, db)` (`app.py:114`).
-- `flask db upgrade` usa a engine da própria app. A URL direta (`DIRECT_URL`) só é usada com
-  `NEXO_DB_DIRECT=1` (`app.py:93-97`). Se `DIRECT_URL` estiver vazia, `config.py:72-75` cai na
-  `DATABASE_URL`, o que só é recusado em produção (`app.py:83-84`). Nada impede, tecnicamente, migrar
-  pela `DATABASE_URL` (pooler) se `NEXO_DB_DIRECT` for esquecida (qualquer modo) ou, fora de produção,
-  se `DIRECT_URL` estiver vazia.
-- O build do Render **não** migra (`render.yaml:15-17`). O procedimento manual está em
-  `Docs/PREPARACAO_RENDER.md:52-88`.
-- `db.create_all()` só aparece em `init_db.py` (SQLite) e em suítes de teste de autenticação
-  (`tests/test_auth_tokens_security.py`, `tests/postgresql_auth_tokens.py`). Não deve substituir
-  migrações.
-- Listener global de conexão aplica `PRAGMA foreign_keys=ON` em SQLite (`app.py:31-57`).
-
-### B.8 Tabelas: código × migrações × produção
-
-| Tabela | Descrita no código | Prevista nas migrações | Existente em produção |
+| Fluxo | Remove | Mantém | Atomicidade |
 |---|---|---|---|
-| 14 tabelas da aplicação (B.2) | Sim | Sim | **[PENDENTE NO SUPABASE REAL]** — não comprovado |
-| `alembic_version` | Não (Alembic) | Implícita (criada pelo Alembic) | **[PENDENTE]** — e qual revisão registra |
-| `avaliacao_analise`, `fatura_cobranca` | Não (só citadas em docstring) | Não | **[PENDENTE]** — só existem no `.sql` histórico; verificar se alguém o executou |
-| Objetos gerenciados pelo Supabase (`auth`, `storage`, `realtime`, `extensions`, `graphql`, `vault`…) | Não | Não | **[PENDENTE]** — o NEXO não os usa |
+| Mover empresa para a lixeira (`company_security.py`) | nada | 100% dos dados, inclusive BYTEA; usuários com `ativo` preservado e geração +1 (sessões e tokens antigos inválidos) | transacional |
+| Restaurar da lixeira | limpa `deletado_em` | contas bloqueadas continuam bloqueadas; geração não volta (novo login obrigatório) | transacional |
+| Exclusão permanente (`blueprints/admin.py:523-612`) | curva ABC, uploads e seus blobs `db:`, indicador, relatório, análises, mensagens (inclusive de ADMIN), chamados, notificações dos usuários da empresa, CLIENTE e a empresa | notificações de **ADMIN** com nome fantasia e assunto do chamado no texto e links órfãos; e-mails já enviados; backups anteriores | banco transacional; arquivo **legado** é apagado do disco antes do commit (perda se o commit falhar) |
+| Excluir análise (`blueprints/admin.py:963-1010`) | uploads e blobs, indicador, relatório, curva ABC e a análise | notificações que apontam para a análise | idem quanto a legados; captura só `IntegrityError` |
+| Substituir upload pelo ADMIN ou pelo cliente (`blueprints/admin.py:671-700`; `blueprints/cliente.py:354-386`) | registro anterior e seu blob `db:`, se nenhum outro upload usa a mesma referência | blob compartilhado com outro upload; arquivo legado até o commit | transacional; o legado sai do disco após o commit, sem erro se a remoção falhar |
+| Trocar/remover imagem ou excluir tópico do Guia (`blueprints/admin.py:1227-1234` e `1247-1254`) | tópico (na exclusão) e blob `guia/` que nenhum outro tópico usa | imagens legadas em `static/` | transacional |
 
-Os modelos e as migrações coincidem (seção C.4), mas isso **não** valida a estrutura de produção.
+Não existe registro das exclusões definitivas. Uma restauração de backup anterior traz de
+volta empresas e usuários excluídos sem fonte para reaplicar a exclusão (ver G.10 e I).
+
+### B.4 Riscos identificados nesta seção
+
+| # | Risco | Tipo | Sev. | Situação |
+|---|---|---|---|---|
+| B4.1 | Exclusão permanente deixa notificações de ADMIN com dados da empresa (resíduo para LGPD; a mensagem de sucesso diz "todos os seus dados") | Comprovado | Média | DOCUMENTADO; correção de código pendente (arquivos congelados) |
+| B4.2 | FK nova sem política de exclusão quebra exclusões (F6.2) | Comprovado | Média | DOCUMENTADO; diretriz em H |
+| B4.3 | Escritas e e-mails para empresa na lixeira | Comprovado | Média | DOCUMENTADO; pendente |
+| B4.4 | Lixeira sem prazo e sem trilha de exclusões; restauração ressuscita dados | Comprovado | Média | DOCUMENTADO; decisão pendente |
+| B4.5 | Arquivo legado apagado antes do commit; exclusões sem checagem de chave compartilhada | Comprovado | Baixa | DOCUMENTADO; pendente |
+| B4.6 | DELETE duplo de indicador/relatório no hard delete (`SAWarning`) | Comprovado | Baixa | DOCUMENTADO; pendente |
+| B4.7 | Banco não garante coerência papel × empresa entre tabelas (responsável não ADMIN, chamado com cliente de outra empresa) | Comprovado | Baixa | DOCUMENTADO; consultas de detecção TESTADAS LOCALMENTE (G.13, E13) |
+| B4.8 | Nove FKs sem índice; `idx_*` do DDL histórico inexistentes | Comprovado | Baixa | DOCUMENTADO; planejar em migração futura |
+| B4.9 | Docstrings internas erradas (`models.py:1-16`; `admin.py` nega o cascade que usa) | Comprovado | Baixa | DOCUMENTADO; correção pendente (arquivos congelados) |
 
 ---
 
-## C. Estado das migrações
+## C. Migrações
 
-### C.1 Cadeia e head
+### C.1 Cadeia (Comprovado; TESTADO LOCALMENTE)
 
-[CÓDIGO] e [VALIDADO LOCALMENTE] (`ScriptDirectory` offline: `heads = ['e4c004a26b01']`,
-`bases = ['d87a6fbc2fbe']`; e `alembic_version = e4c004a26b01` no PostgreSQL local migrado):
+Confirmado pela API `ScriptDirectory` do Alembic, sem banco: **8 revisões, cadeia linear,
+base `d87a6fbc2fbe`, head única `e4c004a26b01`**, sem `branch_labels` nem `depends_on`;
+todo arquivo começa com o próprio revision id. A informação da análise preliminar está
+correta.
 
-```
-d87a6fbc2fbe (raiz: schema inicial, 12 tabelas)
-└─ c7189696a9cd (indicador_analise.periodo_base_inicio/fim)
-   └─ f958d38a7f19 (relatorio_analise.gerado_por_ia)
-      └─ 91a2ecf56a41 (usuario.primeiro_acesso)
-         └─ d61b5e68082c (guia_topico)
-            └─ a3f1c9b27d04 (empresa.deletado_em)
-               └─ b7c4e2a9f031 (arquivo_armazenado)
-                  └─ e4c004a26b01 (usuario.geracao_autorizacao + UPDATE de dados)  ← HEAD
-```
-
-- 8 revisões, cadeia **linear**, raiz única, **head única `e4c004a26b01`** (confirmada como head).
-- Sem revisões duplicadas, sem merges, sem `branch_labels` nem `depends_on`.
-- **[PENDENTE NO SUPABASE REAL]** A revisão aplicada em produção não está confirmada
-  (`Docs/RELATORIO_NEXO_SEC005_ETL_SEGURO.md:16-17`). O código atual mapeia
-  `usuario.geracao_autorizacao`, criada só pela head: se produção estiver em `b7c4e2a9f031`, as
-  consultas a `Usuario` falham com o código atual.
-
-### C.2 Infraestrutura de migração (`migrations/env.py`) [CÓDIGO]
-
-| Aspecto | Comportamento | Implicação |
-|---|---|---|
-| Engine | Usa a engine da app (`get_engine()`); exige contexto Flask | URL decidida por `NEXO_DB_DIRECT`/`DIRECT_URL` |
-| URL no Config | `render_as_string(hide_password=False)` (`env.py:27-32`), gravada no Config do Alembic por `config.set_main_option` (`env.py:39`) | Senha em memória; o modo online (`env.py:97`) não precisa dela |
-| `compare_type` / `render_as_batch` | Defaults do Flask-Migrate 4.0.7 (ligados) | Autogenerate emite `batch_alter_table` |
-| `compare_server_default` | Desligado | Mudança de `server_default` não é detectada |
-| `transaction_per_migration` | Desligado | No PostgreSQL, todas as revisões pendentes rodam numa única transação e acumulam locks |
-| `lock_timeout` / `statement_timeout` | Ausentes | Um `ALTER` pode ficar na fila e bloquear a aplicação |
-| Logging | `fileConfig` reconfigura o logging global | Rodar migrações via CLI em processo separado |
-| Depreciação | `get_engine` será removido no Flask-SQLAlchemy 3.2 (`env.py:21`); o aviso aparece nos logs de `tests.test_company_restore_migration` e `tests.postgresql_company_restore_migration` (em `tests.test_deploy` e no ensaio de backup o stderr é redirecionado) | Hoje fixado em 3.1.1 (`requirements.txt`); tratar antes de atualizar |
-
-### C.3 Mapa das migrações
-
-| Revisão | Anterior | Descrição | Tabelas | Alterações | Atualiza dados? | Reversão (downgrade) | Riscos | Coerente com `models.py` |
-|---|---|---|---|---|---|---|---|---|
-| `d87a6fbc2fbe` | — | Esquema inicial | 12 tabelas (todas, exceto `guia_topico` e `arquivo_armazenado`) | `create_table` ×12; 4 índices; 19 CHECK (2 nomeados); 8 UNIQUE; 16 FK sem nome e sem ON DELETE; `server_default CURRENT_TIMESTAMP` nas colunas de criação/registro (`data_criacao`, `data_abertura`, `data_envio`, `data_geracao`, `data_upload`) | Não | **Destrutiva total**: remove as 12 tabelas | Constraints anônimas com nomes que dependem do banco | Sim |
-| `c7189696a9cd` | `d87a6fbc2fbe` | Período da base | `indicador_analise` | `add_column` ×2 (`Date`, anuláveis) | Não | Remove 2 colunas (perde valores) | Baixo | Sim |
-| `f958d38a7f19` | `c7189696a9cd` | `gerado_por_ia` | `relatorio_analise` | `add_column` Boolean NOT NULL `server_default 'false'` | Implícito (linhas existentes recebem o default) | Remove a coluna | `'false'` vira texto no SQLite | Sim |
-| `91a2ecf56a41` | `f958d38a7f19` | `primeiro_acesso` | `usuario` | `add_column` Boolean NOT NULL `server_default 'false'` | Implícito (todos `false` no PostgreSQL; no SQLite o literal `'false'` é gravado como texto, como em `f958d38a7f19`) | Remove a coluna; um re-upgrade zera a troca obrigatória de senha | Downgrade em SQLite recria `usuario` (FK/CHECK) | Sim |
-| `d61b5e68082c` | `91a2ecf56a41` | CMS do Guia | `guia_topico` | `create_table` + `ix_guia_topico_categoria`; `ativo` DEFAULT true | Não | Remove a tabela (perde o conteúdo do CMS) | Baixo | Sim |
-| `a3f1c9b27d04` | `d61b5e68082c` | Soft delete | `empresa` | `add_column` `deletado_em` (anulável) | Não | Remove a coluna: empresas da lixeira voltam a parecer ativas | Semântica de segurança | Sim |
-| `b7c4e2a9f031` | `a3f1c9b27d04` | Arquivos no banco | `arquivo_armazenado` | `create_table` (BYTEA) | Não | **Remove todos os arquivos**; referências `db:` ficam órfãs | Crescimento do banco | Sim |
-| `e4c004a26b01` (HEAD) | `b7c4e2a9f031` | SEC-004: geração de autorização | `usuario` (lê `empresa`) | `add_column` Integer NOT NULL DEFAULT 0 com CHECK de coluna nomeado; `UPDATE` que define `ativo=false` e `geracao_autorizacao=1` para CLIENTE de empresas na lixeira | **Sim, UPDATE explícito** | Remove a coluna e o histórico de revogação; **não restaura `ativo`** | Lock ACCESS EXCLUSIVE; exige janela com escritores parados (docstring `:6-13`) | Sim |
-
-A última coluna indica que as operações da revisão coincidem com as definições atuais de `models.py`;
-um banco parado numa revisão anterior à head **não** atende o código atual (C.1).
-
-**Conclusões:** nenhum downgrade é rollback seguro em produção; o caminho de retorno é restaurar
-backup verificado (`Docs/OPERACAO_BACKUP_RESTAURACAO.md:229-240`). A `e4c004a26b01` é a única com
-atualização explícita de dados e é irreversível quanto a esses dados.
-
-### C.4 Compatibilidade modelos × migrações
-
-- **[VALIDADO LOCALMENTE]** `tests/test_deploy.py::test_migrations_empty_database_repeat_upgrade_and_metadata`
-  aprovado: SQLite vazio migrado até a head, upgrade repetido sem efeito, conjunto de tabelas igual
-  ao metadata e `compare_metadata == []`.
-- **[VALIDADO LOCALMENTE]** No PostgreSQL 16.15 local, as migrações produzem as 14 tabelas +
-  `alembic_version`, e o ensaio de backup confirma tabelas e revisão iguais à head.
-- **[CÓDIGO]** Comparação estática coluna a coluna: 14 tabelas, 142 colunas, tipos, nulidade, 20 CHECK
-  com texto idêntico, 8 UNIQUE, 16 FK e 5 índices coincidem. Diferenças só de forma:
-  - D1: `geracao_autorizacao` usa `server_default=sa.text("0")` na migração e `"0"` no modelo
-    (equivalentes);
-  - D2: `ck_usuario_geracao_autorizacao` é CHECK de coluna na migração e de tabela no modelo (mesmo
-    objeto no PostgreSQL; DDL diferente no SQLite).
-- **Lacunas da verificação atual** [CÓDIGO]: o `compare_metadata` roda **só em SQLite** e só com
-  `compare_type`. Não compara CHECK, `server_default`, nomes de constraints nem `ondelete` em
-  PostgreSQL. Uma mudança em `nome_plano IN (...)` no modelo sem migração passaria no teste. Só a
-  transição `b7c4e2a9f031 → e4c004a26b01` tem teste com dados pré-existentes.
-
-### C.5 Riscos das migrações
-
-| ID | Risco | Tipo | Gravidade |
-|---|---|---|---|
-| M1 | Revisão aplicada em produção desconhecida; `upgrade head` às cegas aplicaria a SEC-004 junto com revisões novas | Potencial | Alta |
-| M2 | Upgrade da head sobrescreve `ativo` de forma irreversível | Comprovado | Alta |
-| M3 | Todos os downgrades destroem dados | Comprovado | Alta |
-| M4 | Constraints sem nome: alterar CHECK de plano/status exige o nome real no PostgreSQL e recriação de tabela no SQLite | Comprovado | Média |
-| M5 | Batch recreate no SQLite descarta CHECK anônimo e tende a falhar com `foreign_keys=ON` em tabela pai | Potencial | Média |
-| M6 | Sem `lock_timeout`/`statement_timeout`; todas as revisões numa transação | Potencial | Média |
-| M7 | Paridade verificada só em SQLite; CHECK/defaults não comparados | Comprovado | Média |
-| M8 | SQLAlchemy e Alembic sem pin direto (localmente resolveram para 2.1.6 e 1.20.1) | Comprovado | Baixa |
-| M9 | Sem `NEXO_DB_DIRECT=1`, `flask db upgrade` usaria a `DATABASE_URL` (pooler) | Potencial | Baixa |
-
----
-
-## D. Sistema de backup existente
-
-### D.1 Componentes analisados
-
-| Componente | Função | Acessa banco externo? |
-|---|---|---|
-| `Docs/OPERACAO_BACKUP_RESTAURACAO.md` | Roteiro de backup lógico, criptografia, restauração isolada e rollback | n/a (documento) |
-| `scripts/verificar_prontidao_backup.py` | Verifica ferramentas (`--version`), cabeçalho `PGDMP`, SHA-256 e `pg_restore --list` de um arquivo local | **Não**: não importa a app, não lê `.env`, ambiente filho filtrado (`PGPASSFILE`/`PGSERVICEFILE` = `/dev/null`) |
-| `tests/test_backup_readiness.py` | 13 testes do verificador, com `subprocess` simulado | **Não** |
-| `tests/test_backup_restore.py` | Ensaio PostgreSQL completo (opt-in via `NEXO_TEST_POSTGRES_BIN`) + 4 testes de segurança do ensaio | **Não**: cluster próprio em `127.0.0.1`, porta efêmera, sem socket Unix, SCRAM com usuário/senha aleatórios; ambiente filtrado sem `DATABASE_URL`/`DIRECT_URL`/`PG*` herdados (define apenas `PG*` sintéticos do próprio cluster, `:392-394`); recusa URL em `NEXO_TEST_POSTGRES_BIN` |
-| `tests/postgresql_support.py` | Cluster privado (socket Unix 0700, sem TCP) das suítes `postgresql_*` | **Não**: recusa DSN; `DROP DATABASE` só no namespace `nexo_security_test_*` |
-| CI (`nexo-security-ci.yml`) | Executa o ensaio no job `security-sqlite-browser` a cada PR e push na `main` | **Não** (variáveis sintéticas) |
-
-Os mecanismos estão corretos e **foram preservados sem alteração** nesta etapa.
-
-### D.2 Respostas às verificações da Subetapa 0.2.4
-
-| # | Verificação | Resultado |
-|---|---|---|
-| 1 | Planejamento | Dump lógico `--format=custom`, cifrado, fora do GitHub e do Render, restauração isolada; frequência diária e retenção 7/4/3 apenas **recomendadas, não implantadas** (`Docs/OPERACAO_BACKUP_RESTAURACAO.md:136, 142`). Não há backup automatizado no repositório (CI sem `schedule`) |
-| 2 | Ferramentas | `pg_dump`, `pg_restore`, `psql`; no ensaio também `initdb`, `pg_ctl`, `createdb`; SHA-256 via `hashlib`; `gpg` documentado |
-| 3 | Acesso externo | Nenhum script ou teste auditado acessa banco externo (D.1) |
-| 4 | Segurança das operações | Ensaio sem `DROP`, sem `--clean`/`--create`; restore em banco novo com `--single-transaction --exit-on-error --no-owner --no-privileges`; diretórios temporários; credenciais sintéticas 0600 |
-| 5 | Verificação do arquivo | Tamanho > 0, cabeçalho `PGDMP`, `pg_restore --list` com `TABLE DATA public <tabela>` para cada tabela e `alembic_version`; arquivo truncado é rejeitado |
-| 6 | Integridade | Todas as linhas e colunas (incluindo BYTEA) iguais entre origem e destino; tabelas = metadata + `alembic_version`; sequências acima do máximo; FK aplicada (inserção inválida falha) |
-| 7 | Restauração de teste | `initdb` → `pg_ctl start` → `createdb` origem/destino → migrações reais → dados sintéticos → `pg_dump` → SHA-256 → TOC → CLI de prontidão → `pg_restore` → validação → `pg_ctl stop` → remoção do diretório |
-| 8 | Hashes | SHA-256 do dump (gerado, conferido, recalculado após o restore) e dos uploads (`hash_arquivo`) |
-| 9 | Arquivos dos clientes | BYTEA entra no dump e é conferido byte a byte; **legados em disco ficam fora** |
-| 10 | Exclusão/sobrescrita | Risco baixo no mecanismo; restauração nunca sobre produção (proibição explícita no roteiro) |
-
-### D.3 Ensaio isolado × 12 requisitos da Subetapa 0.2.6
-
-| # | Requisito | Atendido | Evidência |
-|---|---|---|---|
-| 1 | Banco fictício | Sim | `initdb` + `createdb nexo_restore_source` (`tests/test_backup_restore.py:395-410`) |
-| 2 | Migrações versionadas | Sim | `flask_migrate.upgrade` (`:423`), após verificação da engine privada (`:422`) |
-| 3 | Dados de teste | Sim | `fixture()` (`:213-279`): plano, segmento, 2 empresas, admin, 2 clientes, 2 análises, 4 uploads BYTEA, chamados, notificações, guia |
-| 4 | Backup | Sim | `pg_dump --format=custom` (`:430-433`) |
-| 5 | Integridade | Sim | `PGDMP`, SHA-256, TOC, CLI de prontidão, rejeição de truncado (`:434-455`) |
-| 6 | Destino separado | Sim | `nexo_restore_target` e app separada (`:409-410, 460-461`) |
-| 7 | Restauração | Sim | `pg_restore --single-transaction --exit-on-error --no-owner --no-privileges` (`:457-458`) |
-| 8 | Tabelas | Sim | Conjunto igual e 15 tabelas (`:293, 97`) |
-| 9 | Relacionamentos | **Parcial** | Relações ORM, FK negativa e referências `db:` dos registros sintéticos (`:297-324, 349-354`); não compara estruturalmente FK/UNIQUE/CHECK/índices entre origem e destino |
-| 10 | Integridade dos dados | Sim | Snapshot integral, hashes, ETL, sequências, rotas (`:296-370`) |
-| 11 | Revisão Alembic | Sim | Igual à origem e à head dos scripts (`:294-295`) |
-| 12 | Encerramento e limpeza | Sim | `pg_ctl stop` no worker e no pai; `TemporaryDirectory` (`:66, 77-88, 470-478`) — confirmado nesta execução: nenhum processo `postgres` nem diretório temporário remanescente |
-
-Conforme exigido, **não foi criado mecanismo paralelo**: a infraestrutura existente atende aos
-requisitos. Melhorias recomendadas (não aplicadas): comparação estrutural de constraints entre origem
-e destino; fixture com empresa na lixeira, usuário inativo, `geracao_autorizacao > 0` e referência
-legada; verificação da identidade do servidor após `pg_ctl start`; criação dos arquivos de credencial
-sintética já com 0600.
-
-### D.4 O que um dump do banco NÃO protege
-
-| Item | Consequência |
-|---|---|
-| Arquivos legados em disco (referências sem `db:`) | Não estão no dump nem no Git; o disco do Render é efêmero |
-| Segredos e variáveis do Render (`SECRET_KEY` gerada pelo Render, `DATABASE_URL`, `DIRECT_URL`, `BREVO_API_KEY` e, se existirem, `ANTHROPIC_API_KEY`/`HF_API_TOKEN`) | Precisam de inventário privado próprio. Perder a `SECRET_KEY` invalida sessões e tokens em trânsito, sem perda de dados (senhas usam hash próprio); vazá-la exige rotação |
-| Roles globais e senhas | `pg_dump` não exporta roles ([backup-dump](https://www.postgresql.org/docs/current/backup-dump.html)) |
-| Configuração do projeto Supabase (Data API, Exposed schemas, Auth, SSL enforcement, PITR, pooler) | Fica no painel; não está no dump |
-| Objetos do Supabase Storage | Não usados pelo NEXO; backups do Supabase não incluem os objetos ([backups](https://supabase.com/docs/guides/platform/backups)) |
-| Logs, cache, estado em memória (rate limit, Socket.IO) | Regeneráveis; não são fonte de recuperação |
-| Contas externas (Brevo, Anthropic, Hugging Face) e configuração do GitHub | Fora do banco |
-
-### D.5 Correções documentais identificadas (não aplicadas nesta etapa)
-
-O roteiro existente está correto em método, mas contém fatos desatualizados. Para não alterar
-mecanismos sem necessidade, as correções ficam registradas aqui e devem ser aplicadas em PR própria:
-
-| Local | Desatualização | Correção |
-|---|---|---|
-| `Docs/OPERACAO_BACKUP_RESTAURACAO.md:16` | "sete revisões" e head `b7c4e2a9f031` | 8 revisões, head `e4c004a26b01` |
-| `Docs/OPERACAO_BACKUP_RESTAURACAO.md` (seção de rollback) | Não cita que o downgrade da head perde o histórico de revogação e não restaura `ativo` | Incluir a ressalva da `e4c004a26b01` |
-| `Docs/OPERACAO_BACKUP_RESTAURACAO.md:29` | Inventário de `usuario` não cita `geracao_autorizacao` (criada pela `e4c004a26b01`) | Incluir a geração de autorização entre os dados que devem sobreviver |
-| `Docs/OPERACAO_BACKUP_RESTAURACAO.md:259` | Contém caminho local de máquina com nome de usuário do sistema operacional | Substituir por marcador genérico |
-| `Docs/AUDITORIA_RENDER.md:76` (e `:17`, `:27`) | "Cadeia única de 7 revisões; head `b7c4e2a9f031`" | 8 revisões, head `e4c004a26b01` |
-| `Docs/OPERACAO_BACKUP_RESTAURACAO.md:98` | Admite a exportação complementar limitada ao schema da aplicação sem avisar que `pg_dump --schema=public` inclui `CREATE SCHEMA public` e falha ao ser restaurado num banco novo com `--exit-on-error` | Registrar a preparação do destino validada na E.2, item 12 (`--use-list` sem a entrada `SCHEMA - public`) |
-| `Docs/CI_SEGURANCA.md:48` | Afirma, sem distinguir os jobs, que a versão do PostgreSQL é registrada; só o job `security-postgresql` executa `postgres --version` (`nexo-security-ci.yml:82`); o job `security-sqlite-browser`, que roda o ensaio de backup, não a imprime | Registrar `postgres --version` também no job `security-sqlite-browser` ou restringir a frase ao job `security-postgresql` |
-
----
-
-## E. Resultados dos testes
-
-### E.1 Ambiente de execução [VALIDADO LOCALMENTE]
-
-| Item | Valor |
-|---|---|
-| Sistema | Container Linux isolado, sem acesso a Supabase/Render; sem `.env`; nenhuma variável `DATABASE_URL`, `DIRECT_URL`, `SECRET_KEY` ou `PG*` definida |
-| Python | 3.12.3, em virtualenv **fora do repositório** (Render fixa 3.12.10; CI usa 3.12 flutuante) |
-| Dependências | Instaladas pelo instalador verificado do próprio projeto: `python -I tools/install_dependencies.py --requirements requirements-dev.txt` (pip 26.2.2 com SHA-256 conferido; `pip check` sem conflitos). Nenhum arquivo de dependência foi alterado |
-| Versões transitivas resolvidas | SQLAlchemy 2.1.6, Alembic 1.20.1 (sem pin no repositório) |
-| PostgreSQL | 16.15 (pacote Ubuntu): `pg_dump`, `pg_restore`, `psql`, `initdb`, `pg_ctl` 16.15. O cluster de sistema do pacote permaneceu parado e não foi usado |
-| Usuário | Testes PostgreSQL executados como usuário de sistema não-root (`initdb` recusa root), com `env -i` (ambiente limpo) |
-
-### E.2 Comandos executados e resultados
-
-| # | Comando | Resultado |
-|---|---|---|
-| 1 | `python -B scripts/verificar_prontidao_backup.py --dry-run` | **Código 0.** `pg_dump`, `pg_restore`, `psql` localizados; nenhum subprocesso; "Restauração: não executada" |
-| 2 | `python -B scripts/verificar_prontidao_backup.py` | **Código 0.** As três ferramentas responderam a `--version` |
-| 3 | `python -B -m unittest tests.test_backup_readiness -v` | **13/13 aprovados** |
-| 4 | `NEXO_TEST_POSTGRES_BIN=/usr/lib/postgresql/16/bin python -B -m unittest tests.test_backup_restore -v` | **5/5 aprovados** (6,1 s). Relatório do ensaio: `status: ok`, `tables: 15`, `uploads: 4`, `files: 5`, `production_access: false`, 17 verificações (`migrations`, `custom_dump`, `sha256`, `pg_restore_list`, `readiness_cli`, `invalid_archive_rejected`, `restore`, `all_rows`, `relationships`, `binary_files`, `sequences`, `foreign_keys`, `etl`, `health`, `csrf_login`, `dashboard`, `company_isolation`) |
-| 5 | `python -B -m unittest tests.test_deploy tests.test_company_restore_migration -v` | **18/18 aprovados** (SQLite: paridade modelos × migrações, seed idempotente, transição SEC-004 com dados sintéticos) |
-| 6 | `NEXO_TEST_POSTGRES_BIN=... python -B -m unittest tests.postgresql_company_restore_migration -v` | **6/6 aprovados** (PostgreSQL privado, incluindo falha atômica: coluna, dados e revisão revertidos juntos) |
-| 7 | `NEXO_TEST_POSTGRES_BIN=... python -B -m unittest discover -s tests -t . -v` (mesmo comando do job 1 do CI, `nexo-security-ci.yml:60`, mas sem navegador, sem as variáveis sintéticas do workflow (`:17-29`) e com usuário não-root que não é dono do checkout) | 531 executados: **518 aprovados, 11 ignorados, 2 falhas ambientais** (ver E.3). O ensaio de backup foi executado novamente dentro da suíte e aprovado |
-| 8 | `python -B -m unittest tests.test_configuration_deploy -v` (como dono do checkout) | **10/10 aprovados**, incluindo os 2 que falharam no item 7 |
-| 9 | `NEXO_TEST_POSTGRES_BIN=... python -B -m unittest tests.postgresql_auth_tokens tests.postgresql_session_revocation tests.postgresql_company_restore_security tests.postgresql_company_restore_migration tests.postgresql_etl_resource_security -v` (job 2 do CI) | **108/108 aprovados** |
-| 10 | Inspeção de catálogo: migrações aplicadas em PostgreSQL privado vazio (reutilizando `tests/postgresql_support.PrivatePostgreSQL`, script auxiliar fora do repositório) e leitura de `pg_class`, `pg_constraint`, `pg_indexes`, `pg_sequences`, `information_schema.columns` | `alembic_version = e4c004a26b01`; 15 tabelas; nomes de constraints da seção B.3; 16 FK `NO ACTION`; RLS desligada em todas; banco removido e cluster encerrado ao final |
-| 11 | `ScriptDirectory('migrations')` (Alembic offline, sem banco) | `heads = ['e4c004a26b01']`, `bases = ['d87a6fbc2fbe']`, 8 revisões lineares |
-| 12 | Ensaio de escopo (script auxiliar fora do repositório, reutilizando `tests/postgresql_support.PrivatePostgreSQL`; PostgreSQL 16.15 privado, migrações reais, 1 segmento sintético): `pg_dump --format=custom --schema=public` e `pg_dump --format=custom` sem filtro, cada um restaurado com `pg_restore --no-owner --no-privileges --single-transaction --exit-on-error` em banco novo | Dump com `--schema=public`: o TOC contém a entrada `SCHEMA - public` (o dump sem filtro não a contém). **Restauração num banco novo: código 1**, `ERROR: schema "public" already exists`; a transação inteira foi desfeita. **Funcionaram (código 0, 15 tabelas, `alembic_version = e4c004a26b01`):** (a) `pg_restore --use-list` com o TOC sem a entrada `SCHEMA - public`; (b) `DROP SCHEMA public` no banco de destino recém-criado e vazio antes do `pg_restore`. O dump sem filtro restaurou num banco novo com código 0 e 15 tabelas. Bancos removidos e cluster encerrado |
-| 13 | Ensaio dos Apêndices A e B (script auxiliar fora do repositório; PostgreSQL 16.15 privado, migrações reais, dados sintéticos): o bloco bash do Apêndice B executado como está no documento, com os placeholders trocados por caminhos do cluster descartável (service file + passfile 0600 pelo socket local, sem TLS; chave GnuPG efêmera); sessão `REPEATABLE READ READ ONLY` com `pg_export_snapshot()` e A-14 mantida aberta durante os dumps, com uma inserção sintética concorrente feita depois do snapshot; o bloco SQL do Apêndice A executado via `psql` dentro do envoltório READ ONLY, na origem e na cópia | **Código 0** em todo o Apêndice B: artefatos B e A gerados, SHA-256 conferidos, TOC listado, CLI de prontidão aprovada nos dois, cifragem, descriptografia de teste com hash igual ao original e restauração do artefato A com `--use-list` (15 tabelas, `alembic_version = e4c004a26b01`). Contagens A-14 (15 linhas) da cópia **iguais às do snapshot**; a inserção concorrente ficou fora da cópia (origem com 2 segmentos, cópia com 1). Apêndice A: **código 0** na origem e na cópia, sem erros, nas 20 consultas; as roles do Supabase não existem localmente, por isso A-3, A-9, A-9b, A-9c e A-10 só tiveram a sintaxe e o papel `public` conferidos. Bancos removidos; cluster e `gpg-agent` encerrados |
-
-**Consolidado local no commit `c919b1d`:** 531 testes gerais. Na execução do item 7: 518 aprovados,
-11 ignorados e 2 reprovados por causa ambiental; esses 2 foram aprovados na reexecução separada do
-item 8, o que dá 520 aprovados **somando as duas execuções**. Nenhuma falha é atribuível ao código.
-108/108 testes PostgreSQL (item 9). A quantidade de testes (531 e 108) coincide com a registrada na
-SEC-005 (`Docs/RELATORIO_NEXO_SEC005_ETL_SEGURO.md:245-253`); lá, porém, os 531 foram aprovados com
-Chromium habilitado (0 falhas, erros ou ignorados), enquanto aqui 11 foram ignorados por falta de
-navegador e 2 só passaram na reexecução do item 8.
-
-### E.3 Testes reprovados, não executados e justificativas
-
-| Item | Situação | Justificativa |
-|---|---|---|
-| `tests.test_configuration_deploy.ConfigurationTests.test_development_import_without_production_secret` e `tests.test_configuration_deploy.ConfigurationTests.test_wsgi_production_import_and_liveness_without_database_connection` | Reprovados no item 7, **aprovados** no item 8 | Causa ambiental comprovada: com o usuário não-root, a app não pôde criar `<repo>/instance` (checkout pertencente a outro usuário) — `PermissionError` em `app.py:105`. No CI, o checkout pertence ao próprio usuário do runner (inferência coerente com os 531 aprovados registrados na SEC-005). Não é defeito do código |
-| 11 testes `test_nexobot_navegador` | Não executados (ignorados) | Exigem `NEXO_TEST_BROWSER=1` e navegador Chromium do Playwright; fora do escopo de banco desta etapa. O CI os executa |
-| Qualquer verificação no Supabase real | Não executada | Proibida nesta etapa; exige autorização e credenciais (seções F e I) |
-| Backup real, restauração de backup real | Não executados | Idem |
-| Restauração de um dump completo de banco Supabase (artefato B de F.2) | Não ensaiada | O cluster local não tem os schemas, roles e extensões gerenciados do Supabase; o ensaio exige ambiente compatível (F.2, passo 11) |
-
-**RESTAURAÇÃO LOCAL EXECUTADA COM SUCESSO** (dados sintéticos, PostgreSQL 16.15). Isso demonstra a
-**capacidade técnica** de backup e restauração do esquema do NEXO nessa major, mas **não** comprova
-que o banco de produção esteja protegido nem que o procedimento funcione na major do servidor real,
-que ainda não foi confirmada (F.1, implicação 2; I.4, item 1). A proteção operacional só poderá ser
-declarada após um backup real autorizado e uma restauração isolada validada na mesma major (seção J).
-
-### E.4 Limpeza do ambiente
-
-Nenhum processo `postgres` nem diretório temporário dos ensaios permaneceu ativo (conferido também
-após os itens 12 e 13). Os diretórios `.audit_tmp/` e `instance/` criados pelos testes, ignorados
-pelo Git, foram removidos ao final. Os scripts auxiliares e o virtualenv ficaram fora do repositório.
-
----
-
-## F. Estratégia de proteção do Supabase
-
-### F.1 Fatos da documentação oficial consultada em 2026-10-24 [DOC]
-
-| Tema | Fato | Fonte |
-|---|---|---|
-| Backups gerenciados | Backup diário automático só nos planos Pro (7 dias), Team (14) e Enterprise; **Free: não incluído** — a recomendação é exportar regularmente e manter cópia off-site | [backups](https://supabase.com/docs/guides/platform/backups); [pricing](https://supabase.com/pricing) |
-| PITR | Add-on dos planos pagos; exige compute Small ou maior; ao ativar, os backups diários deixam de ser feitos | [backups](https://supabase.com/docs/guides/platform/backups) |
-| Backup físico | Projetos em Postgres 15.8.1.079 ou mais novo usam backup físico; o arquivo lógico baixável deixa de ser gerado; alternativa: `supabase db dump` ou `pg_dump` | [backups](https://supabase.com/docs/guides/platform/backups); [download-logical-backups](https://supabase.com/docs/guides/troubleshooting/download-logical-backups) |
-| Conexão para `pg_dump` | Conexão direta (`db.<ref>.supabase.co:5432`, IPv6, ou IPv4 com add-on) recomendada para "pg_dump, backup and restore"; em rede só IPv4 sem add-on, Session pooler (Supavisor, porta 5432, usuário `postgres.<ref>`), que o guia de migração recomenda para pg_dump/restore; o Transaction pooler (6543) perde o estado de sessão entre transações, e por isso este documento o descarta para o backup (inferência, não proibição explícita da fonte) | [connecting-to-postgres](https://supabase.com/docs/guides/database/connecting-to-postgres); [migrating-to-supabase/postgres](https://supabase.com/docs/guides/platform/migrating-to-supabase/postgres) |
-| Compatibilidade | `pg_dump` não faz dump de servidor de major mais nova que a sua; a saída não tem garantia de carga em major mais antiga | [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) |
-| Limite do dump lógico | Fora de casos simples, o `pg_dump` geralmente não é a escolha certa para backups regulares de produção (Capítulo 25 da documentação). No NEXO, no plano Free, é o único mecanismo acessível; isso reforça avaliar plano pago/PITR (I.5, item 1) | [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) |
-| Dump de schema específico | `-n/--schema` seleciona o próprio schema e todo o seu conteúdo; não há garantia de que um dump de schema específico se restaure sozinho num banco limpo. Comportamento confirmado localmente na E.2, item 12 | [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) |
-| Versão no Supabase | Postgres 17 é o padrão atual da plataforma (afirmação feita no changelog 46080, que trata do self-hosted); projetos hospedados em Postgres 15 seguem suportados até o fim de vida do PG 15 na plataforma, sem data publicada | [changelog 46080](https://supabase.com/changelog/46080-self-hosted-supabase-upgrading-from-pg-15-to-17-breaking-change); [upgrading](https://supabase.com/docs/guides/platform/upgrading) |
-| Credenciais | `.pgpass` (0600) ou service file; `PGPASSWORD` não recomendado | [libpq-pgpass](https://www.postgresql.org/docs/current/libpq-pgpass.html); [libpq-envars](https://www.postgresql.org/docs/current/libpq-envars.html) |
-| TLS | Mínimo `sslmode=require`; para verificar o servidor, `verify-full` com o certificado raiz do painel | [connecting-to-postgres](https://supabase.com/docs/guides/database/connecting-to-postgres); [libpq-ssl](https://www.postgresql.org/docs/current/libpq-ssl.html) |
-| CLI do Supabase | `supabase db dump` roda `pg_dump` em contêiner e ignora `auth`, `storage` e os schemas criados por extensões; a conexão vem do projeto vinculado (`supabase link` + `--linked`, senha por `-p/--password`) ou de `--db-url` com string percent-encoded. As duas formas põem a senha em argumento de processo, o que contraria F.2, passo 6 | [supabase-db-dump](https://supabase.com/docs/reference/cli/supabase-db-dump) |
-| Dumps em texto plano | CVE-2025-8714 (injeção via meta-comandos do psql) corrigido em 17.6, 16.10, 15.14 | [CVE-2025-8714](https://www.postgresql.org/support/security/CVE-2025-8714/) |
-| Restauração | Restaurar um dump faz o destino executar código arbitrário escolhido pelos superusuários da origem, e dumps ou restaurações parciais não limitam isso; se eles não forem confiáveis, inspecionar o SQL antes (`pg_restore --file=<saida>.sql <dump>`). Restaurar só em ambiente isolado é decisão deste documento | [pg_restore](https://www.postgresql.org/docs/current/app-pgrestore.html) |
-| Data API | O schema `public` é exposto na Data API por padrão; tabela em schema exposto sem RLS é legível e gravável por qualquer role com grant; lint `0013_rls_disabled_in_public` (ERROR); alternativa: remover `public` dos Exposed schemas ou desligar a Data API | [using-custom-schemas](https://supabase.com/docs/guides/api/using-custom-schemas); [row-level-security](https://supabase.com/docs/guides/database/postgres/row-level-security); [database-advisors](https://supabase.com/docs/guides/database/database-advisors); [hardening-data-api](https://supabase.com/docs/guides/database/hardening-data-api) |
-| Mudança anunciada | Tabelas novas deixam de ser expostas automaticamente na Data API; aplicação a projetos existentes anunciada para 2026-10-30; **tabelas existentes mantêm os grants atuais** | [changelog 45329](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically) |
-
-**Implicações para o NEXO:**
-
-1. Flask-Migrate/Alembic continua a única autoridade de esquema: **não** introduzir
-   `supabase migrations`, `supabase db push` nem o schema `supabase_migrations`.
-2. O ambiente local desta etapa tem `pg_dump` 16.15. **Se o servidor do Supabase for Postgres 17, esse
-   cliente não serve** para o backup real; será preciso `pg_dump`/`pg_restore`/`psql` 17.x (≥ 17.6).
-3. **Não reaproveitar `DATABASE_URL`** (pooler da aplicação) para o backup; o SQLAlchemy também
-   reescreve o esquema da URL para `postgresql+psycopg2`, inválido para libpq.
-4. Se o plano do projeto for Free, o dump lógico cifrado e off-site é a **única** cópia de
-   recuperação.
-
-### F.2 Procedimento do backup real (preparado; NÃO executado)
-
-Cada passo indica o estado da verificação.
-
-| # | Passo | Como | Estado |
-|---|---|---|---|
-| 0 | Autorização | Registro escrito do proprietário: janela, responsável, destino do arquivo, custódia da chave de criptografia, política de retenção | **[PENDENTE]** |
-| 1 | Identificar o banco correto | Copiar host, porta e usuário do painel **Connect** do projeto de produção (nunca de exemplos da documentação); confirmar o *project ref* com o proprietário; conferir que não é projeto de desenvolvimento | **[PENDENTE NO SUPABASE REAL]** |
-| 2 | Identificar a versão | Sessão somente leitura: `SHOW server_version_num; SELECT version();` (Apêndice A, A-1) | **[PENDENTE]** — procedimento [DOC] |
-| 3 | Verificar permissões | Consultas A-3/A-5 (role atual, `rolbypassrls`, dono das tabelas, RLS) | **[PENDENTE]** — consultas preparadas [CÓDIGO/DOC] |
-| 4 | Definir o escopo | Inventário somente leitura dos schemas e de onde está `alembic_version` (A-4, A-15). Artefato **B (principal)**: dump do banco completo (`pg_dump -Fc`, sem `--schema`), conforme `Docs/OPERACAO_BACKUP_RESTAURACAO.md:37, 98`; se falhar por permissão ou por objetos gerenciados, o backup **não está aprovado** até o procedimento ser ajustado com o provedor, sem excluir `auth`, `storage` ou `realtime` e sem rebaixar privilégios. Artefato **A (complementar)**: `pg_dump -Fc --schema=public` (14 tabelas + `alembic_version`), para a restauração isolada da aplicação; não substitui B. Qualquer decisão do proprietário de aceitar só A é registrada por escrito como exceção ao roteiro e incluída na D.5. O proprietário aprova o escopo por escrito | Dump custom do banco local validado [VALIDADO LOCALMENTE]; `--schema=public` ensaiado localmente: exige preparar o destino (E.2, item 12; passo 11); escopo real **[PENDENTE]** |
-| 5 | Ambiente seguro | Máquina controlada pelo responsável (não o Render, não o CI, nem qualquer ambiente compartilhado), disco cifrado, `umask 077`, diretório novo por execução fora do checkout; cliente PostgreSQL da **mesma major do servidor** (≥ 17.6 se o servidor for 17) | **[PENDENTE]** |
-| 6 | Credenciais | Service file exclusivo do backup + `.pgpass` 0600 fora do repositório; `sslmode=verify-full` com certificado raiz do painel (validar no pooler; se falhar só no pooler, preferir conexão direta a rebaixar o TLS); nunca `PGPASSWORD`, senha em argumento ou `DATABASE_URL` da app | Mecanismo [DOC]; execução **[PENDENTE]** |
-| 7 | Dump consistente | Para cada artefato: `pg_dump --dbname="service=<backup>" --no-password --format=custom [--schema=public] --file=<dir>/<nome>.dump.partial`, depois `mv -n` para o nome final; acrescentar `--snapshot=<id>` quando as contagens forem tiradas no mesmo snapshot (passo 12). O `pg_dump` exporta um snapshot consistente sem bloquear usuários | Formato custom, service file com passfile, `--snapshot` e `--schema=public` ensaiados em cluster local [VALIDADO LOCALMENTE] (E.2, itens 4, 12 e 13); TLS e conexão ao Supabase não ensaiados; real **[PENDENTE]** |
-| 8 | Validar integridade | `sha256sum` → manifesto; `pg_restore --list`; `python -B scripts/verificar_prontidao_backup.py --backup <arquivo> --sha256 <hash> --list` | CLI validada no ensaio e nos dois artefatos do Apêndice B [VALIDADO LOCALMENTE] (E.2, itens 4 e 13); real **[PENDENTE]** |
-| 9 | Proteger o arquivo | Cifrar imediatamente para chave pública verificada (`gpg --encrypt --recipient <fingerprint>`) ou `age -r`; hash também do arquivo cifrado; manter o arquivo em claro só no diretório privado até concluir a descriptografia de teste, a conferência do hash original e a restauração do passo 11; só então removê-lo, conforme a política aprovada (`Docs/OPERACAO_BACKUP_RESTAURACAO.md:132`) | [DOC]; comandos `gpg` ensaiados com chave efêmera local [VALIDADO LOCALMENTE] (E.2, item 13); chave e destino reais **[PENDENTE]** |
-| 10 | Armazenar fora do GitHub | Destino privado, separado da infraestrutura de produção, com retenção definida e cópia independente; nunca no checkout (o `.gitignore` é rede de segurança, não mecanismo de sigilo) | **[PENDENTE]** — decisão do proprietário |
-| 11 | Restaurar em ambiente isolado | PostgreSQL vazio, novo, da mesma major, sem rede para produção: `pg_restore --no-owner --no-privileges --single-transaction --exit-on-error`; depois `ANALYZE`. **Artefato A:** o dump contém `CREATE SCHEMA public` e falha num banco novo; restaurar com `--use-list` de um TOC sem a entrada `SCHEMA - public` (preferível, porque não executa DDL destrutivo) ou, só no banco recém-criado e vazio, `DROP SCHEMA public` sem `CASCADE` antes do `pg_restore`. **Artefato B:** exige ambiente compatível com os schemas, roles e extensões gerenciados do Supabase (`Docs/OPERACAO_BACKUP_RESTAURACAO.md:190, 202`); falha de extensão ou de permissão não é sucesso. Nunca sobre o Supabase, nunca `stamp`/`upgrade`/seed na cópia | Artefato A: restauração e as duas preparações do destino validadas [VALIDADO LOCALMENTE] (E.2, itens 4, 12 e 13); artefato B não ensaiado; real **[PENDENTE]** |
-| 12 | Conferir os dados restaurados | Conjunto de tabelas igual ao inventariado na origem (esperado: 15); `alembic_version` registrada; contagens das 15 tabelas (A-14) iguais às da origem, tiradas **no mesmo snapshot do dump**: numa sessão `BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY; SELECT pg_export_snapshot();`, rodar A-14 e manter a sessão aberta enquanto o `pg_dump --snapshot=<id>` roda (conexão direta ou Session pooler), ou parar os escritores durante o dump. Na cópia restaurada: referências `db:` sem órfãos e SHA-256 dos uploads conferidos (A-7 a A-7d **apenas na cópia restaurada**; A-6 na origem ou na cópia); login e páginas da aplicação apontando para a cópia isolada | Método de snapshot ensaiado em cluster local [VALIDADO LOCALMENTE] (E.2, item 13); real **[PENDENTE]** |
-| 13 | Registrar evidências | Data, versão do servidor e do cliente, SHA-256, tamanho, contagens agregadas, revisão Alembic, resultado da restauração, responsável — **sem** URLs, senhas, nomes de clientes ou amostras de dados; guardar o registro em local privado | **[PENDENTE]** |
-
-### F.3 Requisitos para a operação real
-
-- Autorização específica e registrada do proprietário (passo 0).
-- Credenciais com o menor privilégio suficiente para leitura de todas as tabelas, fornecidas fora do
-  repositório e revogáveis.
-- Cliente PostgreSQL compatível com a versão confirmada do servidor.
-- Destino cifrado aprovado e chave de criptografia sob custódia definida.
-- Ambiente de restauração isolado disponível (PostgreSQL local ou projeto separado).
-- Janela sem alterações de esquema em andamento.
-- Proibições mantidas: nada de restauração sobre produção, alteração de configurações do projeto,
-  exportação de dados para o repositório ou divulgação de evidências com dados sensíveis.
-
----
-
-## G. Planejamento das migrations
-
-### G.1 Padrão de evolução
-
-1. **Criação de revisões:** gerar sempre em SQLite descartável sob `.audit_tmp/`, exportando
-   explicitamente `FLASK_ENV=development`, `DATABASE_URL=sqlite:///<.audit_tmp/arquivo>.db`,
-   `DIRECT_URL=` e `NEXO_DB_DIRECT=0` (o `config.py` carrega `.env` e usaria um `DATABASE_URL`
-   configurado nele). Sequência: `flask --app app db upgrade` → editar `models.py` →
-   `flask --app app db migrate -m "E<n>: <descrição>"` → **revisão manual obrigatória** → apagar o
-   banco descartável. Revisões só de dados: `flask db revision`.
-2. **Encadeamento:** `down_revision = 'e4c004a26b01'` (head atual) e head única. Nunca editar revisão
-   já mergeada; corrigir para frente; sem `stamp`.
-3. **Compatibilidade PostgreSQL:** tipos já usados (`Integer` PK, `String`, `Text`, `Numeric`,
-   `DateTime`, `Boolean`); evitar `sa.Enum` (preferir `String` + CHECK nomeado); limites de texto via
-   CHECK nomeado `length(col) <= n` e validação na aplicação; nomes ≤ 63 caracteres.
-4. **Booleanos novos:** `server_default=sa.false()`/`sa.true()` com `op.add_column` **fora de batch**
-   (o literal `'false'` vira texto no SQLite).
-5. **Tabelas existentes:** somente `op.add_column` fora de batch (anulável ou com default constante,
-   opcionalmente com CHECK de coluna nomeado, como fez a `e4c004a26b01`) e `create_index`. Nada de FK
-   nova, alteração de CHECK, `alter_column`, rename ou drop em tabela existente na mesma release.
-6. **FKs e constraints só em tabelas novas**, todas **nomeadas** (`ck_<tabela>_<regra>`,
-   `uq_<tabela>_<colunas>`, `fk_<tabela>_<coluna>`, `ix_<tabela>_<colunas>`), no modelo **e** na
-   migração; não usar `unique=True`/`index=True` em colunas novas.
-7. **`naming_convention`:** **não** adotar globalmente nesta fase — faria os 6 UNIQUE implícitos
-   ganharem nome no metadata, quebraria o `compare_metadata` e proporia recriação de tabelas pai no
-   SQLite. A normalização de nomes legados fica para etapa própria, após inventário de `pg_constraint`
-   em produção.
-8. **Exclusões:** manter `NO ACTION` (falha segura com rollback). Filhos de análise via relationship
-   com `cascade="all, delete-orphan"` em `Analise`; filhos de empresa/usuário por passo explícito na
-   exclusão permanente (`blueprints/admin.py:523-612`). **Nenhum `ON DELETE CASCADE` nesta fase**
-   (apagaria em silêncio dados novos e auditoria). Exceção a decidir: `SET NULL` em FK anulável de
-   auditoria.
-9. **Índices:** indexar toda FK nova usada em filtro ou exclusão. Em tabelas novas, `CREATE INDEX`
-   comum dentro da transação; `CONCURRENTLY` só em tabela existente grande, em revisão isolada.
-10. **Migrações de dados:** idempotentes (INSERT … WHERE NOT EXISTS por chave natural; UPDATE com
-    WHERE que exclua o já convertido), usando `sa.table`/`sa.column` locais (nunca importar `models`),
-    sem IDs de produção e **sem inventar estado** (nada de backfill de avaliações ou autoria antiga).
-
-### G.2 Estratégia de testes
-
-- **Suíte OLD_HEAD/NEW_HEAD por revisão**, no modelo de `tests/test_company_restore_migration.py`:
-  esquema construído pelas revisões reais até `OLD_HEAD = "e4c004a26b01"`, dados sintéticos inseridos
-  por tabelas refletidas, snapshot de constraints e contagens, upgrade para `NEW_HEAD`, verificação de
-  contagens, constraints antigas preservadas, novas aplicadas, defaults em linhas novas, upgrade
-  repetido sem efeito e downgrade apenas em banco descartável. Acrescentar `ondelete` à comparação de
-  FKs. Não alterar as constantes da suíte da SEC-004.
-- **Cenário encadeado** a partir de `b7c4e2a9f031` (estado possível de produção): dados em
-  `b7c4e2a9f031` → `e4c004a26b01` → nova head.
-- **PostgreSQL privado obrigatório** (`tests/postgresql_<etapa>_migration.py` reutilizando
-  `PrivatePostgreSQL`) para revisões que alterem tabela existente, migrem dados, criem FK para tabela
-  com dados ou mudem semântica de exclusão; incluir cenário de falha atômica; **adicionar o módulo
-  explicitamente** ao job `security-postgresql` do CI (os `postgresql_*.py` não são descobertos pelo
-  padrão `test*.py`).
-- **Paridade em PostgreSQL:** criar teste de `compare_metadata` no PostgreSQL privado e comparação
-  normalizada de CHECKs refletidos com o metadata (lacuna C.4).
-- **SQLite** continua útil para paridade e regras simples, mas não prova atomicidade, locks nem
-  semântica de `FOR UPDATE`.
-- **Não usar `db.create_all()`** como substituto: testes de esquema das etapas futuras devem rodar
-  sobre migrações reais (`DeployTestCase`) e sobre as suítes OLD_HEAD/NEW_HEAD.
-
-### G.3 Preservação de dados
-
-- Base sintética mínima representando o estado anterior: três planos (BRONZE, PRATA, OURO — hoje as
-  fixtures criam só BRONZE), empresas ATIVA, SUSPENSA, CANCELADA e na lixeira, ADMIN e CLIENTE ativos
-  e inativos, análises nos quatro status, MENSAL e QUINZENAL, relatório publicado e rascunho, uploads
-  com `arquivo_armazenado`, chamados com mensagens, notificações e Guia.
-- `seed.py` só insere o que falta e **não** atualiza linhas existentes: mudanças em planos de produção
-  exigem migração de dados revisada (ou tela administrativa), nunca o seed.
-- Atualizar junto com cada nova tabela: `tests/test_backup_restore.py` (contagem `tables`, fixture
-  populando **toda** tabela nova — uma tabela vazia com PK inteira faz a verificação de sequências
-  falhar —, relacionamentos e isolamento); fixtures de `tests/deploy_support.py`; testes da exclusão
-  permanente de empresa; **criar** teste para a exclusão de análise (hoje inexistente); inventário de
-  tabelas em `Docs/OPERACAO_BACKUP_RESTAURACAO.md`.
-
-### G.4 Compatibilidade com produção: migrar antes de liberar o código
-
-O build não migra e o Auto-Deploy pode estar ativo. Código que mapeia coluna inexistente quebra todas
-as consultas do modelo. Padrão **expand → migrate → deploy → contract**:
-
-1. **PR-A (expand):** somente modelos de **tabelas novas**, sem colunas novas em `Usuario`, `Empresa`,
-   `Analise` ou `Plano` e sem relationships novas em modelos existentes; revisão Alembic; testes de
-   migração SQLite e PostgreSQL; ensaio de backup atualizado. Esse código não consulta as tabelas
-   novas e é inofensivo antes ou depois do upgrade.
-2. **Operador (janela autorizada):** backup verificado e restauração isolada (seção F) →
-   `flask db current` com `NEXO_DB_DIRECT=1` (somente leitura) → se estiver em `b7c4e2a9f031`, aplicar
-   **primeiro** a `e4c004a26b01` na janela própria da SEC-004 (escritores parados) → aplicar cada nova
-   revisão **pelo ID** (`flask db upgrade <rev>`), nunca `head` às cegas, com `lock_timeout` e
-   `statement_timeout` na sessão → conferir o esquema resultante.
-3. **PR-B (feature):** rotas, templates, relationships/cascade, passos novos na exclusão permanente e
-   testes. Merge só depois do passo 2 confirmado.
-4. **Contract:** remoções apenas em release posterior, após confirmado o desuso.
-
-Alternativa: janela controlada única (suspender tráfego, migrar, implantar, homologar, reabrir), como
-na SEC-004, quando código e esquema estiverem acoplados (por exemplo, coluna nova em modelo existente).
-
-### G.5 Impacto das funcionalidades futuras sobre o esquema (análise; nada foi criado)
-
-| Funcionalidade | Tabelas existentes afetadas | Tabelas novas prováveis | Riscos específicos |
-|---|---|---|---|
-| E4: controle por plano | `plano` (CHECK `plano_nome_plano_check` sem nome no código; campos `nivel_*` sem uso), `empresa.id_plano_atual`, `analise.id_plano_referencia` | Funcionalidade por plano (FK nomeada para `plano`, UNIQUE nomeada); opcional override por empresa | Não alterar CHECKs de `plano`; decidir plano atual × snapshot da análise; não remover recursos de clientes existentes; dados por migração idempotente por `nome_plano` |
-| E5: avaliações de clientes | `analise`, `usuario`, `relatorio_analise.publicado` | Avaliação (FK `analise`, `usuario`, opcional `empresa`; nota com CHECK nomeado) | Sem cascade em `Analise`, a exclusão de análise e a exclusão permanente falham por FK; isolamento entre empresas; limite de texto e rate limit |
-| E5: sugestões privadas | `empresa`, `usuario` | Sugestão (texto, status com CHECK nomeado) | Passo novo na exclusão permanente antes de apagar usuários; nunca expor publicamente; LGPD |
-| E6/E7: moderação de depoimentos | `empresa`, `usuario`, avaliação | Depoimento (consentimento e data, status, moderador, publicação) | A landing (`/`) passa a depender do banco; filtrar `empresa.deletado_em IS NULL` e status aprovado; restauração da empresa re-expõe; consentimento registrado |
-| Registros de publicação | `relatorio_analise` (despublicar apaga `data_publicacao`), `analise` | Evento append-only gravado na mesma transação | FK `NO ACTION` bloqueia exclusão da análise; cascade perde a auditoria — decidir (`SET NULL` ou snapshot sem FK) |
-
-Novas tabelas criadas em `public` de projetos existentes podem receber grants padrão para as roles da
-Data API; a mudança anunciada pelo Supabase para 2026-10-30 altera isso apenas para tabelas novas
-(F.1). Qualquer política de RLS/REVOKE decidida na seção H deverá ser replicada nas migrações das
-novas tabelas, com guarda de dialeto (PostgreSQL apenas).
-
-### G.6 Checklist de PR de migração
-
-1. Head única, `down_revision` correto, nenhuma revisão antiga editada.
-2. Revisão aditiva; sem drop, rename ou alteração de CHECK/FK em tabela existente; em tabela
-   existente, apenas `op.add_column` e `op.create_index` **fora** de `batch_alter_table` (G.1.4–G.1.5);
-   converter na revisão manual todo `batch_op.add_column` emitido pelo autogenerate.
-3. Constraints e índices nomeados; FKs indexadas; `ondelete` igual no modelo e na migração.
-4. Migração de dados idempotente, sem importar `models`, sem IDs de produção, sem inventar estado.
-5. Suíte OLD_HEAD/NEW_HEAD em SQLite + módulo PostgreSQL privado incluído no CI + falha atômica.
-6. `test_backup_restore` (contagem e fixtures), exclusão permanente, exclusão de análise e
-   documentação de backup atualizados.
-7. Downgrade testado só em banco descartável e documentado como destrutivo.
-8. Plano de implantação: backup, `flask db current`, aplicação por ID, PR-A/PR-B ou janela, Auto-Deploy
-   confirmado desligado.
-
----
-
-## H. Riscos de segurança
-
-### H.1 Consolidado
-
-| ID | Problema | Gravidade | Tipo | Evidência | Recomendação |
+| # | Revisão | `down_revision` | Mudança | Tipo | Downgrade |
 |---|---|---|---|---|---|
-| S1 | Credencial fixa de um CLIENTE de demonstração versionada | **Alta** | Comprovado | `criar_cliente_demo.py:17-19` (valores não reproduzidos); versionada desde o 2º commit do repositório e presente em todas as branches | Remover o script (preferencial) ou endurecê-lo; tratar a credencial como comprometida (H.2) |
-| S1' | Conta de demonstração existente em produção com a senha conhecida (tomada de conta e acesso aos dados da empresa vinculada) | **Crítica** | Potencial | Script vincula à primeira empresa e reseta senha; uso documentado com `NEXO_DB_DIRECT=1` | Verificação somente leitura autorizada (Apêndice A, A-8); se existir, desativar e incrementar a geração de autorização |
-| S2 | Tabelas da aplicação em `public` possivelmente expostas pela Data API sem RLS (inclui `usuario.senha_hash` e BYTEA de planilhas) | **Crítica** | Potencial | Migrações sem GRANT/REVOKE/RLS; RLS desligada no esquema gerado localmente; documentação oficial (F.1) | Após o backup, consultas A-5, A-9 a A-12 e Security Advisor; com autorização, desligar a Data API ou retirar `public` dos Exposed schemas; avaliar RLS deny-all + REVOKE só após confirmar que a role da app é dona/tem BYPASSRLS (sem `FORCE`) |
-| S3 | Revisão Alembic de produção desconhecida | Alta | Potencial | C.1 | `flask db current` somente leitura antes de qualquer revisão nova |
-| S4 | Auto-Deploy possivelmente ativo + `main` sem proteção: merge pode implantar código antes da migração | Alta | Potencial | `Docs/PREPARACAO_RENDER.md:81`; A.2 | A.3 (proteção e Auto-Deploy desligado); G.4 |
-| S5 | Sem backup real comprovado; plano do Supabase desconhecido (Free não tem backup gerenciado) | Alta | Potencial | D.2; F.1 | Executar F.2 com autorização |
-| S6 | Arquivos legados em disco fora do dump | Alta | Potencial | B.6 | Inventário somente leitura de referências sem `db:` (A-6) |
-| S7 | Sem separação de role de runtime e de migração (runtime possivelmente com privilégio de DDL) | Média | Potencial | `config.py:54-75`; uso de uma role por URL | Confirmar com A-3/A-5; planejar role de runtime só com DML |
-| S8 | SSL não imposto pelo código | Média | Potencial | `config.py:32-45` | Confirmar `sslmode` nas URLs e "Enforce SSL" no painel |
-| S9 | Separação de ambientes só por variáveis; scripts em modo development aceitam PostgreSQL; `.env` carregado automaticamente | Média | Comprovado | `config.py:23, 194-196`; `criar_cliente_demo.py`, `seed.py`, `seed_guia.py`, `migrar_arquivos_para_db.py` | Projetos Supabase distintos por ambiente; scripts recusam PostgreSQL por padrão |
-| S10 | Isolamento entre empresas só na aplicação (sem RLS); várias tabelas derivam a empresa por FK | Média | Potencial | H.3 | Regras de H.3 para novas tabelas |
-| S11 | Lacunas de teste de acesso cruzado: `/cliente/tickets/<id>`, `/notificacoes/<id>/abrir`, `/midia` com chave fora de `guia/` ou anônima | Média | Comprovado | Busca em `tests/` | Adicionar testes antes das novas tabelas |
-| S12 | Sem trilha de login (`ultimo_acesso` nunca gravado) nem autoria do upload do cliente | Média | Comprovado | `models.py:144, 270` | Registrar em etapa futura |
-| S13 | `migrations/env.py` renderiza a URL com senha em memória | Baixa | Potencial | `migrations/env.py:27-32` | Ajuste futuro revisado |
-| S14 | Lacunas no `.gitignore` para outros formatos de dump e chaves locais | Baixa | Comprovado | H.5 | **Corrigido nesta branch** (preventivo) |
-| S15 | Caminho local com nome de usuário do sistema em documento versionado | Baixa | Comprovado | `Docs/OPERACAO_BACKUP_RESTAURACAO.md:259` | Sanitizar (D.5) |
+| 1 | `d87a6fbc2fbe` (base) | — | 12 tabelas e 4 índices | aditiva | `DROP` de todas as tabelas: perda total |
+| 2 | `c7189696a9cd` | `d87a6fbc2fbe` | `indicador_analise.periodo_base_inicio/fim` | aditiva | perde os períodos |
+| 3 | `f958d38a7f19` | `c7189696a9cd` | `relatorio_analise.gerado_por_ia` (`server_default='false'`) | aditiva | perde a indicação de IA |
+| 4 | `91a2ecf56a41` | `f958d38a7f19` | `usuario.primeiro_acesso` (`server_default='false'`) | aditiva | perde o estado de primeiro acesso; no SQLite com linhas filhas, a recriação de `usuario` falha |
+| 5 | `d61b5e68082c` | `91a2ecf56a41` | `guia_topico` (CMS do Guia/NexoBot) | aditiva | `DROP TABLE guia_topico` |
+| 6 | `a3f1c9b27d04` | `d61b5e68082c` | `empresa.deletado_em` | aditiva | perde a marcação da lixeira |
+| 7 | `b7c4e2a9f031` | `a3f1c9b27d04` | `arquivo_armazenado` (BYTEA) | aditiva | `DROP TABLE`: perde **todos os bytes** dos documentos |
+| 8 | `e4c004a26b01` (head) | `b7c4e2a9f031` | `usuario.geracao_autorizacao` + `UPDATE` que desativa clientes de empresas na lixeira | aditiva **e altera dados** | remove a coluna, perde o histórico de revogação e **não** reativa contas (irreversível por desenho) |
 
-### H.2 Script de demonstração `criar_cliente_demo.py`
+Nenhuma revisão é segura como mecanismo de rollback; a orientação de não usar
+`downgrade` (`Docs/OPERACAO_BACKUP_RESTAURACAO.md`, §10) continua válida e foi completada.
 
-**Não executado. Credenciais não reproduzidas. Conta não testada.**
+### C.2 Compatibilidade com os modelos (TESTADO LOCALMENTE)
 
-Comportamento [CÓDIGO]:
+- SQLite descartável: `upgrade` até a head gera 15 tabelas; `compare_metadata` retorna
+  vazio com `compare_type` padrão (no Alembic 1.18.4 já é `True`), `True`, `False` e com
+  `compare_server_default`. Upgrade repetido, downgrade até a base e novo upgrade no mesmo
+  arquivo vazio concluíram sem erro. O teste do projeto
+  `tests.test_deploy...test_migrations_empty_database_repeat_upgrade_and_metadata` passou.
+- PostgreSQL 18.1 descartável: o ensaio de backup aplica as 8 revisões, confere a head e o
+  conjunto de tabelas; as consultas de G.11 a G.13 confirmaram constraints e sequências.
+- DDL PostgreSQL offline (URL falsa, sem conexão): uma transação única `BEGIN/COMMIT`,
+  13 `SERIAL`, `UPDATE` da `e4c004a26b01` com `ativo=false`.
+- Limite: o Alembic não compara CHECK constraints; a paridade não detecta CHECK perdida.
 
-- Executa tudo no nível do módulo (sem `main()` nem guarda `if __name__ == "__main__"`): qualquer
-  importação grava no banco.
-- Usa `create_app("development")`, que **ignora `FLASK_ENV` e pula as travas de produção**
-  (`app.py:76-102`), mas continua lendo `DATABASE_URL`/`DIRECT_URL` do ambiente e do `.env`.
-- Vincula a conta nova (ou a existente sem empresa, por exemplo um ADMIN convertido) à **primeira
-  empresa** (`ORDER BY id_empresa`), sem filtrar lixeira ou status; conta existente já vinculada
-  mantém a empresa.
-- Se a conta existe: força papel CLIENTE, **reativa** (`ativo=True`), **redefine a senha** para o
-  valor fixo e rearma `primeiro_acesso`.
-- Imprime a senha em texto claro e não desliga o `SQLALCHEMY_ECHO=True` do modo development (SQL com
-  parâmetros no console).
-- Nenhum módulo o importa e nenhum teste o cobre.
+### C.3 Riscos para futuras alterações (Comprovado por experimento, salvo indicação)
 
-Recomendação:
+| # | Risco | Efeito | Situação |
+|---|---|---|---|
+| C3.1 | `server_default='false'/'true'` em string em colunas BOOLEAN (`91a2ecf56a41`, `f958d38a7f19`, `d61b5e68082c`) | No **SQLite**, linhas preexistentes ficam com o texto `'false'`; o ORM lê `True`, filtros `is_(False)` não as encontram e o CAS de troca de senha falha (CLIENTE legado sem saída em SQLite de desenvolvimento). No PostgreSQL o literal é convertido corretamente. | DOCUMENTADO; regra em H.2. Correção exige revisão nova (não criada agora). |
+| C3.2 | Recriação `batch` no SQLite descarta CHECK sem nome (`render_as_batch=True` é padrão do Flask-Migrate) | Esquemas divergem entre SQLite e PostgreSQL sem que `compare_metadata` perceba | DOCUMENTADO; regra em H.2 |
+| C3.3 | No SQLite com FK ativa (`app.py` liga `PRAGMA foreign_keys=ON` em toda conexão, inclusive na do Alembic), recriar tabela referenciada com linhas filhas falha | Downgrade para em revisão intermediária com tabela `_alembic_tmp_*` residual | DOCUMENTADO; downgrade em SQLite com dados não é suportado |
+| C3.4 | Migrações não são atômicas no SQLite (`transactional_ddl=False`) | Falha no `UPDATE` da `e4c004a26b01` deixa a coluna criada e a versão antiga | DOCUMENTADO; ensaio de falha deve ser feito no PostgreSQL |
+| C3.5 | `init_db.py` (README, opção A) usa `create_all` sem `alembic_version` | O `upgrade` seguinte falha (`table plano already exists`); a CHECK de geração fica em nível de tabela, divergindo da migração | DOCUMENTADO; pendente (README fora do escopo) |
+| C3.6 | `NUMERIC` sem precisão vira afinidade REAL no SQLite | Valores monetários com artefatos de ponto flutuante nos ensaios SQLite | DOCUMENTADO; regra em H.2 |
+| C3.7 | `migrations/env.py`: `render_as_string(hide_password=False)`, `get_engine()` depreciado no Flask-SQLAlchemy 3.1 (aviso em cada migração dos testes; o fallback cobre a remoção na 3.2), sem `lock_timeout`/`statement_timeout` em migrações PostgreSQL | Potencial vazamento de credencial em traceback (F1.11); risco de fila de lock em produção | DOCUMENTADO; alteração de `env.py` fica para etapa futura |
+| C3.8 | Testes com contratos fixos: 15 tabelas e 4 uploads/5 arquivos no ensaio; `OLD_HEAD`/`NEW_HEAD` explícitos | Toda tabela nova exige atualizar `tests/test_backup_restore.py` | DOCUMENTADO |
 
-1. **Preferencial:** remover o script e suas referências (`README.md:159, 302`;
-   `Docs/ARQUIVOS_PUBLICACAO.txt:28`; `Docs/INVENTARIO_ANTES_RENDER.json:147`), em PR própria.
-2. Se a demonstração for mantida: `main(argv)` com guarda `__main__`; recusar backend diferente de
-   SQLite, `FLASK_ENV=production`, `NEXO_DB_DIRECT=1` e variáveis do Render; e-mail por argumento
-   (domínio `.invalid`); senha aleatória (`secrets`) entregue pelo link de primeiro acesso de uso
-   único já existente, **nunca impressa**; desligar o echo; exigir `--id-empresa` (recusando empresa
-   na lixeira) e `--apply` (dry-run por padrão); não alterar papel nem reativar conta existente;
-   teste no estilo de `tests/test_maintenance.py`.
-3. **Rotação:** a credencial está no histórico Git e deve ser considerada comprometida e nunca
-   reutilizada. Verificar em sessão somente leitura autorizada (Apêndice A, A-8) se a conta existe em
-   produção:
-   - não existe → basta a correção do script;
-   - existe com `primeiro_acesso = true` → desativar (`ativo=false`) e incrementar
-     `geracao_autorizacao` em operação autorizada; depois decidir a exclusão;
-   - existe com `primeiro_acesso = false` e `data_atualizacao` preenchida → alguém concluiu o primeiro
-     acesso: tratar como **possível incidente** (desativar, revisar atividade agregada, avaliar
-     notificação com o responsável).
+### C.4 Revisão aplicada no Supabase — PENDENTE DE VALIDAÇÃO
 
-### H.3 Isolamento de dados
-
-Mecanismos existentes [CÓDIGO]:
-
-- `cliente_required` / `admin_required` (`blueprints/cliente.py:61-69`; `blueprints/admin.py:45-53`).
-- CHECK `ck_usuario_role_empresa` (CLIENTE exige empresa; ADMIN proíbe).
-- `_guard_sessao` em todo request: conta ativa, papel válido, empresa fora da lixeira, `BOOT_ID` e
-  HMAC da credencial (`app.py:159-197`; `session_security.py:33-115`).
-- Cada rota de `blueprints/cliente.py` filtra `id_empresa == current_user.empresa.id_empresa` e
-  responde **404** para recurso de outra empresa; `/notificacoes/<id>/abrir` filtra pelo dono da
-  notificação e redireciona ao destino padrão (`blueprints/notificacoes.py:56-65`); o upload revalida a
-  análise com `FOR UPDATE` (`blueprints/cliente.py:347`).
-- Notificações e Socket.IO: salas por usuário, entrega após commit com revalidação.
-- `/midia` só serve conteúdo global do Guia.
-
-Cobertura de testes: análise, PDF, upload e NexoBot cobertos [VALIDADO LOCALMENTE — inclusive o
-`company_isolation` do ensaio de backup]; lacunas em S11.
-
-Regras obrigatórias para avaliações, sugestões e depoimentos:
-
-1. `id_empresa NOT NULL` com FK nomeada, autor (`usuario`) e, se couber, `id_analise`; considerar FKs
-   compostas `(id_analise, id_empresa)` e `(id_usuario, id_empresa)` para coerência no banco.
-2. `id_empresa` sempre derivado de `current_user`, nunca do formulário; `id_analise` revalidado
-   (empresa, CONCLUIDO, publicado) com `FOR UPDATE` quando houver corrida.
-3. Toda listagem filtrada pela empresa do usuário; detalhe alheio → **404**.
-4. Rotas do cliente com `@cliente_required`; moderação com `@admin_required`; POST com CSRF e rate
-   limit explícito; sem `csrf.exempt`.
-5. Decisão explícita sobre empresas SUSPENSA/CANCELADA (hoje só a lixeira bloqueia o acesso do
-   cliente; status diferente de ATIVA apenas impede novas análises, `blueprints/admin.py:230-231`).
-6. Depoimento público só com consentimento registrado e aprovação do ADMIN, dados mínimos, filtro de
-   lixeira e status aprovado.
-7. Notificações apenas pelas funções existentes de `notifications.py` (despacho após commit).
-8. Incluir as novas tabelas na exclusão permanente de empresa e no ensaio de backup.
-9. Testes de acesso cruzado obrigatórios para cada rota nova (detalhe alheio → 404; POST com id de
-   outra empresa → 404 sem efeito; listagem sem itens alheios; moderação negada a CLIENTE → 403).
-
-### H.4 Verificações futuras de segurança do Supabase
-
-Preparadas no Apêndice A (consultas somente leitura, **NÃO EXECUTADAS NO SUPABASE**; sintaxe
-conferida localmente na E.2, item 13) e no painel:
-
-- Data API habilitada? Quais schemas estão em Exposed schemas? GraphQL ativo?
-- Grants de `anon`/`authenticated`/`PUBLIC` nas tabelas, colunas sensíveis e sequências de `public`.
-- RLS por tabela (`relrowsecurity`, `relforcerowsecurity`) e políticas (`pg_policies`).
-- Atributos das roles (`rolbypassrls`, `rolsuper`) e dono das tabelas.
-- Default privileges que tabelas futuras herdarão.
-- Security Advisor (lints `0013_rls_disabled_in_public` e `0023_sensitive_columns_exposed`).
-- Cadastro no Supabase Auth habilitado? "Enforce SSL" ligado?
-- Projetos separados por ambiente (desenvolvimento, homologação, produção).
-
-Nenhuma permissão ou política foi alterada. Ordem recomendada: (1) backup autorizado; (2) inventário
-somente leitura; (3) decisão do proprietário; (4) mudança autorizada com janela própria.
-
-### H.5 Proteção dos backups no `.gitignore`
-
-Já protegidos antes desta etapa: `.env` e variantes (exceto `.env.example`), `instance/`, `*.db`,
-`uploads/*`, `.audit_tmp/`, `backups/`, `backup/`, `*.dump`, `*.dump.*`, `*.backup`, `*.sql.gz`,
-`*.sql.gpg`, `*.age`, `*.pgpass`, `pg_service.conf`, `*.log`, `*.zip`.
-
-Lacuna comprovada (verificada com `git check-ignore --no-index` contra o `.gitignore` do commit
-`c919b1d`, sem criar arquivos no checkout): não eram ignorados `dumps/`, `dump/`, `dump.sql`,
-`*.sql.*` (ex.: `.zst`), `*.custom`, `*.tar`, `*.tar.*`, `*.tgz`, o formato diretório do `pg_dump`
-(`toc.dat`, `NNNN.dat.gz`), chaves (`*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`),
-`credentials.json`, `secrets/` e `private/`.
-
-**Ajuste aplicado nesta branch** (estritamente preventivo): bloco adicionado à seção de backups do
-`.gitignore` com `dumps/`, `dump/`, `dump.sql`, `*.sql.*`, `*.custom`, `*.tar`, `*.tar.*`, `*.tgz`,
-`*.dat`, `*.dat.*`, `*.pem`, `*.key`, `*.p12`, `*.pfx`, `id_rsa*`, `id_ed25519*`, `credentials.json`,
-`secrets/`, `private/` (padrões sem âncora valem em qualquer diretório). Verificações: `git ls-files -ci --exclude-standard` vazio (nenhum arquivo rastreado
-passou a ser ignorado); `schema_nexo_mvp_v4.sql` e `Docs/schema_nexo_mvp_v4 (1).sql` continuam
-versionáveis (não foi usado `*.sql` global). Nenhum código, teste ou workflow lê o `.gitignore`.
+A revisão de produção é **desconhecida**. O código atual mapeia
+`usuario.geracao_autorizacao`; se o banco estiver em `b7c4e2a9f031`, toda consulta a
+`Usuario` falha (reproduzido em SQLite descartável: `no such column:
+usuario.geracao_autorizacao`). Como a `e4c004a26b01` já está no código, **qualquer**
+publicação, mesmo sem arquivo novo em `migrations/versions`, depende de comparar
+`flask db current` com `flask db heads` (procedimento em G.12 e no §5 de
+`Docs/PREPARACAO_RENDER.md`).
 
 ---
 
-## I. Pendências
+## D. Backup
 
-### I.1 Dependem de acesso ao Supabase real (com autorização, somente leitura)
+### D.1 Ferramentas existentes
 
-1. Plano do projeto (Free/Pro), backups gerenciados e PITR.
-2. Versão do servidor (`server_version_num`) — define o cliente `pg_dump` necessário.
-3. Revisão em `alembic_version` (`b7c4e2a9f031` ou `e4c004a26b01`) e o schema onde ela está.
-4. Nomes reais das constraints sem nome; paridade do esquema real com as migrações; ausência de
-   `avaliacao_analise`, `fatura_cobranca` e índices `idx_*` do `.sql` histórico.
-5. Objetos em `public` criados fora das migrações; schemas com objetos da aplicação.
-6. Data API, Exposed schemas, RLS, grants, default privileges, roles, Security Advisor.
-7. Existência e estado da conta de demonstração.
-8. Referências legadas sem `db:` e órfãos em `arquivo_armazenado`; volume de BYTEA.
-9. Execução do backup real (F.2) e da restauração isolada.
+| Ferramenta | Função | Situação |
+|---|---|---|
+| `scripts/verificar_prontidao_backup.py` | Verifica utilitários e um dump local (SHA-256, assinatura, `pg_restore --list`), sem conectar a banco | IMPLEMENTADO (F2 a F4); TESTADO LOCALMENTE |
+| `tests/test_backup_readiness.py` | Testes do verificador com mocks | 18 testes (13 + 5 novos); TESTADO LOCALMENTE |
+| `tests/test_backup_restore.py` | Ensaio opt-in: cluster PostgreSQL temporário, migrações, fixtures, `pg_dump` custom, SHA-256, TOC, CLI, `pg_restore` em banco novo, comparação completa, rotas Flask | IMPLEMENTADO (F1); TESTADO LOCALMENTE no Windows com PG 18.1 (8 testes), exceto a verificação do ETL, que exige Linux |
+| `tests/postgresql_support.py` e `tests.postgresql_*` | Cluster privado por socket Unix para 5 suítes de segurança | NÃO VERIFICADO nesta máquina (exigem POSIX por desenho e falham no `setUpClass` no Windows; rodam no CI) |
+| `Docs/OPERACAO_BACKUP_RESTAURACAO.md` | Roteiro operacional | IMPLEMENTADO (F7) |
 
-### I.2 Dependem de acesso ao Render
+### D.2 Avaliação de segurança (Subetapa 0.2A.4)
 
-1. Estado real do Auto-Deploy e de Pull Request Previews (que copiariam variáveis de produção).
-2. Commit implantado, comandos efetivos, número de instâncias.
-3. Se `DIRECT_URL` aponta para conexão direta ou Session pooler; `sslmode` nas URLs.
-4. Variáveis não declaradas no YAML (`ANTHROPIC_API_KEY`, `HF_API_TOKEN`, `RATELIMIT_STORAGE_URI`,
-   `SOCKETIO_CORS_ORIGINS`) e versões efetivas de SQLAlchemy/Alembic instaladas.
-5. Inventário privado dos segredos (incluindo a `SECRET_KEY`) e responsáveis.
+| Critério | Avaliação |
+|---|---|
+| Segurança dos comandos | `shell=False`, argumentos montados internamente, `stdin/stdout/stderr` controlados, timeout de 15 s (adequado: no formato custom o TOC fica no início; `--list` levou 21-60 ms em arquivos esparsos de até 4 GiB após a primeira abertura e 0,3-0,4 s num arquivo aleatório de 1 GiB; a primeira abertura, mais lenta por causa do antivírus, recai no cálculo do hash, fora do timeout). **Defeito corrigido:** no Windows, `shutil.which` consultava antes o diretório atual e aceitava `.bat/.cmd/.com`; um utilitário plantado na pasta de trabalho era executado e podia dar veredito falso, e um `.bat` permitia injeção de comando pelo nome do arquivo (`&`) via `cmd.exe`. Na revisão, a busca passou a usar `Path.is_absolute()`: no Python 3.12, `os.path.isabs` aceita `\dir` sem letra de unidade, que depende da unidade do diretório atual. |
+| Proteção das credenciais | Ambiente filho filtrado (`PGPASSFILE`/`PGSERVICEFILE` apontando para `os.devnull`), argumentos inválidos sem eco, erros sem saída bruta. Adequado. |
+| Tratamento dos arquivos | Leitura somente, em blocos. **Defeito corrigido:** o caminho ia no argv do `pg_restore`, convertido para a página ANSI no Windows; com best-fit, o catálogo podia ser lido de **outro** arquivo (falso positivo forjável) e caminhos com caracteres fora do cp1252 ou longos davam falso negativo. Agora o Python reabre o caminho já resolvido logo após o hash e entrega o conteúdo pelo stdin; falha na reabertura dá código 1. Limite: uma troca concorrente do arquivo entre o hash e o `--list` não é detectada (a mesma janela existia antes; ler pelo mesmo handle só a reduziria, pois a escrita no lugar continua possível). |
+| Validação de hashes | SHA-256 completo, referência com 64 hex em qualquer caixa; divergência interrompe antes do catálogo. Adequado; o hash só tem valor comparado a manifesto confiável e separado. |
+| Arquivos corrompidos | Rejeita vazio, sem assinatura ou truncado no cabeçalho; `--list` detecta TOC truncado. Limite documentado: `--list` não lê blocos de dados, então dados truncados só aparecem no restore. |
+| Testes de recuperação | O ensaio restaura e compara todas as linhas, vínculos, sequências, FKs, bytes, hashes e rotas. **Defeito corrigido:** desde a SEC-005 ele falhava no Windows (ver F1). |
+| Isolamento | Cluster próprio em diretório temporário, `127.0.0.1` em porta efêmera, SCRAM com credenciais geradas, `unix_socket_directories=''`, processo filho com ambiente filtrado e `dotenv` desativado, asserção de host/porta/usuário/banco antes de qualquer DDL. Nunca usa o serviço preexistente nem URLs externas. Comprovado por leitura e execução. |
+| Limpeza | Cluster encerrado e diretório removido em todas as execuções do ensaio e das validações SQL desta etapa (conferido: nenhum `postgres.exe` novo, nenhum diretório novo). Potencial: `TemporaryDirectory` sem tolerância a arquivo ainda aberto no Windows; resta o diretório `%TEMP%\nexo-backup-drill-0ezil1f5` do ensaio de 20/10 (sem processo associado; remoção manual pendente). Resíduos das suítes desta etapa estão em J (ambiente local). |
+| Prevenção de restauração acidental | O CLI não aceita URL, banco, `--clean` ou `--create`; o ensaio só restaura em banco recém-criado no próprio cluster. Adequado. |
+| Compatibilidade com PostgreSQL | Ensaio validado com cliente e servidor 18.1. A versão do Supabase não é conhecida (G.2). **Defeito corrigido:** utilitário que falhava em `--version` continuava sendo usado e gerava código 1 ("backup não validado") em vez de 3. |
 
-### I.3 Dependem de credenciais autorizadas
+### D.3 Arquivos armazenados e backup (Subetapa 0.2A.6)
 
-1. Credencial de leitura para backup (service file + `.pgpass`), fora do repositório.
-2. Certificado raiz do Supabase para `sslmode=verify-full`.
-3. Chave pública de criptografia dos backups e custódia da chave privada.
-4. Permissão administrativa no GitHub para aplicar a proteção da `main` (e plano compatível).
+- **Armazenamento (Comprovado):** `storage.salvar()` grava os bytes em
+  `arquivo_armazenado.conteudo` na **mesma transação** do registro que os cita e devolve
+  `'db:'+chave`. O ETL lê o BYTEA direto do banco, com limite de tamanho, para cópia privada
+  temporária; `/midia` serve só chaves `guia/` e também lê do banco.
+- **Origem dos metadados (`etl_uploads.py`, `etl_runtime.py`):** `ler_upload_validado`
+  (`etl_uploads.py:47-83`) lê no máximo o limite configurado, calcula o SHA-256 durante a
+  leitura e valida o arquivo em subprocesso isolado (`run_validation`) **antes** de
+  `storage.salvar` (`blueprints/cliente.py:345` e `354`; `blueprints/admin.py:663` e `671`).
+  `hash_arquivo` e `tamanho_arquivo` vêm dessa leitura (`cliente.py:373`, `admin.py:692`);
+  falha de validação não persiste bytes. No Windows a validação é recusada (SEC-005), então
+  a persistência de uploads pela rota só é verificável em Linux (E5).
+- **Backup:** o BYTEA é dado de tabela e entra no `TABLE DATA` de `arquivo_armazenado` de um
+  dump completo; `-b/-B` (large objects) não se aplica. Não usar `--exclude-table-data`
+  para reduzir o dump: isso quebra todas as referências `db:`. O restore padrão
+  (`--single-transaction`) é serial e não combina com `-j`.
+- **Integridade:** sem FK, o banco aceita referência quebrada, blob órfão e chave
+  compartilhada. As consultas de G.13 detectam cada caso (TESTADO LOCALMENTE em PG 18.1 com
+  anomalias injetadas).
+- **Legados:** referências sem `db:` dependem de arquivos em disco fora do dump e do Git; o
+  fallback por nome-base pode apontar para o arquivo de outro upload.
+- **Cache local:** `tempfile/nexo_arquivos` só é preenchido por `storage.resolver()` com
+  referência `db:` (testes, verificações manuais e um helper sem chamadores); é reutilizado
+  apenas por existir e pode mascarar blob ausente. Validar restaurações pelas consultas, que
+  leem o banco, e não por `resolver()`.
+- **Volume:** sem retenção dos arquivos brutos; regravar a mesma chave reescreve o BYTEA
+  inteiro. Nenhum volume real foi medido (NÃO VERIFICADO).
 
-### I.4 Dependem de infraestrutura de testes
+### D.4 Proteção contra vazamento (Subetapa 0.2A.7)
 
-1. Cliente PostgreSQL da mesma major do servidor real (provavelmente 17.x ≥ 17.6) para o backup real e
-   para repetir na mesma major os ensaios locais (E.2, itens 4, 12 e 13) antes do backup real.
-2. Ambiente compatível com os schemas, roles e extensões gerenciados do Supabase para restaurar o
-   artefato B (F.2, passo 11).
-3. Ambiente isolado para restaurar o backup real.
-4. Navegador (Playwright/Chromium) para os 11 testes de navegador, se forem exigidos localmente (o CI
-   já os executa).
-5. Teste de `compare_metadata` em PostgreSQL e de constraints refletidas (G.2), a criar em etapa
-   futura.
-
-### I.5 Dependem de decisões do proprietário
-
-1. Escopo do backup (artefato B completo como principal e artefato A `public` como complementar, ou
-   exceção registrada) e destino/retenção/RPO/RTO; avaliação de plano pago/PITR.
-2. Remoção ou endurecimento de `criar_cliente_demo.py`; tratamento da credencial.
-3. Desligar o Auto-Deploy; plano do GitHub para proteção da `main`.
-4. Data API: desligar ou restringir; política de RLS.
-5. Regras de negócio: SUSPENSA/CANCELADA; plano atual × snapshot da análise; avaliação por análise ou
-   por usuário; consentimento de depoimentos; destino da auditoria na exclusão.
-6. Fixar versões de SQLAlchemy e Alembic antes da primeira revisão das etapas.
-7. Aplicação das correções documentais de D.5.
-8. Sincronização da branch de integração com a `main`, que recebeu a PR #21 (A.2) depois do início
-   desta etapa, antes da Etapa 0.3.
-
----
-
-## J. Critérios de liberação
-
-Antes de iniciar a **primeira alteração estrutural no banco de produção**, todos os itens abaixo devem
-estar satisfeitos e registrados (evidências sem dados sensíveis, em local privado quando necessário):
-
-1. **Backup real:** dump autorizado do Supabase gerado conforme F.2 (artefatos B e A, ou exceção
-   aprovada e registrada), com SHA-256, `pg_restore --list` e cópia cifrada armazenada fora do GitHub
-   e do Render.
-2. **Restauração validada:** o dump real restaurado em ambiente isolado da mesma major (F.2, passo
-   11), com o mesmo conjunto de tabelas inventariado na origem (esperado: 15 — 14 da aplicação +
-   `alembic_version`; divergência registrada e explicada), `alembic_version` esperada, contagens
-   iguais às da origem no mesmo snapshot (A-14), referências `db:` sem órfãos e hashes de uploads
-   conferidos (A-7 a A-7d).
-3. **Revisão conhecida:** `alembic_version` de produção confirmada; se estiver em `b7c4e2a9f031`, a
-   `e4c004a26b01` aplicada antes, em janela própria, com o procedimento da SEC-004.
-4. **Esquema real conhecido:** nomes de constraints e paridade com as migrações conferidos; objetos
-   fora das migrações inventariados.
-5. **Exposição avaliada:** Data API, RLS e grants verificados; decisão registrada (e aplicada, se for
-   o caso) antes de criar tabelas com dados de clientes.
-6. **Deploy controlado:** Auto-Deploy confirmado desligado (ou janela com tráfego suspenso definida) e
-   ordem "migrar antes de liberar o código" (G.4) acordada.
-7. **Proteção da `main`:** regra técnica aplicada ou, na impossibilidade, política manual registrada.
-8. **Conta de demonstração:** inexistência confirmada ou conta desativada; script removido ou
-   endurecido.
-9. **Revisão candidata pronta:** PR com a nova migração aprovada no CI, incluindo suíte OLD_HEAD/NEW_HEAD
-   em SQLite e PostgreSQL privado, falha atômica, ensaio de backup atualizado e checklist G.6 cumprido.
-10. **Plano de recuperação:** responsável, janela, `lock_timeout`/`statement_timeout`, critério de
-    abortar e caminho de retorno por restauração (nunca downgrade) definidos.
-
-**Estado em 2026-10-24:** a preparação técnica e documental desta etapa está concluída. Os critérios
-1 a 8 e 10 dependem de autorização, acesso ou decisão do proprietário e estão **pendentes**. O
-critério 9 depende da primeira revisão das próximas etapas, que ainda não existe. **Nenhum critério
-está cumprido.** A proteção operacional do banco de produção **não** pode ser declarada concluída até
-que os critérios 1 e 2 sejam cumpridos.
+- `.gitignore` testado com `git check-ignore` em repositório temporário (cópia idêntica do
+  arquivo, ignore global neutralizado, `core.ignorecase` true e false). Já protegia `.env`,
+  `.env.local`, `.env.*.local` e `.env.*` (preservando `.env.example`), `instance/`, `*.db`,
+  `*.sqlite`, `*.sqlite3`, uploads, mídias do Guia, planilhas e PDF em `dados/`
+  (`dados/**/*.xlsx`, `*.csv`, `*.xls`, `*.pdf`), `.audit_tmp/`, `.claude/`, `*.zip`, `*.log`
+  e os artefatos do roteiro de backup do OPERACAO (`*.dump`, `*.dump.*`, `*.pgpass`,
+  `pgpass.conf`, `pg_service.conf`, `backups/`).
+- **Lacuna comprovada e corrigida (F6):** arquivos auxiliares do SQLite (`-wal`, `-shm`,
+  `-journal`) não eram ignorados, embora `app.py` ative WAL em toda conexão e `config.py`
+  aceite SQLite relativo à raiz. Com o app em execução, o `-wal` continha dados ainda
+  ausentes do `.db`, e `git add -A` os prepararia para commit.
+- Endurecimentos opcionais **não adotados**, por não serem lacunas comprovadas: dumps em
+  texto (`*.sql` é preservado de propósito para os DDL de schema), tar/diretório,
+  chaves/certificados, planilhas na raiz. O roteiro do OPERACAO gera dump custom fora do
+  checkout; o conjunto da CLI (G.6 b) gera SQL em texto com dados de clientes, que o
+  `.gitignore` não cobre. Por isso a seção G exige gerar e manter todos os artefatos só no
+  volume privado, com caminhos absolutos, e nomeia as listas de TOC como `*.dump.*`.
+- Varredura da pasta (somente nomes): não há `.env` real, banco SQLite, dump, backup, chave
+  ou log. Varredura de padrões de segredo: nenhuma ocorrência real. Existe a credencial de
+  demonstração já registrada (F4.1 da Etapa 0.1, `criar_cliente_demo.py`; valor não
+  reproduzido). `.env.example` contém só placeholders vazios.
+- Um ZIP da pasta contorna o `.gitignore` (levaria `.env`, bancos locais e uploads, se
+  existirem): para compartilhar, preferir `git archive` ou lista de exclusão.
 
 ---
 
-## Apêndice A — Consultas somente leitura preparadas (NÃO EXECUTADAS NO SUPABASE)
+## E. Testes
 
-Executar apenas em etapa operacional autorizada, em sessão `psql` privada (service file), sem
-registrar URLs ou credenciais, sempre dentro de:
+Todos executados nesta máquina, sem acesso externo. Resultado por comando:
 
-```sql
-\set ON_ERROR_STOP on
-BEGIN TRANSACTION READ ONLY;
-SET LOCAL statement_timeout = '15s';
-SET LOCAL lock_timeout = '2s';
--- consultas
-ROLLBACK;
+| # | Comando / verificação | Resultado |
+|---|---|---|
+| E1 | `python -B -m unittest tests.test_backup_readiness -v` (estado inicial) | **13 testes, 13 aprovados**, 0,248 s (confirma a análise anterior; relatado, sem log arquivado) |
+| E2 | `python -B scripts/verificar_prontidao_backup.py --dry-run` (ambiente como está) | Código **3**: `pg_dump`, `pg_restore` e `psql` indisponíveis no `PATH`. Dependência ausente, comportamento documentado. |
+| E3 | O mesmo, com o bin do PostgreSQL 18 acrescentado ao `PATH` só na sessão | `--dry-run`: código 0 (ferramentas localizadas, `--version` não executado). Padrão: código 0 (`--version` dos três concluído). |
+| E4 | `tests.test_backup_restore -v` com `NEXO_TEST_POSTGRES_BIN=C:/Program Files/PostgreSQL/18/bin`, **antes** da correção | 5 testes: 4 aprovados, **1 falha** (36,3 s): "Ensaio isolado falhou na etapa comparação completa e relacionamentos (ETLValidationError)". Causa reproduzida sem banco: o ETL da SEC-005 recusa o Windows (`code="platform"`). Relatado, sem log arquivado. |
+| E5 | Suíte completa `python -B -m unittest discover -s tests -t . -v`, **antes** de qualquer alteração (linha de base) | **561 testes; 13 falhas, 13 erros, 42 ignorados**, 514,8 s. Nenhuma falha causada por migração, persistência ou backup; a persistência de uploads pela rota real (`test_cliente_uploads_persist_in_database_and_survive_cache_removal`) ficou NÃO VERIFICADA no Windows, porque o upload depende da validação do ETL, recusada pela plataforma (executar em Linux/CI). A alteração F1 em `tests/test_backup_restore.py` começou durante esta execução, depois do carregamento dos módulos; o log mostra os 5 testes originais. Causas: ETL recusado no Windows (uploads e processamento), módulos ausentes (`gunicorn`, `yaml`), versões locais de Werkzeug/Flask/python-dotenv diferentes das fixadas e codificação cp1252. Ignorados: navegador (opt-in), POSIX/gunicorn, `pdftotext`, ensaio sem opt-in. |
+| E6 | Módulos de banco/migração/backup (`test_deploy`, `test_company_restore_migration`, `test_company_restore_security`, `test_maintenance`, `test_configuration_deploy`, `test_backup_readiness`, `test_backup_restore`) | 87 testes, num estado intermediário: já com a versão de F1 em `tests/test_backup_restore.py` (7 testes, 2 novos) e com `tests/test_backup_readiness.py` ainda original (13). Migrações (paridade e SEC-004, 5/5), restauração de empresas (32/32), manutenção (7/7), configuração (10/10) aprovados; 1 falha e 2 erros apenas nos testes de `test_deploy` que dependem do ETL no Windows; 1 ignorado (ensaio sem opt-in). No estado final o mesmo comando executa 93 testes (E15 inclui todos). |
+| E7 | `tests.test_backup_readiness` após as correções | **18 testes, 18 aprovados** (16 após a primeira rodada; mais 2 na revisão: reabertura do arquivo que falha e executável regular) |
+| E8 | `tests.test_backup_restore` após as correções, sem opt-in | 8 testes: 7 aprovados, 1 ignorado com motivo (nenhum cluster iniciado) |
+| E9 | O mesmo, com opt-in (PostgreSQL 18.1 local isolado) | **8 testes, 8 aprovados** (29,0 s; 30,3 s de duração total do processo). Relatório: `status ok`, 15 tabelas, 4 uploads, 5 arquivos, 16 verificações aprovadas e a do ETL **não executada** (`not_executed: ["etl"]`; exige Linux), `production_access: false`. O teste pai confere que nenhuma verificação não executada aparece entre as aprovadas e que as 17 estão contabilizadas. Nenhum processo ou diretório residual. |
+| E10 | Mutação: cada defeito corrigido ou ramo novo reintroduzido numa cópia fora do projeto | Os 5 mutantes da primeira rodada (busca com diretório atual/`.bat`, caminho no argv, versão reprovada mantida, abertura para escrita, stdout herdado), reaplicados sobre o código final, e 14 novos: `os.path.isabs` sem unidade, entradas relativas aceitas (iniciadas por `.` ou não), reabertura sem tratamento de erro ou tratada como sucesso, sem `X_OK`, sem `isfile`, teste pai sem cada uma das três asserções, plataforma fixa, tolerância também no Linux, qualquer erro do ETL tolerado e, no ensaio real com opt-in, filtro de `checks` removido. **19 de 19 detectados**, cada um pelo teste previsto; versão sem mutação aprovada. No Linux, o mutante de `os.path.isabs` é equivalente ao código (J, cobertura de CI). |
+| E11 | CLI corrigido com o `pg_restore.exe` 18.1 real e dumps sintéticos (reexecutado após a revisão) | Válido com espaços: 0. Válido em pasta com `Ω`: 0 (antes 1). TOC truncado em pasta `Ω2` vizinha de válido em pasta `O2` (colisão best-fit): 1 (antes 0, falso positivo). Caminho de 446 caracteres: 0 (antes 1). TOC truncado: 1. `pg_restore.bat` plantado no diretório atual, com `.` no `PATH`: não executado. Entrada do `PATH` sem letra de unidade: ignorada (código 3). |
+| E12 | `.gitignore`: `git check-ignore` antes e depois | 8 nomes auxiliares do SQLite passam a ser ignorados (um 9º testado, `instance/nexo_mvp.db-wal`, já era coberto por `instance/`); nenhum dos 258 arquivos do projeto passa a ser ignorado; `.env.example`, os `.sql` de schema e os `.gitkeep` continuam versionáveis. |
+| E13 | Consultas de G.11 a G.13 em PostgreSQL 18.1 descartável (dados fictícios, transação somente leitura) | **16/16 verificações**: zero no estado íntegro; cada anomalia injetada (blob órfão, referência quebrada, conteúdo alterado, chave compartilhada, legado, responsável não ADMIN, chamado/remetente de outra empresa, lixeira) detectada com a contagem exata; constraints por tipo iguais às de B.1; impressão digital SQL igual à calculada em Python. Reexecutado após a revisão, com a impressão digital ordenada por `COLLATE "C"`: 16/16. Num banco com collation ICU pt-BR, a versão sem `COLLATE "C"` divergia da ordem por bytes e gerava falso alarme; com ela, coincide. |
+| E14 | `pg_dump --schema=public --format=custom` e restauração isolada (PG 18.1 descartável; reexecutado após a revisão) | TOC com `SCHEMA - public`; restauração direta com `--single-transaction --exit-on-error` **falha**; com lista de TOC sem essas entradas, **conclui**, e as 11 consultas de validação são idênticas entre origem e cópia. |
+| E15 | Suíte completa após as alterações (mesmo comando de E5, pelo PowerShell) | **569 testes (561 + 8 novos); 13 falhas, 12 erros, 42 ignorados**, 162,4 s. **Nenhuma falha ou erro novo** em relação a E5: as 13 falhas são as mesmas nas duas execuções, inclusive os 4 subtestes de `SessionVaryCompatibilityTests` (Flask local 3.0.3 frente ao 3.1.3 fixado). Só não se repetiu o erro de `test_etl_runtime_limits...test_parent_cancellation_still_terminates_the_owned_child_and_cleans_resources`, que isolado passou 3 de 3 vezes (log arquivado); a linha de base rodou com a auditoria paralela consumindo CPU. A primeira rodada de correções (566 testes) teve o mesmo resultado. Pelo Git Bash, 3 testes de PDF que exigem `pdftotext` deixam de ser ignorados e falham com o `pdftotext` do Git (`ucrt64/bin`): efeito do ambiente, não das alterações (J). |
+
+Não executados, com motivo: as 5 suítes `tests.postgresql_*` (exigem POSIX); testes de
+navegador (opt-in `NEXO_TEST_BROWSER=1` e Playwright); testes que exigem `gunicorn`/POSIX; a
+verificação do ETL dentro do ensaio de backup no Windows (SEC-005; registrada como não
+executada). Nenhum teste ignorado nem verificação não executada foi contado como aprovado.
+
+Evidências arquivadas fora do repositório, em pasta privada da etapa, sem dados reais:
+logs de E5, E6, E7, E8, E9, E15 e da reexecução isolada citada em E15; saídas de E2, E3 e
+E11 (cenários do CLI), E13, E14 e da validação de collation; resultados da mutação (E10).
+E1 e E4 são relatados sem log arquivado (execuções anteriores às correções).
+
+---
+
+## F. Correções
+
+Problemas realmente corrigidos, com a menor mudança segura. Todas as alterações de código
+têm teste correspondente, conferido por mutação (E10).
+
+| # | Arquivo | O que mudou | Por quê / problema resolvido | Validação | Situação |
+|---|---|---|---|---|---|
+| F1 | `tests/test_backup_restore.py` | `_etl_or_platform_refusal` tolera **somente** a recusa `code="platform"` do ETL; o relatório ganha `not_executed`; `_acceptable_not_executed` aceita apenas `["etl"]`, nunca no Linux, e recebe a plataforma na chamada; o teste pai confere que nenhuma verificação não executada aparece em `checks` e que as 17 estão contabilizadas; 3 testes novos | O ensaio documentado para Windows falhava desde a SEC-005, que recusa o ETL fora de POSIX por desenho (`Docs/RELATORIO_NEXO_SEC005_ETL_SEGURO.md:372`). A verificação passa a ser registrada como **não executada**, nunca como aprovada; bytes, hashes, restauração e rotas continuam obrigatórios; no Linux (CI) o ETL segue obrigatório. | E4 → E9; E10; reconstrução do original confirmou que só esses trechos mudaram | IMPLEMENTADO; TESTADO LOCALMENTE (ETL do ensaio NÃO VERIFICADO no Windows) |
+| F2 | `scripts/verificar_prontidao_backup.py` | `locate_tool()`: busca só em diretórios absolutos do `PATH` (`Path.is_absolute()`, que no Windows exige letra de unidade ou UNC) e, no Windows, só `.exe`; `import shutil` removido | Utilitário plantado no diretório atual era executado; `.bat/.cmd` permitia injeção via `cmd.exe`; entrada `\dir` dependia da unidade atual | E10, E11, testes `test_locate_tool_ignores_current_directory_relative_entries_and_wrappers` e `test_locate_tool_requires_an_executable_regular_file` | IMPLEMENTADO; TESTADO LOCALMENTE |
+| F3 | idem | `--list` reabre o caminho já resolvido e entrega o conteúdo ao `pg_restore` pelo stdin (`run_local_command(..., stdin=...)`); falha na reabertura dá código 1 | Argv ANSI/best-fit no Windows: catálogo de outro arquivo ou falso negativo. Limite documentado: troca concorrente do arquivo após o hash não é detectada | E10, E11, teste de invocação com conferência de `stdin`, `shell`, `DEVNULL` e timeout; `test_backup_unavailable_when_reopened_for_listing_is_not_validated` | IMPLEMENTADO; TESTADO LOCALMENTE |
+| F4 | idem | Utilitário que falha em `--version` vira indisponível | Código 1 indevido ("backup não validado") em vez de 3 | Teste `test_failed_version_check_marks_tool_unavailable_and_skips_listing` | IMPLEMENTADO; TESTADO LOCALMENTE |
+| F5 | `tests/test_backup_readiness.py` | Mocks passam de `shutil.which` para `locate_tool`; invocação do `--list` verificada por inteiro; testes novos de busca (entradas relativas efetivas, `PATH` sem unidade, executável regular), versão reprovada, reabertura que falha e arquivo somente leitura | Os testes antigos não detectavam stdout herdado no `--list`, busca no diretório atual nem abertura para escrita; a revisão mostrou ramos novos ainda sem teste | E7, E10 | IMPLEMENTADO; TESTADO LOCALMENTE |
+| F6 | `.gitignore` | Bloco `*.db-wal`, `*.db-shm`, `*.db-journal`, `*.sqlite*-wal`, `*.sqlite*-shm`, `*.sqlite*-journal` | Lacuna real: páginas com dados do SQLite em WAL podiam ir ao controle de versão | E12 | IMPLEMENTADO; TESTADO LOCALMENTE |
+| F7 | `Docs/OPERACAO_BACKUP_RESTAURACAO.md` | Nota datada de head/8 revisões; `geracao_autorizacao`; limites de `migrar_arquivos_para_db.py`; órfãos e vínculos semânticos; fallback por nome-base; cache; ACL no Windows; comportamento revisado do CLI, limite da reabertura e precedência dos códigos; políticas RLS na restauração; ETL e suítes POSIX no ensaio; downgrades destrutivos completos; descarte; reexecução de 24/10; caminho local anonimizado, com marca no texto | Divergências comprovadas com o código atual; registros históricos preservados, com notas datadas, exceto a anonimização do caminho local no registro de 20/10 (§11), marcada no próprio texto | Revisão contra o código e os testes desta etapa | IMPLEMENTADO (documentação) |
+| F8 | `Docs/PREPARACAO_RENDER.md` | §5 com ordem segura (Auto-Deploy controlado, `current` × `heads` sempre, janela com escritores parados, SHA aprovado); descrição de `DIRECT_URL` (Session pooler/IPv4); higiene de segredos no Passo 1 | O roteiro anterior (push → upgrade → "latest commit") podia publicar código antes da migração e não considerava a exigência da `e4c004a26b01` | Revisão contra `render.yaml`, `app.py`, migração e documentação oficial do Supabase | IMPLEMENTADO (documentação) |
+| F9 | `Docs/PLANO_PUBLICACAO_SEGURA.md` | Uma nota datada | O plano condicionava a publicação à ausência de migração e mantinha candidato superado | Revisão | IMPLEMENTADO (documentação) |
+| F10 | `Docs/REESTRUTURACAO_COMERCIAL/00_02_PROTECAO_BANCO_MIGRACOES.md` | Novo | Documento de referência desta etapa | Revisão adversarial independente (seção A) | IMPLEMENTADO (documento novo) |
+
+Problemas encontrados e **não** corrigidos por estarem fora do escopo autorizado estão na
+seção J.
+
+---
+
+## G. Procedimento para backup real do Supabase e restauração isolada
+
+**Situação: DOCUMENTADO — preparado, não executado.** Nenhum passo abaixo foi executado
+contra o Supabase. Foram TESTADOS LOCALMENTE, em PostgreSQL 18.1 descartável com dados
+fictícios, apenas: o dump custom do schema `public`, a restauração com lista de TOC (G.10),
+as consultas de G.11 a G.13 e o verificador de prontidão (G.7). Fontes oficiais consultadas
+em 24/10/2026 estão ao final da seção; onde houver inferência, ela está marcada.
+
+Pré-condições: autorização registrada (responsável, janela, escopo), estação Windows
+privada, volume criptografado fora do checkout e de pastas sincronizadas. Executar com o
+diretório atual no volume privado da execução (nos exemplos, `D:/backups-nexo/EXECUCAO_UTC`)
+todos os comandos que gravam artefatos (dump, SQL, TOC, lista, log), com caminho absoluto: o
+`.gitignore` não cobre `*.sql`. O verificador (G.7) e os comandos `flask` (G.12) não gravam
+artefatos e rodam a partir do checkout, também com caminhos absolutos para os artefatos.
+Nunca usar o serviço PostgreSQL local da porta 5432, `DATABASE_URL`/`DIRECT_URL` da
+aplicação nem o disco do Render.
+
+**G.1 Identificar o projeto de origem.** Copiar host, usuário e porta pelo botão
+**Connect** do painel; não montar o host do pooler à mão (o índice do cluster varia). O
+*project ref* aparece em `db.<ref>.supabase.co` e no usuário `postgres.<ref>` do pooler.
+Registrar organização, região e plano em local privado. Confirmar no painel se há buckets
+do Storage: o código do NEXO não usa Storage (os arquivos estão no banco), mas o inventário
+real é PENDENTE DE VALIDAÇÃO.
+
+**G.2 Identificar a versão do PostgreSQL.** Já conectado: `SELECT version();`,
+`SHOW server_version;` e `SHOW server_version_num;`. Registrar também extensões
+(`SELECT extname, extversion FROM pg_extension ORDER BY 1;`). O Postgres 17 é o padrão
+atual da plataforma; a versão do projeto do NEXO é NÃO VERIFICADO.
+
+**G.3 Ferramentas.** `pg_dump`, `pg_restore` e `psql` com versão principal **igual ou maior**
+que a do servidor (o `pg_dump` recusa servidor mais novo; a saída não tem garantia de
+carregar em servidor mais antigo). Os binários 18.1 locais servem para dump de servidor 15
+ou 17 e para restaurar em cluster local 18; para restaurar num projeto Supabase 17, gerar o
+dump com cliente 17 ou pela CLI. Chamar sempre pelo caminho absoluto
+(`& 'C:\Program Files\PostgreSQL\18\bin\pg_dump.exe' ...`). A Supabase CLI
+(`supabase db dump`) executa o `pg_dump` em container (exige Docker) e exclui os schemas
+gerenciados; é o caminho oficial para recuperar num **novo projeto Supabase**.
+
+**G.4 Conexão apropriada.** Para `pg_dump`: conexão direta (`db.<ref>.supabase.co:5432`,
+IPv6; IPv4 só com add-on) ou **Session pooler** (porta 5432, usuário `postgres.<ref>`,
+IPv4). Os guias oficiais de backup usam o Session pooler por padrão. **Nunca** o modo
+transação (6543): estado de sessão não sobrevive entre transações. TLS com
+`sslmode=verify-full` e `sslrootcert` apontando para o certificado baixado em *Database
+Settings → SSL Configuration*; `require` não impede ataque intermediário. Se houver
+*Network Restrictions*, liberar o IP de saída.
+
+**G.5 Proteger as credenciais.** Arquivo de serviço e passfile privados, fora do
+repositório, apontados por `PGSERVICEFILE` e `PGPASSFILE` (padrões no Windows:
+`%APPDATA%\postgresql\.pg_service.conf` e `%APPDATA%\postgresql\pgpass.conf`). No Windows a
+libpq **não** verifica permissões do passfile: restringir com ACL NTFS (`icacls`, ver
+`Docs/OPERACAO_BACKUP_RESTAURACAO.md`, §3 e §4). Não usar senha em argumento, `PGPASSWORD`,
+histórico do PowerShell ou URL na linha de comando. Opcional e sujeito a autorização (cria
+objeto em produção): papel dedicado de leitura (`backup_reader`, com `pg_read_all_data`,
+`BYPASSRLS` e `default_transaction_read_only`), conforme o guia oficial; ele lê todos os
+schemas, inclusive `auth` e `storage`.
+
+Exemplo **fictício** de serviço (sem senha):
+
+```ini
+[nexo_origem]
+host=HOST_COPIADO_DO_CONNECT
+port=5432
+dbname=postgres
+user=postgres.PROJECT_REF
+sslmode=verify-full
+sslrootcert=D:/cofre-nexo/supabase-ca.crt
+connect_timeout=15
 ```
 
-Um erro aborta a transação READ ONLY: executar `ROLLBACK` e reabrir o bloco. A sintaxe das consultas
-foi conferida num cluster local descartável com o esquema das migrações (E.2, item 13), onde as roles
-do Supabase não existem; nenhuma foi executada no Supabase.
+**G.6 Gerar um backup consistente.** O `pg_dump` exporta um snapshot consistente do início da
+execução sem bloquear leitores nem escritores; evitar DDL e migrações durante o dump. Dois
+artefatos complementares:
+
+- **(a) Schema da aplicação, formato custom** — para restauração isolada em PostgreSQL
+  comum e validação dos BYTEA (inferência apoiada na documentação do `pg_dump`; testado
+  localmente em PG 18):
+
+  ```powershell
+  $env:PGSERVICEFILE = 'D:/cofre-nexo/pg_service.conf'
+  $env:PGPASSFILE = 'D:/cofre-nexo/pgpass.conf'
+  & 'C:\Program Files\PostgreSQL\18\bin\pg_dump.exe' --no-password `
+      --dbname='service=nexo_origem' --schema=public --format=custom `
+      --file='D:/backups-nexo/EXECUCAO_UTC/nexo_public.dump'
+  if ($LASTEXITCODE -ne 0) { throw 'pg_dump falhou' }
+  ```
+
+  Com `--schema`, o `pg_dump` não leva dependências de outros schemas. As 14 tabelas e
+  `alembic_version` ficam em `public` (o código não define outro schema; confirmar no
+  inventário real).
+
+- **(b) Conjunto oficial da CLI** — para recuperação num novo projeto Supabase:
+  `supabase db dump --db-url 'URL_DO_PROJETO' -f 'D:/backups-nexo/EXECUCAO_UTC/roles.sql' --role-only`,
+  `supabase db dump --db-url 'URL_DO_PROJETO' -f 'D:/backups-nexo/EXECUCAO_UTC/schema.sql'` e
+  `supabase db dump --db-url 'URL_DO_PROJETO' -f 'D:/backups-nexo/EXECUCAO_UTC/data.sql' --use-copy --data-only`
+  (o guia atual também exclui `storage.buckets_vectors` e `storage.vector_indexes`). São SQL
+  em texto com todas as linhas, inclusive `senha_hash` e BYTEA: nunca gerá-los no checkout. A
+  URL com senha fica visível no histórico e na lista de processos: usar sessão efêmera ou
+  `supabase link`.
+
+Opcional: para comparar origem e cópia no mesmo instante, abrir uma sessão
+`BEGIN ISOLATION LEVEL REPEATABLE READ; SELECT pg_export_snapshot();`, rodar nela as
+consultas de G.11 a G.13 e executar o `pg_dump --snapshot=ID_DO_SNAPSHOT` com a transação
+aberta.
+
+**G.7 Conferir a integridade do backup.** Exigir código 0 e log sem erro. Calcular o SHA-256
+(`Get-FileHash -Algorithm SHA256`) e guardá-lo em manifesto separado e protegido. Gerar o
+TOC sem conectar:
+`& 'C:\Program Files\PostgreSQL\18\bin\pg_restore.exe' --list --file='D:/backups-nexo/EXECUCAO_UTC/nexo_public.dump.toc' 'D:/backups-nexo/EXECUCAO_UTC/nexo_public.dump'`
+(`--file` evita a codificação do redirecionamento do PowerShell; o sufixo `.dump.toc` é
+coberto pelo `.gitignore`). O TOC deve listar `TABLE DATA` das 14 tabelas e de
+`alembic_version`, além de `SEQUENCE SET`, `CONSTRAINT`, `FK CONSTRAINT` e `INDEX`. O
+verificador local faz hash, assinatura e `--list` sem conectar:
+`python -B 'CAMINHO_DO_CHECKOUT/scripts/verificar_prontidao_backup.py' --backup 'D:/backups-nexo/EXECUCAO_UTC/nexo_public.dump' --sha256 HASH_SHA256_CONFIAVEL --list`,
+com `C:\Program Files\PostgreSQL\18\bin` no `PATH` só desta sessão (o verificador procura os
+utilitários apenas no `PATH` e, sem isso, devolve 3; OPERACAO §6).
+Checksum e TOC **não** provam que o backup restaura; só G.10 a G.13 provam.
+
+**G.8 Armazenar fora do GitHub.** Criptografar antes de sair da estação (por exemplo,
+`gpg --encrypt` para chave pública com fingerprint verificada), guardar em destino privado
+com versionamento, retenção imutável e segunda cópia independente; chave privada em cofre
+separado; testar a descriptografia. O guia oficial de backup com GitHub Actions grava os
+dumps no próprio repositório: **não adotar** no NEXO. Nunca anexar dump, TOC ou log a PR,
+issue, CI ou e-mail. No plano Free não há backup automático nem PITR; nos planos pagos os
+backups físicos diários não podem ser baixados, então a cópia externa depende sempre de
+dump lógico próprio. O plano do NEXO é NÃO VERIFICADO.
+
+**G.9 Proteger os dados dos clientes.** O dump contém hashes de senha, planilhas (BYTEA),
+chamados e dados de empresas, inclusive das que estão na lixeira. Compressão do formato
+custom não é criptografia. Acesso restrito ao responsável, estação sem compartilhamento,
+nenhuma cópia em pastas sincronizadas sem proteção, descarte conforme política aprovada.
+
+**G.10 Restaurar em ambiente isolado.**
+
+- **PostgreSQL comum (testado localmente):** cluster novo em diretório próprio, porta livre
+  diferente de 5432, `listen_addresses` em loopback, versão igual ou maior que a da origem,
+  banco criado a partir de `template0`, serviço e passfile **só do destino**. O dump de
+  `--schema=public` contém as entradas `SCHEMA - public` e `COMMENT - SCHEMA public`, que
+  colidem com o `public` já existente: a restauração direta com `--exit-on-error` **falha**.
+  Gerar a lista, comentar essas duas linhas com `;` e restaurar com ela:
+
+  ```powershell
+  Set-Location 'D:/backups-nexo/EXECUCAO_UTC'
+  & 'C:\Program Files\PostgreSQL\18\bin\pg_restore.exe' --list --file=nexo_public.dump.list nexo_public.dump
+  # editar nexo_public.dump.list: prefixar com ';' as linhas "SCHEMA - public" e "COMMENT - SCHEMA public"
+  & 'C:\Program Files\PostgreSQL\18\bin\pg_restore.exe' --no-password `
+      --dbname='service=nexo_restore_isolado' --use-list=nexo_public.dump.list `
+      --single-transaction --exit-on-error --no-owner --no-privileges nexo_public.dump
+  ```
+
+  Depois, `ANALYZE`. `--no-owner --no-privileges` facilita o isolamento e não reproduz donos
+  nem grants de produção; `--no-privileges` só ignora GRANT/REVOKE. Políticas RLS presentes
+  no dump são restauradas e, se citarem papéis ou funções do Supabase inexistentes no destino
+  (`anon`, `authenticated`, `auth.uid()`), a restauração falha. Nesse caso, acrescentar
+  `--no-policies` (`pg_restore` 18) ou comentar na lista as entradas `POLICY`, e registrar em
+  G.14 que a cópia não tem as políticas de produção. O ensaio local (E14) partiu de banco
+  sem políticas e não cobre esse caso.
+
+- **Novo projeto Supabase (oficial):**
+  `psql --single-transaction --variable ON_ERROR_STOP=1 --file roles.sql --file schema.sql --command 'SET session_replication_role = replica' --file data.sql --dbname 'URL_DO_PROJETO_NOVO'`.
+  Antes, avaliar `ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;`
+  (aviso oficial do `db dump`); depois, redefinir senhas de papéis com LOGIN e revisar
+  grants e RLS antes de liberar qualquer acesso. O "restore to a new project" do painel só
+  existe em planos pagos e não copia o Storage.
+
+- Em qualquer opção: desligar integrações de saída (Brevo/SMTP, IA); não rodar seed,
+  `create_all`, `stamp`, `upgrade` ou `downgrade` sobre a cópia; após a validação, reaplicar
+  as exclusões definitivas posteriores ao backup antes de liberar acesso ou e-mail (não há
+  trilha automática; ver I).
+
+**G.11 Conferir as tabelas restauradas** (só números). Consultas validadas em PG 18.1:
 
 ```sql
--- A-1 Versão e contexto
-SELECT current_setting('server_version_num') AS versao_num, version(),
-       current_user, current_database(), current_setting('search_path') AS search_path;
-
--- A-2 Constraints reais da aplicação (comparar com a seção B.3)
-SELECT cl.relname AS tabela, con.conname AS nome, con.contype AS tipo,
-       pg_get_constraintdef(con.oid) AS definicao
-FROM pg_constraint con
-JOIN pg_class cl ON cl.oid = con.conrelid
-JOIN pg_namespace n ON n.oid = cl.relnamespace
-WHERE n.nspname = 'public'
-ORDER BY 1, 3, 2;
-
--- A-3 Atributos das roles relevantes
-SELECT rolname, rolsuper, rolcreaterole, rolcreatedb, rolcanlogin, rolbypassrls
-FROM pg_roles
-WHERE rolname IN (current_user, 'postgres', 'anon', 'authenticated', 'service_role', 'authenticator')
-ORDER BY rolname;
-
--- A-4 Revisão Alembic e localização da tabela de versão
-SELECT table_schema FROM information_schema.tables WHERE table_name = 'alembic_version';
--- Executar a consulta abaixo só se a anterior retornar 'public'; caso contrário, qualificar com o
--- schema retornado.
-SELECT version_num FROM public.alembic_version;
-
--- A-5 Inventário de public: dono e RLS
-SELECT c.relkind, c.relname, pg_get_userbyid(c.relowner) AS dono,
-       c.relrowsecurity AS rls, c.relforcerowsecurity AS rls_forcada
-FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = 'public' AND c.relkind IN ('r','p','v','m','f','S')
-ORDER BY 1, 2;
-
--- A-6 Referências legadas (sem prefixo db:) — somente contagens; pode rodar em sessão somente
---     leitura autorizada no Supabase ou na cópia restaurada
-SELECT (SELECT count(*) FROM public.upload_relatorio
-         WHERE caminho_arquivo IS NOT NULL AND caminho_arquivo NOT LIKE 'db:%') AS uploads_legados,
-       (SELECT count(*) FROM public.guia_topico
-         WHERE imagem_url IS NOT NULL AND imagem_url NOT LIKE 'db:%') AS imagens_legadas;
-
--- A-7 a A-7d: executar APENAS NA CÓPIA RESTAURADA
--- A-7 Uploads com referência db: sem arquivo e volume
-SELECT count(*) AS referencias_sem_arquivo
-FROM public.upload_relatorio u
-WHERE u.caminho_arquivo LIKE 'db:%'
-  AND NOT EXISTS (SELECT 1 FROM public.arquivo_armazenado a WHERE a.chave = substr(u.caminho_arquivo, 4));
-SELECT count(*) AS arquivos, pg_size_pretty(sum(length(conteudo))::bigint) AS volume
-FROM public.arquivo_armazenado;
-
--- A-7b Imagens do Guia com referência db: sem arquivo
-SELECT count(*) AS imagens_sem_arquivo
-FROM public.guia_topico g
-WHERE g.imagem_url LIKE 'db:%'
-  AND NOT EXISTS (SELECT 1 FROM public.arquivo_armazenado a WHERE a.chave = substr(g.imagem_url, 4));
-
--- A-7c Arquivos sem nenhuma referência
-SELECT count(*) AS arquivos_sem_referencia
-FROM public.arquivo_armazenado a
-WHERE NOT EXISTS (SELECT 1 FROM public.upload_relatorio u WHERE u.caminho_arquivo = 'db:' || a.chave)
-  AND NOT EXISTS (SELECT 1 FROM public.guia_topico g WHERE g.imagem_url = 'db:' || a.chave);
-
--- A-7d Uploads com SHA-256 divergente (somente contagem; esperado 0)
-SELECT count(*) AS hashes_divergentes
-FROM public.upload_relatorio u
-JOIN public.arquivo_armazenado a ON a.chave = substr(u.caminho_arquivo, 4)
-WHERE u.caminho_arquivo LIKE 'db:%' AND u.hash_arquivo IS NOT NULL
-  AND u.hash_arquivo <> encode(sha256(a.conteudo), 'hex');
-
--- A-8 Conta de demonstração: o operador lê o e-mail em criar_cliente_demo.py:17 e define
---     \set email_demo '...' sem registrá-lo em relatório ou log
-SELECT u.id_usuario, u.role, u.ativo, u.primeiro_acesso, u.geracao_autorizacao,
-       u.data_criacao, u.data_atualizacao, (e.deletado_em IS NOT NULL) AS empresa_na_lixeira
-FROM public.usuario u LEFT JOIN public.empresa e ON e.id_empresa = u.id_empresa
-WHERE lower(u.email) = lower(:'email_demo');
-
--- A-9 Privilégios efetivos de anon/authenticated/PUBLIC por tabela
-SELECT c.relname AS tabela, r.papel,
-       has_table_privilege(r.papel, c.oid, 'SELECT') AS sel,
-       has_table_privilege(r.papel, c.oid, 'INSERT') AS ins,
-       has_table_privilege(r.papel, c.oid, 'UPDATE') AS upd,
-       has_table_privilege(r.papel, c.oid, 'DELETE') AS del
-FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-CROSS JOIN (SELECT rolname AS papel FROM pg_roles WHERE rolname IN ('anon','authenticated')
-            UNION ALL SELECT 'public') r
-WHERE n.nspname = 'public' AND c.relkind IN ('r','p','v','m')
-ORDER BY 1, 2;
-
--- A-9b Privilégio de leitura em colunas sensíveis
-SELECT c.relname AS tabela, a.attname AS coluna, r.papel,
-       has_column_privilege(r.papel, c.oid, a.attnum, 'SELECT') AS sel
-FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped
-CROSS JOIN (SELECT rolname AS papel FROM pg_roles WHERE rolname IN ('anon','authenticated')
-            UNION ALL SELECT 'public') r
-WHERE n.nspname = 'public'
-  AND (c.relname, a.attname) IN (('usuario','senha_hash'), ('arquivo_armazenado','conteudo'))
-ORDER BY 1, 2, 3;
-
--- A-9c Privilégios em sequências
-SELECT c.relname AS sequencia, r.papel,
-       has_sequence_privilege(r.papel, c.oid, 'USAGE') AS uso,
-       has_sequence_privilege(r.papel, c.oid, 'UPDATE') AS upd
-FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-CROSS JOIN (SELECT rolname AS papel FROM pg_roles WHERE rolname IN ('anon','authenticated')
-            UNION ALL SELECT 'public') r
-WHERE n.nspname = 'public' AND c.relkind = 'S'
-ORDER BY 1, 2;
-
--- A-10 Tabelas acessíveis por anon/authenticated sem RLS (esperado: nenhuma linha)
-SELECT c.relname AS tabela_exposta_sem_rls
-FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname = 'public' AND c.relkind IN ('r','p') AND NOT c.relrowsecurity
-  AND EXISTS (SELECT 1 FROM pg_roles r WHERE r.rolname IN ('anon','authenticated')
-              AND has_table_privilege(r.rolname, c.oid, 'SELECT, INSERT, UPDATE, DELETE'))
+-- Tabelas: esperado plano, segmento, empresa, usuario, analise, upload_relatorio,
+-- indicador_analise, relatorio_analise, produto_curva_abc, chamado_suporte,
+-- mensagem_suporte, notificacao, guia_topico, arquivo_armazenado e alembic_version.
+SELECT table_name
+FROM information_schema.tables
+WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
 ORDER BY 1;
 
--- A-11 Políticas RLS existentes
-SELECT schemaname, tablename, policyname, permissive, roles, cmd
-FROM pg_policies WHERE schemaname = 'public' ORDER BY 2, 3;
+-- Contagens por tabela: comparar com a origem no mesmo snapshot.
+SELECT 'alembic_version' AS tabela, count(*) AS linhas FROM alembic_version
+UNION ALL SELECT 'analise', count(*) FROM analise
+UNION ALL SELECT 'arquivo_armazenado', count(*) FROM arquivo_armazenado
+UNION ALL SELECT 'chamado_suporte', count(*) FROM chamado_suporte
+UNION ALL SELECT 'empresa', count(*) FROM empresa
+UNION ALL SELECT 'guia_topico', count(*) FROM guia_topico
+UNION ALL SELECT 'indicador_analise', count(*) FROM indicador_analise
+UNION ALL SELECT 'mensagem_suporte', count(*) FROM mensagem_suporte
+UNION ALL SELECT 'notificacao', count(*) FROM notificacao
+UNION ALL SELECT 'plano', count(*) FROM plano
+UNION ALL SELECT 'produto_curva_abc', count(*) FROM produto_curva_abc
+UNION ALL SELECT 'relatorio_analise', count(*) FROM relatorio_analise
+UNION ALL SELECT 'segmento', count(*) FROM segmento
+UNION ALL SELECT 'upload_relatorio', count(*) FROM upload_relatorio
+UNION ALL SELECT 'usuario', count(*) FROM usuario
+ORDER BY 1;
 
--- A-12 Default privileges herdados por tabelas futuras
-SELECT pg_get_userbyid(d.defaclrole) AS criador, n.nspname AS schema, d.defaclobjtype AS tipo,
-       CASE WHEN a.grantee = 0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee) END AS beneficiario,
-       a.privilege_type
-FROM pg_default_acl d
-LEFT JOIN pg_namespace n ON n.oid = d.defaclnamespace
-CROSS JOIN LATERAL aclexplode(d.defaclacl) a
-ORDER BY 1, 2, 3, 4, 5;
+-- Constraints por tipo (comparar entre servidores da mesma versão principal).
+SELECT c.contype AS tipo, count(*) AS quantidade
+FROM pg_constraint c
+JOIN pg_namespace n ON n.oid = c.connamespace
+WHERE n.nspname = 'public'
+GROUP BY c.contype
+ORDER BY 1;
 
--- A-13 SSL da sessão atual
-SELECT ssl, version, cipher FROM pg_stat_ssl WHERE pid = pg_backend_pid();
-
--- A-14 Contagens agregadas de todas as tabelas de public (sem dados de clientes)
-SELECT 'plano' AS tabela, count(*) FROM public.plano
-UNION ALL SELECT 'segmento', count(*) FROM public.segmento
-UNION ALL SELECT 'empresa', count(*) FROM public.empresa
-UNION ALL SELECT 'usuario', count(*) FROM public.usuario
-UNION ALL SELECT 'analise', count(*) FROM public.analise
-UNION ALL SELECT 'indicador_analise', count(*) FROM public.indicador_analise
-UNION ALL SELECT 'relatorio_analise', count(*) FROM public.relatorio_analise
-UNION ALL SELECT 'produto_curva_abc', count(*) FROM public.produto_curva_abc
-UNION ALL SELECT 'upload_relatorio', count(*) FROM public.upload_relatorio
-UNION ALL SELECT 'arquivo_armazenado', count(*) FROM public.arquivo_armazenado
-UNION ALL SELECT 'chamado_suporte', count(*) FROM public.chamado_suporte
-UNION ALL SELECT 'mensagem_suporte', count(*) FROM public.mensagem_suporte
-UNION ALL SELECT 'notificacao', count(*) FROM public.notificacao
-UNION ALL SELECT 'guia_topico', count(*) FROM public.guia_topico
-UNION ALL SELECT 'alembic_version', count(*) FROM public.alembic_version;
-
--- A-15 Inventário de schemas (somente contagens por tipo de objeto)
-SELECT n.nspname AS schema, c.relkind, count(*)
-FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-WHERE n.nspname NOT IN ('pg_catalog', 'information_schema') AND n.nspname NOT LIKE 'pg_toast%'
-GROUP BY 1, 2
-ORDER BY 1, 2;
+-- Sequências: ultimo_valor_sequencia deve ser maior ou igual a maior_id.
+WITH pk(tabela, coluna) AS (VALUES
+  ('analise', 'id_analise'), ('chamado_suporte', 'id_chamado'), ('empresa', 'id_empresa'),
+  ('guia_topico', 'id'), ('indicador_analise', 'id_indicador'), ('mensagem_suporte', 'id_mensagem'),
+  ('notificacao', 'id_notificacao'), ('plano', 'id_plano'), ('produto_curva_abc', 'id_produto_abc'),
+  ('relatorio_analise', 'id_relatorio'), ('segmento', 'id_segmento'), ('upload_relatorio', 'id_upload'),
+  ('usuario', 'id_usuario'))
+SELECT pk.tabela,
+       (xpath('/row/m/text()', query_to_xml(
+           format('SELECT max(%I) AS m FROM public.%I', pk.coluna, pk.tabela), false, true, '')))[1]::text::bigint
+         AS maior_id,
+       s.last_value AS ultimo_valor_sequencia
+FROM pk
+LEFT JOIN pg_sequences s
+  ON format('%I.%I', s.schemaname, s.sequencename) = pg_get_serial_sequence('public.' || pk.tabela, pk.coluna)
+ORDER BY 1;
 ```
 
-## Apêndice B — Esboço de comandos do backup real (placeholders; NÃO executar sem autorização)
+**G.12 Verificar a revisão Alembic.** `SELECT version_num FROM alembic_version;` deve
+retornar exatamente uma linha, igual à da origem no momento do snapshot. A head do código
+é `e4c004a26b01`; produção pode estar atrás, porque o build do Render não migra. Antes de
+qualquer publicação, comparar, a partir do checkout, `flask db current` (somente leitura,
+contra o banco autorizado) com `flask db heads` (local). Nunca usar `flask db stamp` nem editar
+`alembic_version` para esconder divergência.
 
-Sequência ensaiada num cluster local descartável com dados sintéticos (E.2, item 13), com
-`sslmode` desligado no socket local; TLS, conexão ao Supabase e restauração do artefato B não foram
-ensaiados.
+**G.13 Validar os arquivos armazenados** (consultas somente leitura, saída numérica,
+validadas em PG 18.1 com anomalias injetadas):
 
-```bash
-set -euo pipefail
-umask 077
-export PGSERVICEFILE="<arquivo-de-servico-privado>" PGPASSFILE="<passfile-privado-0600>"
-CHECKOUT="<checkout-do-nexo>"
-BACKUP_DIR="<diretorio-novo-fora-do-checkout>"
-ENSAIO_DIR="<outro-diretorio-novo-para-o-ensaio>"
-mkdir "$BACKUP_DIR" "$ENSAIO_DIR"
-cd "$BACKUP_DIR"
+```sql
+-- Blobs: tamanho_divergente e vazios devem ser 0.
+SELECT count(*) AS arquivos,
+       coalesce(sum(octet_length(conteudo)), 0) AS bytes_total,
+       coalesce(max(octet_length(conteudo)), 0) AS maior_arquivo,
+       count(*) FILTER (WHERE octet_length(conteudo) <> tamanho) AS tamanho_divergente,
+       count(*) FILTER (WHERE octet_length(conteudo) = 0) AS vazios
+FROM arquivo_armazenado;
 
-# 0) Versões do cliente (devem ser da mesma major do servidor confirmado em A-1)
-pg_dump --version; pg_restore --version; psql --version
+-- Planilhas: refs_quebradas, sha256_divergente e tamanho_divergente devem ser 0.
+SELECT count(*) AS refs_db,
+       count(*) FILTER (WHERE a.chave IS NULL) AS refs_quebradas,
+       count(*) FILTER (WHERE a.chave IS NOT NULL AND u.hash_arquivo IS NOT NULL
+                          AND encode(sha256(a.conteudo), 'hex') <> u.hash_arquivo) AS sha256_divergente,
+       count(*) FILTER (WHERE a.chave IS NOT NULL AND u.tamanho_arquivo IS NOT NULL
+                          AND u.tamanho_arquivo <> octet_length(a.conteudo)) AS tamanho_divergente,
+       count(*) FILTER (WHERE u.hash_arquivo IS NULL OR u.tamanho_arquivo IS NULL) AS sem_hash_ou_tamanho
+FROM upload_relatorio u
+LEFT JOIN arquivo_armazenado a ON a.chave = substr(u.caminho_arquivo, 4)
+WHERE u.caminho_arquivo LIKE 'db:%';
 
-# 1) Snapshot comum (F.2, passo 12): em OUTRA sessão psql "service=<servico_backup>", manter aberta
-#      BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY; SELECT pg_export_snapshot();
-#    rodar A-14 nessa sessão e encerrá-la com ROLLBACK só depois dos dois dumps.
-SNAPSHOT="<id-retornado-por-pg_export_snapshot>"
+-- Imagens do Guia: refs_quebradas deve ser 0.
+SELECT count(*) AS refs_db,
+       count(*) FILTER (WHERE a.chave IS NULL) AS refs_quebradas
+FROM guia_topico g
+LEFT JOIN arquivo_armazenado a ON a.chave = substr(g.imagem_url, 4)
+WHERE g.imagem_url LIKE 'db:%';
 
-# 2) Artefato B (principal): banco completo
-pg_dump --dbname="service=<servico_backup>" --no-password --format=custom --snapshot="$SNAPSHOT" \
-  --file=nexo_completo.dump.partial 2>pg_dump_completo.log
-mv -n nexo_completo.dump.partial nexo_completo.dump
+-- Órfãos, compartilhados e legados: exigem justificativa registrada se forem maiores que 0.
+SELECT
+  (SELECT count(*) FROM arquivo_armazenado a
+    WHERE NOT EXISTS (SELECT 1 FROM upload_relatorio u WHERE u.caminho_arquivo = 'db:' || a.chave)
+      AND NOT EXISTS (SELECT 1 FROM guia_topico g WHERE g.imagem_url = 'db:' || a.chave)) AS blobs_orfaos,
+  (SELECT count(*) FROM (SELECT caminho_arquivo FROM upload_relatorio WHERE caminho_arquivo LIKE 'db:%'
+                         GROUP BY caminho_arquivo HAVING count(*) > 1) s) AS planilhas_compartilhadas,
+  (SELECT count(*) FROM upload_relatorio WHERE caminho_arquivo NOT LIKE 'db:%') AS uploads_legados,
+  (SELECT count(*) FROM guia_topico
+    WHERE imagem_url IS NOT NULL AND imagem_url <> '' AND imagem_url NOT LIKE 'db:%') AS guia_legado;
 
-# 3) Artefato A (complementar): schema da aplicação
-pg_dump --dbname="service=<servico_backup>" --no-password --format=custom --schema=public \
-  --snapshot="$SNAPSHOT" --file=nexo_public.dump.partial 2>pg_dump_public.log
-mv -n nexo_public.dump.partial nexo_public.dump
+-- Impressão digital: rodar na origem (mesmo snapshot) e na cópia e comparar só o hexadecimal.
+-- COLLATE "C" fixa a ordem por bytes, sem depender da collation de cada banco.
+SELECT encode(sha256(convert_to(coalesce(
+         string_agg(chave || ':' || encode(sha256(conteudo), 'hex'), E'\n' ORDER BY chave COLLATE "C"), ''), 'UTF8')), 'hex')
+       AS impressao_digital
+FROM arquivo_armazenado;
 
-# 4) Integridade de cada artefato
-for f in nexo_completo.dump nexo_public.dump; do
-  sha256sum "$f" > "$f.sha256"
-  sha256sum --check "$f.sha256"
-  pg_restore --list "$f" > "$f.toc"
-  python -B "$CHECKOUT/scripts/verificar_prontidao_backup.py" --backup "$f" \
-    --sha256 "$(cut -d' ' -f1 "$f.sha256")" --list
-done
-
-# 5) Criptografia para chave pública verificada + hash do cifrado (o claro fica até o passo 8)
-for f in nexo_completo.dump nexo_public.dump; do
-  gpg --output "$f.gpg" --encrypt --recipient "<fingerprint-verificada>" "$f"
-  sha256sum "$f.gpg" > "$f.gpg.sha256"
-done
-
-# 6) Descriptografia de teste em diretório novo e conferência do hash original
-gpg --output "$ENSAIO_DIR/nexo_public.dump" --decrypt nexo_public.dump.gpg
-test "$(sha256sum < "$ENSAIO_DIR/nexo_public.dump" | cut -d' ' -f1)" = \
-     "$(cut -d' ' -f1 nexo_public.dump.sha256)"
-
-# 7) Restauração do artefato A em PostgreSQL ISOLADO da mesma major (nunca o Supabase), num banco
-#    recém-criado e vazio, com o TOC sem a entrada "SCHEMA - public" (E.2, item 12)
-pg_restore --list "$ENSAIO_DIR/nexo_public.dump" | grep -v ' SCHEMA - public ' \
-  > "$ENSAIO_DIR/restauracao.list"
-pg_restore --dbname="service=<servico_restauracao_isolada>" --no-password --no-owner \
-  --no-privileges --single-transaction --exit-on-error --use-list="$ENSAIO_DIR/restauracao.list" \
-  "$ENSAIO_DIR/nexo_public.dump"
-psql "service=<servico_restauracao_isolada>" -X -c "ANALYZE;"
-#    Na cópia: A-7 a A-7d e A-14, comparando com as contagens do snapshot.
-#    Artefato B: somente em ambiente compatível com o Supabase (F.2, passo 11).
-
-# 8) Só depois do passo 7 aprovado: remover as cópias em claro, conforme a política aprovada
+-- Vínculos que o banco não garante: os quatro primeiros devem ser 0.
+SELECT
+  (SELECT count(*) FROM analise a JOIN usuario u ON u.id_usuario = a.id_usuario_admin_responsavel
+    WHERE u.role <> 'ADMIN') AS responsavel_nao_admin,
+  (SELECT count(*) FROM upload_relatorio r JOIN usuario u ON u.id_usuario = r.id_usuario_admin
+    WHERE u.role <> 'ADMIN') AS homologador_nao_admin,
+  (SELECT count(*) FROM chamado_suporte c JOIN usuario u ON u.id_usuario = c.id_usuario_cliente
+    WHERE u.role <> 'CLIENTE' OR u.id_empresa IS DISTINCT FROM c.id_empresa) AS chamado_cliente_divergente,
+  (SELECT count(*) FROM mensagem_suporte m
+     JOIN chamado_suporte c ON c.id_chamado = m.id_chamado
+     JOIN usuario u ON u.id_usuario = m.id_usuario_remetente
+    WHERE NOT (u.role = 'ADMIN' OR (u.role = 'CLIENTE' AND u.id_empresa = c.id_empresa))) AS remetente_divergente,
+  (SELECT count(*) FROM empresa WHERE deletado_em IS NOT NULL) AS empresas_na_lixeira;
 ```
+
+Executar com `psql -X -v ON_ERROR_STOP=1` dentro de `BEGIN TRANSACTION READ ONLY; ...; ROLLBACK;`,
+somente na cópia isolada; na origem, apenas com autorização. Calcular `sha256` de todos os
+BYTEA lê todo o conteúdo: fazer fora do horário de uso. `sha256()` é nativa a partir do
+PostgreSQL 11. Critério de aprovação: zeros onde indicado, impressão digital idêntica,
+contagens iguais às da origem e leitura funcional pela aplicação isolada (em Linux, para
+incluir o ETL). Referências legadas exigem cópia física separada e conferência do SHA-256
+com `hash_arquivo`; antes de qualquer `migrar_arquivos_para_db.py --apply`, listar nomes-base
+repetidos e hashes ausentes.
+
+**G.14 Registrar evidências sem revelar informações privadas.** Registrar em local privado:
+data/hora UTC, operador, autorização, região, versões do servidor e dos clientes, plano e
+PITR, comandos com placeholders, nome, tamanho e SHA-256 do arquivo, contagem de entradas do
+TOC por tipo, duração do dump e do restore (RTO medido), `version_num`, contagens por
+tabela, resultados das consultas e a impressão digital. **Não** registrar senhas, URLs de
+conexão, tokens, conteúdo de linhas, e-mails, CNPJ/CPF, chaves de arquivos (contêm ids de
+análise), TOC ou logs brutos em local público nem o IP do operador; mascarar o *project
+ref* em registros compartilhados. No repositório, somente agregados sintéticos.
+
+**Fontes oficiais consultadas (24/10/2026):** Supabase — [Backups](https://supabase.com/docs/guides/platform/backups),
+[Backup and restore using the CLI](https://supabase.com/docs/guides/platform/migrating-within-supabase/backup-restore),
+[Connecting to Postgres](https://supabase.com/docs/guides/database/connecting-to-postgres),
+[IPv4 address](https://supabase.com/docs/guides/platform/ipv4-address),
+[SSL enforcement](https://supabase.com/docs/guides/platform/ssl-enforcement),
+[`supabase db dump`](https://supabase.com/docs/reference/cli/supabase-db-dump),
+[pg_dump e RLS (backup_reader)](https://supabase.com/docs/guides/troubleshooting/pg_dump-fails-with-query-would-be-affected-by-row-level-security-policy-1d5783),
+[Migrating to Supabase (Postgres)](https://supabase.com/docs/guides/platform/migrating-to-supabase/postgres),
+[Tabelas novas não expostas automaticamente à Data API](https://supabase.com/changelog/45329-breaking-change-tables-not-exposed-to-data-and-graphql-api-automatically),
+[Restrições em auth, storage e realtime](https://supabase.com/changelog/34270-restricting-access-on-auth-storage-and-realtime-schemas-on-april-21-2025).
+PostgreSQL — [pg_dump](https://www.postgresql.org/docs/18/app-pgdump.html),
+[pg_restore](https://www.postgresql.org/docs/18/app-pgrestore.html),
+[SQL Dump](https://www.postgresql.org/docs/current/backup-dump.html),
+[passfile](https://www.postgresql.org/docs/current/libpq-pgpass.html),
+[serviço de conexão](https://www.postgresql.org/docs/current/libpq-pgservice.html),
+[SSL na libpq](https://www.postgresql.org/docs/current/libpq-ssl.html).
+As páginas do Supabase não exibem data de atualização; reconferir antes da execução real.
 
 ---
 
-*Documento gerado na Etapa 0.2 da reestruturação comercial do NEXO. Referência:
-`c919b1d17e6cbf4bf9dac09e29cefca67d908d06`, 2026-10-24.*
+## H. Planejamento das futuras migrations
+
+**Situação: DOCUMENTADO.** Nenhuma tabela, coluna ou revisão foi criada; `models.py` não foi
+alterado.
+
+### H.1 Estruturas previstas e estratégia
+
+| Necessidade (etapas futuras) | Estratégia recomendada |
+|---|---|
+| Controle de recursos dos planos Bronze, Prata e Ouro (E4) | Tabela **aditiva** de recursos por plano (por exemplo, `plano_recurso` com `id_plano`, código do recurso, habilitado e limite), preenchida por migração de dados idempotente. Evitar alterar a CHECK de `nome_plano` (nome gerado `plano_nome_plano_check` no PG; recriação batch no SQLite falha com dados). Não depender de `seed.py`, que não atualiza linhas existentes. Decidir explicitamente entre plano atual da empresa e plano de referência da análise. |
+| Avaliações dos clientes (E5) | Tabela própria com FK para `analise` e para o usuário autor; UNIQUE explícita quando houver regra "uma por análise/usuário". |
+| Comentários públicos e sugestões privadas (E5) | Separar por tipo/visibilidade com CHECK nomeada, ou tabelas distintas; nunca expor sugestão privada por rota pública. |
+| Moderação administrativa (E6) | Estado de moderação com CHECK nomeada, moderador (FK para ADMIN), data e motivo; transições registradas. |
+| Registro de consentimento | Tabela de consentimentos **append-only**: texto/versão do termo, finalidade, data UTC, origem e revogação. É evidência: não apagar em cascata com o usuário sem decisão jurídica; guardar o necessário para prova com dado mínimo. |
+| Histórico de publicação | Tabela de eventos append-only (publicado, despublicado, editado), com autor e data; sem `UPDATE` destrutivo. |
+
+A partir de 30/10/2026 (padrão em projetos novos desde 30/05/2026), o Supabase deixará de
+expor automaticamente à Data API as tabelas novas do schema `public` também nos projetos
+existentes; o NEXO usa conexão direta (SQLAlchemy) e não depende disso, mas o estado de RLS
+e grants das tabelas existentes é PENDENTE DE VALIDAÇÃO.
+
+### H.2 Regras para cada nova revisão Alembic
+
+1. Encadear a partir da head única (hoje `e4c004a26b01`) e conferir `flask db heads` com uma
+   só head; nunca editar revisões existentes.
+2. Preferir mudanças **aditivas** (expandir → migrar dados → código tolerante aos dois
+   estados → contrair em revisão posterior). Coluna nova NOT NULL só com `server_default`
+   válido nos dois bancos ou em duas etapas.
+3. Booleanos: `server_default=sa.false()`/`sa.true()` (gera `0`/`1` no SQLite e
+   `false`/`true` no PG), nunca `'false'`/`'true'` em string; `op.add_column` sem `batch`.
+4. Nomear **toda** constraint e índice novos (`ck_`, `fk_`, `uq_`, `ix_`). Adotar
+   `naming_convention` global só com revisão dedicada e testada, porque altera a comparação
+   das constraints existentes.
+5. Não usar `batch` que recrie `plano`, `usuario`, `empresa` ou `analise` no SQLite com dados;
+   se inevitável, escrever a migração por dialeto (PG: `ALTER ... CONSTRAINT` pelo nome real
+   da seção B.1) e documentar o procedimento SQLite.
+6. Valores monetários com `Numeric(precisão, escala)`; datas com política de fuso definida.
+7. Toda FK nova com **política de exclusão explícita**: incluir a tabela na exclusão
+   permanente de empresa e no cascade de `Analise` (ou `ON DELETE` com
+   `passive_deletes=True`), com teste que exclua empresa e análise com dados nas tabelas
+   novas. Para FK de autor (usuário) em dados que devem sobreviver ao usuário (consentimento,
+   moderação, histórico), preferir coluna anulável ou anonimização a cascata.
+8. Docstring da revisão com a perda de dados do downgrade; migrações de dados idempotentes e
+   separadas do DDL quando possível.
+9. Migrações PostgreSQL com `lock_timeout` e `statement_timeout` definidos na sessão
+   (recomendação para quando `env.py` puder mudar) e janela de baixa atividade.
+
+### H.3 Testes obrigatórios por revisão
+
+- `upgrade` em SQLite vazio e paridade (`tests/test_deploy.py`, `compare_metadata == []`),
+  acrescida de comparação de CHECK.
+- `upgrade` a partir da head anterior **com linhas preexistentes inseridas por SQL bruto**
+  (padrão de `tests/test_company_restore_migration.py`), lendo pelo ORM as colunas novas.
+- Ensaio em PostgreSQL privado (`tests/test_backup_restore.py` no Windows ou Linux;
+  `tests.postgresql_*` em Linux/CI), incluindo falha simulada no meio da migração.
+- Atualizar o contrato de 15 tabelas, as fixtures e as consultas de G.11 a G.13 para as
+  tabelas novas.
+- Downgrade testado só em banco descartável; nunca usado como rollback em produção.
+
+### H.4 Preservação de dados e recuperação
+
+- **Antes** de cada migração em produção: backup verificado (G.6 e G.7), restauração
+  isolada aprovada (G.10 a G.13), `flask db current` × `heads` registrado, plano de
+  interrupção e responsável definidos.
+- **Dados anteriores:** consultas de pré-validação que contem linhas que violariam a regra
+  nova (NOT NULL, CHECK, UNIQUE) antes de aplicá-la; no PG, constraints grandes podem usar
+  `NOT VALID` seguido de `VALIDATE CONSTRAINT`.
+- **Arquivos armazenados:** não alterar `arquivo_armazenado` nem o formato das chaves; rodar
+  G.13 antes e depois.
+- **Conflitos de schema:** uma head só; não gerar `autogenerate` contra banco fora de
+  sincronia; revisar à mão todo bloco `batch` gerado.
+- **Ordem de implantação:** Auto-Deploy controlado; migração aditiva aplicada e conferida
+  antes do código que a usa; publicação manual do SHA aprovado (§5 de
+  `Docs/PREPARACAO_RENDER.md`).
+- **Em caso de erro:** preferir correção para frente com revisão nova que preserve dados;
+  voltar só o código se compatível com o schema; restaurar em **banco separado** e
+  reconciliar gravações posteriores ao snapshot. Downgrade só após revisão do SQL, teste em
+  cópia autorizada e aceitação explícita das perdas.
+
+---
+
+## I. Segurança
+
+| # | Risco | Recomendação | Situação |
+|---|---|---|---|
+| I1 | Credencial de demonstração versionada em `criar_cliente_demo.py` (F4.1 da Etapa 0.1); o script também converte ADMIN em CLIENTE quando o e-mail coincide | Remover o literal, exigir senha por variável ou entrada interativa, travar contra PostgreSQL, verificar se a conta existe em produção e desativá-la/rotacioná-la | PENDENTE DE VALIDAÇÃO |
+| I2 | RLS, grants e exposição das tabelas do `public` pela Data API do Supabase desconhecidos; tabelas com `senha_hash` e BYTEA | Inventário autorizado de RLS/grants; revogar `anon`/`authenticated` se não usados | PENDENTE DE VALIDAÇÃO |
+| I3 | Resíduos de exclusão: notificações de ADMIN, lixeira sem prazo, e-mails a empresa na lixeira, sem trilha de exclusões | Registro operacional de exclusões definitivas fora do banco e do Git (data UTC, tipo, id, hash do CNPJ, operador, solicitação), reaplicado após restauração; decisão sobre prazo da lixeira e retenção de backups | PENDENTE DE VALIDAÇÃO (decisão do responsável) |
+| I4 | ACL herdada no Windows: a raiz desta pasta concede leitura a `Usuários` e modificação a `Usuários autenticados`; um `.env` ou SQLite local herdaria isso | Manter o checkout sob o perfil do usuário ou restringir `.env` e `instance/` com `icacls /inheritance:r` | DOCUMENTADO |
+| I5 | Segredos em comandos de shell (exemplos com `export` de valores reais) | Nota de higiene em `Docs/PREPARACAO_RENDER.md`; carregar de arquivo protegido ou gerenciador de segredos | IMPLEMENTADO (documentação) |
+| I6 | `migrations/env.py` renderiza a URL com senha em memória (F1.11) | Usar `hide_password=True` onde não for necessária no modo offline (etapa futura) | DOCUMENTADO |
+| I7 | ZIP da pasta contorna o `.gitignore` | `git archive` ou lista de exclusão ao compartilhar | DOCUMENTADO |
+| I8 | Cache `tempfile/nexo_arquivos` com cópias em claro, se usado manualmente com dados reais | Remover ao encerrar verificações | DOCUMENTADO |
+| I9 | `tests/test_configuration_deploy.py` cria `instance/` na raiz e usa `postgresql://localhost/nexo_test`, que aponta para a porta padrão do serviço local preexistente (hoje nenhuma conexão ocorre) | Isolar `instance_path` e usar host inalcançável (etapa futura; teste fora do escopo) | DOCUMENTADO; correção pendente (teste fora do escopo) |
+| I10 | Executável plantado e injeção via `.bat` no verificador de backup; entrada do `PATH` sem letra de unidade | Corrigido (F2) | IMPLEMENTADO; TESTADO LOCALMENTE |
+
+---
+
+## J. Pendências
+
+**Dependem de acesso autorizado ao Supabase:** revisão aplicada (`alembic_version`);
+versão do PostgreSQL, plano, PITR, extensões, buckets do Storage; RLS, grants e Data API;
+nomes reais das constraints; inventário de dados (planos, empresas por plano e status,
+legados, órfãos, volume de BYTEA, conta de demonstração); primeiro backup real e
+restauração isolada com tempos medidos (RTO) e RPO aprovado.
+
+**Dependem de acesso ao Render:** estado real do Auto-Deploy e de Pull Request Previews,
+commit implantado, comandos efetivos, variáveis não declaradas no YAML, mecanismo de
+suspensão de tráfego para a janela de migração, disponibilidade de shell no plano.
+
+**Decisões do responsável:** RPO/RTO, frequência e retenção de backups, prazo da lixeira,
+registro de exclusões, destino criptografado e cofre de chaves, responsáveis e substitutos.
+
+**Problemas de código fora do escopo desta etapa (registrados com evidência):**
+notificações de ADMIN no hard delete e mensagem de sucesso (`blueprints/admin.py:523-612`);
+remoção de legados antes do commit e sem checagem de compartilhamento
+(`blueprints/admin.py:567, 994`; `storage.py:188-213`); DELETE duplo no hard delete;
+escritas e e-mails para empresa na lixeira; `migrar_arquivos_para_db.py` com chave por
+nome-base e sobrescrita silenciosa; cache de `storage.py` sem conferência de conteúdo e sem
+normalização da chave em `remover()`; `content_type` dependente do host para `.xlsx` e
+`.webp`; docstrings de `models.py` e `admin.py`; índices em FKs; normalização dos booleanos
+em texto em SQLite legado (exige revisão nova); `migrations/env.py` (`get_engine`
+depreciado, `hide_password`, timeouts); `init_db.py` com `create_all`.
+
+**Cobertura de CI (fora do escopo):** as proteções do verificador específicas do Windows (só
+`.exe`, recusa de `.bat/.cmd/.com`, `PATH` sem letra de unidade) só são testadas no Windows;
+o CI usa `ubuntu-24.04`, então uma regressão exclusiva do Windows passaria nele. Avaliar um
+job Windows opcional.
+
+**Pendências documentais fora do escopo:** `README.md` (13 modelos/entidades, links `docs/`
+em minúsculas, deploy automático "desabilitado", opção A com `init_db.py`, opção B sem
+`FLASK_ENV=production`, exemplo de ETL no Windows); `Docs/RELATORIO_TECNICO.md` (13
+entidades, "6 migrações" — hoje são 8 —, migrações "reversíveis", lixeira que
+"desativa/reativa"); `Docs/AUDITORIA_RENDER.md`
+(registro histórico de 7 revisões); linha "YAML versionado" de
+`Docs/PLANO_PUBLICACAO_SEGURA.md` (build anterior à SEC-006B, registro de 22/10);
+`Docs/PENDENCIAS_SEGURANCA_SEC004_SEC005.md` (SEC-005 como branch exclusiva); referências
+de linha de `tests/test_backup_restore.py` citadas na Etapa 0.1, deslocadas pelas mudanças
+desta etapa.
+
+**Ambiente local:** remover manualmente `%TEMP%\nexo-backup-drill-0ezil1f5` (resíduo do
+ensaio de 20/10, credenciais fictícias); alinhar os pacotes locais a `requirements*.txt`
+(decisão do proprietário) para reproduzir o CI. As execuções desta etapa criaram, e ao final
+foram removidos depois de conferidos sem arquivos: `instance/` (vazio) e `.audit_tmp/` (só
+com a subpasta vazia `config-uploads/`, criada por `tests/test_configuration_deploy.py:25`
+via `app.py:107`) na raiz do projeto (criados pelas suítes de teste; ambos ignorados pelo
+`.gitignore`) e
+`%TEMP%\nexo-etl-job-x36s81t0` (criado durante a linha de base, provavelmente pelo erro do
+teste de cancelamento do ETL). No Git Bash, o `PATH` inclui o `pdftotext` do Git
+(`ucrt64/bin`), que falha ao ler da entrada padrão: rodar a suíte pelo PowerShell, como em
+E15, ou retirar essa pasta do `PATH`; na linha de base (E5) o `pdftotext` também não estava
+no `PATH`.
+
+**Próxima atividade:** validação operacional **autorizada** do backup real (G) e da revisão
+do banco de produção (C.4). A Etapa 0.3 (ambiente de homologação) só deve começar depois da
+avaliação dessas pendências.
+
+---
+
+## K. Critérios de conclusão antes de alterar o banco de produção
+
+Nenhuma alteração estrutural em produção deve ser autorizada sem que **todos** os itens
+abaixo estejam cumpridos e registrados:
+
+1. Autorização explícita, responsável e janela definidos.
+2. Backup lógico real gerado conforme G.6, com SHA-256 em manifesto protegido, TOC
+   conferido e cópia criptografada fora do GitHub (G.7 e G.8).
+3. Restauração isolada aprovada: tabelas, contagens, constraints, sequências, revisão
+   Alembic e todas as consultas de G.13 nos critérios, com tempos medidos.
+4. Revisão de produção conhecida (`flask db current`) e comparada com `flask db heads`;
+   divergência explicada antes de prosseguir.
+5. RLS, grants e exposição pela Data API inventariados; conta de demonstração verificada.
+6. Auto-Deploy controlado e mecanismo de suspensão de tráfego/escritores definido e testado
+   no Render.
+7. Revisão nova (se houver) aprovada com os testes de H.3, inclusive no PostgreSQL privado e
+   com dados preexistentes, e com plano de recuperação de H.4.
+8. Suíte de testes executada em ambiente equivalente ao CI (Linux, pacotes fixados),
+   sem falhas não explicadas; ensaio de backup com o ETL executado (Linux).
+9. Registro de exclusões definitivas preparado para reconciliação pós-restauração.
+
+---
+
+## L. Situação final
+
+**Classificação: CONCLUÍDA LOCALMENTE.**
+
+Justificativa:
+
+- A auditoria de modelos, migrações, backup, arquivos armazenados, vazamento e documentação
+  foi concluída, com verificação adversarial independente de cada achado. Uma segunda
+  revisão adversarial das alterações não encontrou achado de severidade alta; os achados
+  confirmados foram corrigidos e revalidados (E7 a E15).
+- Os testes locais possíveis foram executados: verificador (13 → 18 aprovados), ensaio
+  PostgreSQL isolado no Windows (falhava; 8/8 após as correções, com a verificação do ETL
+  registrada como não executada — exige Linux; ver E9), testes de migração e persistência,
+  mutação dos defeitos corrigidos e dos ramos novos, utilitários reais, validação das
+  consultas (inclusive com collation ICU) e do restore do schema `public` em PostgreSQL 18.1
+  descartável. A suíte completa tem falhas apenas fora do escopo, explicadas pela plataforma
+  Windows e pelos pacotes locais; depois das alterações (569 testes) não surgiu nenhuma falha
+  ou erro novo em relação à linha de base (561 testes).
+- Os defeitos comprovados dentro do escopo foram corrigidos com a menor mudança e testes
+  correspondentes; a documentação operacional divergente foi atualizada sem reescrever
+  registros históricos, exceto a anonimização do caminho local no registro de 20/10 de
+  `Docs/OPERACAO_BACKUP_RESTAURACAO.md`, declarada em F7 e marcada no texto.
+- O procedimento do backup real e da restauração isolada está preparado (G), e os critérios
+  para alterar produção estão definidos (K).
+
+Esta classificação **não** equivale a homologação de produção. Não houve backup real,
+restauração do Supabase, verificação da revisão aplicada em produção nem acesso ao Render;
+esses itens estão em J e são pré-requisito da Etapa 0.3.
+
+---
+
+*Documento gerado na Etapa 0.2A da reestruturação comercial do NEXO, em 2026-10-24, sobre a
+pasta local (sem `.git`). Destino do commit manual: repositório oficial
+`nexofaturamentointeligente-coder/Nexo-Faturamento-Inteligente`.*

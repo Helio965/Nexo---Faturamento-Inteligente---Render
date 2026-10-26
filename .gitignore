@@ -39,6 +39,13 @@ instance/
 *.db
 *.sqlite
 *.sqlite3
+# Auxiliares do SQLite: app.py ativa WAL; -wal/-journal guardam páginas com dados.
+*.db-wal
+*.db-shm
+*.db-journal
+*.sqlite*-wal
+*.sqlite*-shm
+*.sqlite*-journal
 
 # === Uploads e Dados (Arquivos de Clientes / LGPD) ===
 uploads/*

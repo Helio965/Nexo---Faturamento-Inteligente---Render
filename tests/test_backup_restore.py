@@ -48,6 +48,27 @@ def _tool(bin_dir, name):
     return bin_dir / (name + (".exe" if os.name == "nt" else ""))
 
 
+def _etl_or_platform_refusal(calculate, etl_error, sales, purchases):
+    """Executa o ETL do ensaio; None somente quando a SEC-005 recusa a plataforma.
+
+    O ETL roda em subprocesso com limites POSIX (etl_worker.py) e recusa, com
+    code="platform", sistemas sem esse isolamento, como o Windows. Qualquer
+    outra falha continua reprovando o ensaio.
+    """
+    try:
+        return calculate(sales, purchases)
+    except etl_error as error:
+        if getattr(error, "code", None) != "platform":
+            raise
+        return None
+
+
+def _acceptable_not_executed(not_executed, platform):
+    """Só o ETL pode ficar sem execução, e nunca no Linux (plataforma do CI e da produção)."""
+    return (isinstance(not_executed, list) and set(not_executed) <= {"etl"}
+            and not (platform.startswith("linux") and not_executed))
+
+
 class PostgreSQLBackupRestoreTests(unittest.TestCase):
     def test_backup_and_restore_private_postgresql_cluster(self):
         raw_bin = os.environ.get("NEXO_TEST_POSTGRES_BIN")
@@ -97,6 +118,13 @@ class PostgreSQLBackupRestoreTests(unittest.TestCase):
         self.assertEqual(report.get("tables"), 15)
         self.assertEqual(report.get("uploads"), 4)
         self.assertEqual(report.get("files"), 5)
+        not_executed = report.get("not_executed", [])
+        self.assertTrue(_acceptable_not_executed(not_executed, sys.platform),
+                        "Verificação obrigatória do ensaio não foi executada nesta plataforma.")
+        # Verificação não executada nunca entra em "checks"; as 17 seguem contabilizadas.
+        self.assertFalse(set(report.get("checks", [])) & set(not_executed),
+                         "Verificação não executada listada como aprovada.")
+        self.assertEqual(len(report.get("checks", [])) + len(not_executed), 17)
         print("\nEnsaio PostgreSQL isolado: " + json.dumps(report, ensure_ascii=True, sort_keys=True))
 
 
@@ -137,6 +165,58 @@ class BackupDrillSafetyTests(unittest.TestCase):
                 self.assertNotIn("synthetic-secret", str(error.exception))
                 run.assert_not_called()
 
+    def test_only_platform_refusal_skips_etl_check(self):
+        class SyntheticETLError(Exception):
+            def __init__(self, code):
+                super().__init__(code)
+                self.code = code
+
+        def failing(error):
+            def calculate(_sales, _purchases):
+                raise error
+            return calculate
+
+        self.assertIsNone(_etl_or_platform_refusal(
+            failing(SyntheticETLError("platform")), SyntheticETLError, "vendas", "compras"))
+        for error in (SyntheticETLError("data"), SyntheticETLError("timeout"),
+                      SyntheticETLError(None), RuntimeError("platform")):
+            with self.subTest(error=repr(error)), self.assertRaises(type(error)):
+                _etl_or_platform_refusal(failing(error), SyntheticETLError, "vendas", "compras")
+        result = object()
+        self.assertIs(_etl_or_platform_refusal(
+            lambda _sales, _purchases: result, SyntheticETLError, "vendas", "compras"), result)
+
+    def test_not_executed_checks_are_never_accepted_on_linux(self):
+        self.assertTrue(_acceptable_not_executed([], "linux"))
+        self.assertTrue(_acceptable_not_executed([], "win32"))
+        self.assertTrue(_acceptable_not_executed(["etl"], "win32"))
+        self.assertFalse(_acceptable_not_executed(["etl"], "linux"))
+        for missing in (["restore"], ["sha256"], ["etl", "restore"], "etl", None):
+            with self.subTest(missing=missing):
+                self.assertFalse(_acceptable_not_executed(missing, "win32"))
+
+    def test_parent_never_counts_unexecuted_checks_as_approved(self):
+        case = PostgreSQLBackupRestoreTests("test_backup_and_restore_private_postgresql_cluster")
+        checks = [f"verificacao_{index}" for index in range(16)]
+        # Cada caso reprovado é detectado por uma única asserção do teste pai.
+        cases = (("win32", checks, True), ("win32", checks[1:] + ["etl"], False),
+                 ("win32", checks[1:], False), ("linux", checks, False))
+        with tempfile.TemporaryDirectory(prefix="nexo-fake-pg-bin-") as fake:
+            for tool in TOOLS:
+                _tool(Path(fake), tool).write_bytes(b"")
+            for platform, approved, accepted in cases:
+                report = {"status": "ok", "tables": 15, "uploads": 4, "files": 5,
+                          "checks": approved, "not_executed": ["etl"]}
+                completed = subprocess.CompletedProcess([], 0, stdout=json.dumps(report))
+                with self.subTest(platform=platform, checks=approved[-1:], accepted=accepted), \
+                        patch.dict(os.environ, {"NEXO_TEST_POSTGRES_BIN": fake}, clear=True), \
+                        patch("subprocess.run", return_value=completed), \
+                        patch.object(sys, "platform", platform), contextlib.redirect_stdout(io.StringIO()):
+                    if accepted:
+                        case.test_backup_and_restore_private_postgresql_cluster()
+                    else:
+                        self.assertRaises(AssertionError, case.test_backup_and_restore_private_postgresql_cluster)
+
 
 class _PrivateDrill(unittest.TestCase):
     """Auxiliar interno; não é um caso descoberto pelo unittest."""
@@ -145,6 +225,7 @@ class _PrivateDrill(unittest.TestCase):
         super().__init__()
         self.bin_dir = bin_dir
         self.stage = "preparação"
+        self.not_executed = []
         self.env = _safe_environment()
         self.env["PATH"] = str(bin_dir) + os.pathsep + self.env.get("PATH", "")
 
@@ -285,7 +366,7 @@ class _PrivateDrill(unittest.TestCase):
         from sqlalchemy.exc import IntegrityError
         from models import (Analise, ArquivoArmazenado, Empresa, GuiaTopico,
                             UploadRelatorio, Usuario)
-        from etl_processor import calcular_kpis_em_memoria
+        from etl_processor import ETLValidationError, calcular_kpis_em_memoria
         import storage
 
         with app.app_context():
@@ -324,10 +405,15 @@ class _PrivateDrill(unittest.TestCase):
                 self.assertEqual(Path(storage.resolver(guia.imagem_url)).read_bytes(), GUIA)
                 uploads = db.session.get(Analise, self.analysis_ids[0]).uploads
                 paths = {item.tipo_relatorio: storage.resolver(item.caminho_arquivo) for item in uploads}
-                result = calcular_kpis_em_memoria(paths["VENDAS"], paths["COMPRAS"])
-                self.assertTrue(result.sucesso)
-                self.assertEqual(result.kpis["faturamento_total"], 25)
-                self.assertEqual(result.kpis["total_comprado"], 40)
+                result = _etl_or_platform_refusal(
+                    calcular_kpis_em_memoria, ETLValidationError, paths["VENDAS"], paths["COMPRAS"])
+                if result is None:
+                    # Registrado como não executado; os bytes/hashes acima seguem obrigatórios.
+                    self.not_executed.append("etl")
+                else:
+                    self.assertTrue(result.sucesso)
+                    self.assertEqual(result.kpis["faturamento_total"], 25)
+                    self.assertEqual(result.kpis["total_comprado"], 40)
             # Confere todas as sequências numéricas, sem remover nenhuma linha.
             for table in db.metadata.sorted_tables:
                 pk = next(iter(table.primary_key.columns))
@@ -461,11 +547,13 @@ class _PrivateDrill(unittest.TestCase):
                     apps.append(target)
                     self.stage = "comparação completa e relacionamentos"
                     self.validate_restore(target, snapshot, revision)
+                    checks = ["migrations", "custom_dump", "sha256", "pg_restore_list", "readiness_cli",
+                              "invalid_archive_rejected", "restore",
+                              "all_rows", "relationships", "binary_files", "sequences", "foreign_keys",
+                              "etl", "health", "csrf_login", "dashboard", "company_isolation"]
                     return {"status": "ok", "tables": len(snapshot) + 1, "uploads": 4, "files": 5,
-                            "checks": ["migrations", "custom_dump", "sha256", "pg_restore_list", "readiness_cli",
-                                       "invalid_archive_rejected", "restore",
-                                       "all_rows", "relationships", "binary_files", "sequences", "foreign_keys",
-                                       "etl", "health", "csrf_login", "dashboard", "company_isolation"],
+                            "checks": [check for check in checks if check not in self.not_executed],
+                            "not_executed": self.not_executed,
                             "production_access": False}
             finally:
                 # Só encerra o cluster inicializado por este processo, sempre por caminho absoluto.

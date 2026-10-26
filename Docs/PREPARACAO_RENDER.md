@@ -41,7 +41,7 @@ O build versionado prepara pip 26.2.2 verificado por SHA256 antes da aplicação
 | `FLASK_ENV` | Sim | Definir como `production` |
 | `SECRET_KEY` | Sim | Chave aleatória segura (use `generateValue: true` no Render) |
 | `DATABASE_URL` | Sim | URL de conexão do PostgreSQL (via Transaction Pooler - porta 6543) |
-| `DIRECT_URL` | Sim | URL de conexão direta do PostgreSQL (porta 5432) para migrações |
+| `DIRECT_URL` | Sim | URL para migrações: conexão direta ou Session pooler (ambos na porta 5432), com SSL; nunca o Transaction pooler (6543). Segundo a documentação do Supabase, a conexão direta usa IPv6 (IPv4 só com add-on) e o Render só tem IPv4: a partir dele, use o Session pooler |
 | `PROXY_FIX_HOPS` | Sim | Definir como `1` (Render usa 1 proxy reverso) |
 | `BREVO_API_KEY` | Sim | Chave da API do Brevo para envio de e-mails via HTTPS (Render Free bloqueia SMTP) |
 | `MAIL_DEFAULT_SENDER` | Sim | E-mail remetente verificado no Brevo |
@@ -65,6 +65,8 @@ export SECRET_KEY="sua_chave_secreta"
 flask db upgrade
 ```
 
+Antes de executar, faça a verificação da seção 5 (revisão atual × head, backup verificado). Não digite segredos reais em comandos que fiquem no histórico do shell; carregue-os de arquivo protegido fora do repositório ou de um gerenciador de segredos e limpe as variáveis ao final.
+
 ### Passo 2: Criação do Administrador Inicial
 Após as migrações, no mesmo terminal (o `seed.py` precisa das mesmas variáveis do Passo 1), execute o script de seed para criar a conta master:
 ```bash
@@ -82,10 +84,13 @@ O YAML versionado declara `autoDeployTrigger: 'off'`, mas isso não comprova a c
 
 Antes de alterar o schema, preparar backup autorizado, validar a restauração isolada e revisar o plano específico de recuperação conforme [Operação de backup, restauração e recuperação](OPERACAO_BACKUP_RESTAURACAO.md). Reverter o código não reverte o banco. Nenhum comando de migração ou publicação deste documento deve ser executado como teste de backup.
 
-Para atualizar a aplicação:
-1. Faça o commit e push das alterações para o GitHub.
-2. Se houver mudanças no banco de dados (novos arquivos em `migrations/versions`), execute `flask db upgrade` com as mesmas variáveis do Passo 1 da seção 4 antes de liberar o tráfego.
-3. No painel do Render, abra o serviço e use **Manual Deploy → Deploy latest commit**.
+Para atualizar a aplicação (roteiro revisado na Etapa 0.2A; cada passo depende de autorização do responsável):
+1. Trabalhe em branch própria e PR. Antes de qualquer merge ou push na `main`, confirme no painel o estado real do Auto-Deploy e desative-o, ou garanta outro bloqueio da publicação automática, até o banco estar na revisão exigida pelo código.
+2. Compare sempre a revisão do banco com a do código, mesmo sem arquivos novos em `migrations/versions`: `flask db current` (somente leitura, com as variáveis do Passo 1) × `flask db heads` (local). A head atual é `e4c004a26b01` e a revisão aplicada em produção não está confirmada; se forem diferentes, o código atual depende da migração.
+3. Para migrar: backup autorizado e restauração isolada aprovados ([Operação de backup](OPERACAO_BACKUP_RESTAURACAO.md)); janela com tráfego e escritores antigos suspensos, como exige a `e4c004a26b01`, por mecanismo que o operador deve definir e conferir no Render; então `flask db upgrade REVISAO_APROVADA` (substituir pelo id da revisão aprovada).
+4. Com o banco na revisão exigida, publique manualmente o SHA aprovado (**Manual Deploy**), sem usar "latest commit" sem conferir o SHA; valide `/healthz`, `/healthz/db` e os fluxos principais antes de reabrir o tráfego.
+
+Critérios, riscos e pendências: [00_02 — Proteção do banco e preparação das migrações](REESTRUTURACAO_COMERCIAL/00_02_PROTECAO_BANCO_MIGRACOES.md).
 
 ## 6. Diagnóstico de Erros Comuns
 
