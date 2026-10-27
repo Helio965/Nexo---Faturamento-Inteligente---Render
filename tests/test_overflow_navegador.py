@@ -160,7 +160,7 @@ _MEDIR = """() => {
         const xt = ticks.filter(t => t.texto).sort((a, b) => a.b.x0 - b.b.x0);
         let sobrepostos = 0;
         for (let i = 1; i < xt.length; i++) if (xt[i].b.x0 < xt[i - 1].b.x1 - 1 && Math.abs(xt[i].b.y0 - xt[i - 1].b.y0) < 2 && Math.abs(xt[i].b.x0 - xt[i-1].b.x0) > 0) sobrepostos++;
-        return {id: c.id, desenhado: !!c.querySelector('.main-svg'), truncados: ticks.filter(t => /…$/.test(t.texto)).length,
+        return {id: c.id, w: Math.round(cr.w), desenhado: !!c.querySelector('.main-svg'), truncados: ticks.filter(t => /…$/.test(t.texto)).length,
                 cortados: cortados.slice(0, 5), sobrepostos, papel: c.getAttribute('role'), rotulo: (c.getAttribute('aria-label') || '').length};
     });
     return {rolagem_x: document.documentElement.scrollWidth > vw + 1, tabelas, kpis, nexobot, sidebar, fora: fora.slice(0, 10), graficos};
@@ -216,6 +216,10 @@ class OverflowNavegadorTests(ContratosCase):
         s.add_all([longa, lixo])
         s.flush()
         self.contratar(empresa_id=longa.id_empresa)
+        # Referência sem espaços (140 caracteres): no modo cartões ela precisa quebrar
+        # dentro do cartão, não vazar dele.
+        self.pagar(date(2026, 1, 1), date(2026, 1, 31), empresa_id=longa.id_empresa,
+                   referencia="Comprovante-fictício-" + "X" * 120)
         # Análise do cliente: indicadores grandes, devolutiva e Curva ABC com nomes longos.
         self.publicar(self.analise_id, inicio=date(2026, 1, 1), fim=date(2026, 1, 31))
         anterior = self.nova_analise(date(2025, 12, 1), date(2025, 12, 31))
@@ -329,11 +333,12 @@ class OverflowNavegadorTests(ContratosCase):
         # computador, quebradas nas palavras como faz NEXO.quebrarRotulo); só os que
         # precisariam de mais linhas podem terminar em reticências, e o nome completo
         # fica na tooltip, na descrição acessível e na tabela ABC.
-        por_linha = 18 if largura < 768 else 26
-        truncaveis = sum(1 for nome in PRODUTOS_LONGOS if _linhas_necessarias(nome, por_linha) > 3)
         for g in m["graficos"]:
             if not g["desenhado"]:
                 continue
+            # O gráfico decide o modo pela própria largura (< 560 px = estreito), não pela do viewport.
+            por_linha = 18 if g["w"] < 560 else 26
+            truncaveis = sum(1 for nome in PRODUTOS_LONGOS if _linhas_necessarias(nome, por_linha) > 3)
             permitidos = truncaveis if "Abc" in g["id"] else 0
             self.assertLessEqual(g["truncados"], permitidos, f"{contexto}: rótulo truncado em {g['id']}")
             self.assertEqual(g["cortados"], [], f"{contexto}: rótulo cortado em {g['id']}")
