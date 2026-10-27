@@ -188,10 +188,15 @@ def contexto_sininho(usuario) -> dict:
     Dados do sininho para o usuário autenticado: contagem de não-lidas e as
     5 notificações mais recentes. Usado pelo context processor (toda página).
     """
-    if usuario is None or not getattr(usuario, "is_authenticated", False):
-        return {"notif_nao_lidas": 0, "notif_recentes": []}
+    vazio = {"notif_nao_lidas": 0, "notif_recentes": []}
+    if usuario is None:
+        return vazio
 
     try:
+        # is_authenticated pode consultar o banco (instância expirada após um
+        # rollback): fica dentro da proteção, como as consultas abaixo.
+        if not getattr(usuario, "is_authenticated", False):
+            return vazio
         nao_lidas = db.session.execute(
             select(db.func.count(Notificacao.id_notificacao)).where(
                 Notificacao.id_usuario == usuario.id_usuario,
@@ -214,6 +219,6 @@ def contexto_sininho(usuario) -> dict:
             db.session.rollback()
         except Exception:  # noqa: BLE001
             pass
-        return {"notif_nao_lidas": 0, "notif_recentes": []}
+        return vazio
 
     return {"notif_nao_lidas": int(nao_lidas), "notif_recentes": recentes}

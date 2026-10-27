@@ -359,8 +359,20 @@ def create_app(config_name: str = None) -> Flask:
     def _pagina_erro(status, titulo, mensagem):
         if request.path.startswith("/api/"):
             return _erro_api(mensagem, status)
-        return render_template("erro_simples.html", titulo=titulo, mensagem=mensagem,
-                               painel_url=_painel_url(), codigo=status), status
+        contexto = {"titulo": titulo, "mensagem": mensagem, "painel_url": _painel_url(), "codigo": status}
+        try:
+            return render_template("erro_simples.html", **contexto), status
+        except Exception:  # noqa: BLE001
+            # Banco inacessível no meio da requisição: algum context processor
+            # (sininho, catálogo do NexoBot, usuário expirado) falhou. A página de
+            # erro é renderizada sem eles, em vez da página branca do servidor.
+            app.logger.exception("Página de erro %s renderizada sem o contexto da sessão", status)
+            try:
+                db.session.rollback()
+            except Exception:  # noqa: BLE001
+                pass
+            contexto["painel_url"] = None
+            return app.jinja_env.get_template("erro_simples.html").render(**contexto), status
 
     @app.errorhandler(404)
     def _nao_encontrado(e):

@@ -55,8 +55,13 @@ def _cabecalhos_defensivos(resposta):
 @api_bp.app_context_processor
 def destinos_nexobot():
     """O widget valida ações usando o mesmo catálogo fechado do backend."""
-    if current_user.is_authenticated and current_user.is_cliente:
-        return {"nexobot_destinos": urls_destinos()}
+    try:
+        if current_user.is_authenticated and current_user.is_cliente:
+            return {"nexobot_destinos": urls_destinos()}
+    except Exception:  # noqa: BLE001
+        # Banco inacessível (ex.: página de erro 500 com a conexão perdida): o
+        # widget fica sem catálogo em vez de derrubar a renderização da página.
+        pass
     return {"nexobot_destinos": {}}
 
 
