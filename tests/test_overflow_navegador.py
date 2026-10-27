@@ -741,6 +741,45 @@ class PaginasDeErroTests(ContratosCase):
             self.assertEqual(painel.status_code, 200)
             self.assertIn("Visão Geral", painel.get_data(as_text=True))
 
+    def test_pagina_de_erro_sem_banco_nenhum(self):
+        """Banco inacessível durante a renderização (context processors falhando):
+        a página de erro sai mesmo assim, sem o link do painel, e nunca a página
+        branca do servidor."""
+        from sqlalchemy.exc import OperationalError
+        app = self.app
+        app.config["PROPAGATE_EXCEPTIONS"] = False
+
+        def _sem_banco():
+            raise OperationalError("SELECT 1", None, Exception("could not connect to server"))
+
+        try:
+            app.add_url_rule("/__teste/sem-banco", "teste_sem_banco", _sem_banco)
+        except AssertionError:
+            from werkzeug.routing import Rule
+            app.url_map.add(Rule("/__teste/sem-banco", endpoint="teste_sem_banco"))
+            app.view_functions["teste_sem_banco"] = _sem_banco
+        cliente = app.test_client()
+        self._entrar(cliente, "admin-test@example.invalid")
+        # Todo context processor que toque o banco falha, inclusive o do próprio
+        # Flask-Login (usuário expirado) — simulado por um processor que lança.
+        app.template_context_processors[None].append(lambda: (_ for _ in ()).throw(
+            OperationalError("SELECT usuario", None, Exception("server closed the connection"))))
+        try:
+            resposta = cliente.get("/__teste/sem-banco")
+            self.assertEqual(resposta.status_code, 500)
+            corpo = resposta.get_data(as_text=True)
+            self.assertIn("Algo deu errado", corpo)
+            self.assertNotIn("Internal Server Error", corpo)
+            # Caminho de contingência (sem contexto da sessão): link para o início, não
+            # para o painel, mesmo com o usuário logado.
+            self.assertIn("Voltar ao início", corpo)
+            self.assertNotIn("Voltar ao painel", corpo)
+            nao_encontrada = cliente.get("/pagina-que-nao-existe")
+            self.assertEqual(nao_encontrada.status_code, 404)
+            self.assertIn("Página não encontrada", nao_encontrada.get_data(as_text=True))
+        finally:
+            app.template_context_processors[None].pop()
+
     def test_email_volta_preenchido_apos_senha_errada(self):
         cliente = self.app.test_client()
         resposta = cliente.post("/auth/login", data={"csrf_token": self._token(cliente),
