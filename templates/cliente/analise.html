@@ -89,11 +89,11 @@
 </div>
 
 {# ---- Pílulas de filtro dinâmico (sem reload) ---- #}
-<div class="abc-filter" id="abcFilter" role="tablist" aria-label="Filtrar produtos por classe ABC">
-    <button type="button" class="abc-pill is-active" role="tab" aria-selected="true" aria-controls="abcTable" data-abc-filter="ALL">Todos <span class="abc-pill-count">{{ analise.curva_abc|length }}</span></button>
-    <button type="button" class="abc-pill" role="tab" aria-selected="false" aria-controls="abcTable" data-abc-filter="A"><span class="abc-dot abc-a" aria-hidden="true"></span>Classe A <span class="abc-pill-count">{{ cont['A'] }}</span></button>
-    <button type="button" class="abc-pill" role="tab" aria-selected="false" aria-controls="abcTable" data-abc-filter="B"><span class="abc-dot abc-b" aria-hidden="true"></span>Classe B <span class="abc-pill-count">{{ cont['B'] }}</span></button>
-    <button type="button" class="abc-pill" role="tab" aria-selected="false" aria-controls="abcTable" data-abc-filter="C"><span class="abc-dot abc-c" aria-hidden="true"></span>Classe C <span class="abc-pill-count">{{ cont['C'] }}</span></button>
+<div class="abc-filter" id="abcFilter" role="group" aria-label="Filtrar produtos por classe ABC">
+    <button type="button" class="abc-pill is-active" aria-pressed="true" data-abc-filter="ALL">Todos <span class="abc-pill-count">{{ analise.curva_abc|length }}</span></button>
+    <button type="button" class="abc-pill" aria-pressed="false" data-abc-filter="A"><span class="abc-dot abc-a" aria-hidden="true"></span>Classe A <span class="abc-pill-count">{{ cont['A'] }}</span></button>
+    <button type="button" class="abc-pill" aria-pressed="false" data-abc-filter="B"><span class="abc-dot abc-b" aria-hidden="true"></span>Classe B <span class="abc-pill-count">{{ cont['B'] }}</span></button>
+    <button type="button" class="abc-pill" aria-pressed="false" data-abc-filter="C"><span class="abc-dot abc-c" aria-hidden="true"></span>Classe C <span class="abc-pill-count">{{ cont['C'] }}</span></button>
 </div>
 
 <div class="table-wrap mb-3">
@@ -205,9 +205,9 @@
       if (!btn) return;
       var alvo = btn.getAttribute('data-abc-filter');
 
-      filtro.querySelectorAll('.abc-pill').forEach(function (p) { p.classList.remove('is-active'); p.setAttribute('aria-selected', 'false'); });
+      filtro.querySelectorAll('.abc-pill').forEach(function (p) { p.classList.remove('is-active'); p.setAttribute('aria-pressed', 'false'); });
       btn.classList.add('is-active');
-      btn.setAttribute('aria-selected', 'true');
+      btn.setAttribute('aria-pressed', 'true');
 
       var visiveis = 0;
       linhas.forEach(function (tr) {

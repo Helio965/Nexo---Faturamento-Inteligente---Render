@@ -56,7 +56,7 @@
             <div class="col-12 col-md-6">
                 <div class="upload-slot {{ 'is-done' if slot.up else '' }}">
                     <div class="upload-slot-head">
-                        <div class="title"><i class="bi bi-filetype-csv"></i> {{ slot.titulo }}</div>
+                        <div class="title" id="dzTitulo{{ a.id_analise }}{{ slot.tipo }}"><i class="bi bi-filetype-csv"></i> {{ slot.titulo }}</div>
                         {% if slot.up %}
                             {% if slot.up.status_processamento == 'PROCESSADO' %}{{ m.badge_upload('PROCESSADO') }}
                             {% elif slot.up.status_processamento == 'ERRO' %}{{ m.badge_upload('ERRO') }}
@@ -72,12 +72,13 @@
                            selecionado agora. O estado muda ao escolher ou arrastar um arquivo novo. #}
                         <label class="dropzone {{ 'is-recebido' if slot.up }}" data-dz>
                             <div class="dz-icon"><i class="bi {{ 'bi-file-earmark-check' if slot.up else 'bi-cloud-arrow-up' }}" aria-hidden="true"></i></div>
-                            <div class="dz-estado" data-dz-estado data-vazio="{{ 'Arquivo recebido' if slot.up else '' }}">{{ 'Arquivo recebido' if slot.up else '' }}</div>
-                            <div class="dz-title" data-dz-label data-vazio="{{ slot.up.nome_arquivo_original if slot.up else 'Arraste o arquivo ou clique para selecionar' }}">{{ slot.up.nome_arquivo_original if slot.up else 'Arraste o arquivo ou clique para selecionar' }}</div>
+                            <div class="dz-estado" id="dzEstado{{ a.id_analise }}{{ slot.tipo }}" data-dz-estado data-vazio="{{ 'Arquivo recebido' if slot.up else '' }}">{{ 'Arquivo recebido' if slot.up else '' }}</div>
+                            <div class="dz-title" id="dzNome{{ a.id_analise }}{{ slot.tipo }}" data-dz-label data-vazio="{{ slot.up.nome_arquivo_original if slot.up else 'Arraste o arquivo ou clique para selecionar' }}">{{ slot.up.nome_arquivo_original if slot.up else 'Arraste o arquivo ou clique para selecionar' }}</div>
                             <div class="dz-hint" id="dzHint{{ a.id_analise }}{{ slot.tipo }}">{{ 'Para reenviar, arraste ou selecione um arquivo novo (.csv ou .xlsx)' if slot.up else 'Formatos aceitos: .csv, .xlsx' }}</div>
                             <div class="dz-erro" data-dz-erro role="alert"></div>
                             <input type="file" name="arquivo" accept=".csv,.xlsx" data-dz-input
-                                   aria-label="{{ slot.titulo }}: selecionar arquivo" aria-describedby="dzHint{{ a.id_analise }}{{ slot.tipo }}">
+                                   {# Nome acessível com os textos visíveis (título do slot, estado e nome do arquivo), acompanhando o estado. #}
+                                   aria-labelledby="dzTitulo{{ a.id_analise }}{{ slot.tipo }} dzEstado{{ a.id_analise }}{{ slot.tipo }} dzNome{{ a.id_analise }}{{ slot.tipo }}" aria-describedby="dzHint{{ a.id_analise }}{{ slot.tipo }}">
                         </label>
                         <button type="submit" class="btn-ghost w-100 justify-content-center mt-3"><i class="bi bi-upload" aria-hidden="true"></i> {{ 'Reenviar' if slot.up else 'Enviar' }} {{ slot.tipo|capitalize }}</button>
                     </form>

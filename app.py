@@ -373,6 +373,13 @@ def create_app(config_name: str = None) -> Flask:
 
     @app.errorhandler(500)
     def _erro_interno(e):
+        # Erro no meio de uma transação: no PostgreSQL ela fica abortada e qualquer
+        # consulta feita pela própria página de erro (sininho, usuário) falharia e
+        # devolveria a página branca do servidor. O rollback limpa a sessão antes.
+        try:
+            db.session.rollback()
+        except Exception:  # noqa: BLE001
+            pass
         return _pagina_erro(500, "Algo deu errado",
                             "Ocorreu um erro inesperado. Tente novamente em instantes.")
 
