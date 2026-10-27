@@ -693,8 +693,10 @@ a { text-decoration: none; }
 /* Ação destrutiva confirmada (cancelar contrato, revogar cobertura): vermelho, não o roxo das ações comuns. */
 .btn-nexo.is-danger, .app-shell .btn-nexo.is-danger { background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%); box-shadow: 0 10px 24px -10px rgba(239, 68, 68, 0.55); }
 .btn-nexo.is-danger:hover, .app-shell .btn-nexo.is-danger:hover { background: linear-gradient(135deg, #991b1b 0%, #b91c1c 100%); }
-/* Rótulo do botão numa linha só (nunca "Nova / empresa" em duas). */
-.btn-nexo, .btn-ghost { white-space: nowrap; }
+/* Rótulo numa linha só apenas nos botões do cabeçalho da página (nunca "Nova /
+   empresa" em duas); nas linhas de botões dos formulários o rótulo continua
+   quebrando, para "Voltar" e "Confirmar" caberem lado a lado no celular. */
+.page-head-actions .btn-nexo, .page-head-actions .btn-ghost { white-space: nowrap; }
 
 .btn-ghost {
   background: var(--surface-2);
@@ -819,7 +821,9 @@ a { text-decoration: none; }
 }
 .upload-slot.is-done { border-color: rgba(34, 197, 94, 0.3); }
 .upload-slot.is-error { border-color: rgba(239, 68, 68, 0.3); }
-.upload-slot-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+/* Título e selo de status lado a lado; no celular o selo ("Aguardando validação")
+   desce para a linha seguinte em vez de alargar o cartão. */
+.upload-slot-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; margin-bottom: 14px; }
 .upload-slot-head .title { display: flex; align-items: center; gap: 10px; font-weight: 700; }
 .upload-slot-head .title i { color: var(--primary); }
 
@@ -1040,14 +1044,16 @@ a { text-decoration: none; }
   -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 72px), rgba(0, 0, 0, 0.18));
   mask-image: linear-gradient(90deg, #000 calc(100% - 72px), rgba(0, 0, 0, 0.18));
 }
-/* Navegando pelo teclado dentro da tabela, nada fica esmaecido. */
-.table-responsive-x.rola-mais:has(:focus-visible) { -webkit-mask-image: none; mask-image: none; }
+/* Navegando pelo teclado (foco no próprio contêiner ou dentro da tabela), nada
+   fica esmaecido e o anel de foco aparece inteiro. */
+.table-responsive-x.rola-mais:is(:focus-visible, :has(:focus-visible)) { -webkit-mask-image: none; mask-image: none; }
 .table-responsive-x :is(a, button) { scroll-margin-inline: 6px; }
 /* Dica de rolagem: fixa à esquerda do contêiner (acompanha a rolagem) e some ao
-   chegar ao fim das colunas. */
+   chegar ao fim das colunas. Alinhada à esquerda para o texto terminar antes da
+   faixa esmaecida da máscara (72 px à direita). */
 .dica-rolagem {
   display: none; position: sticky; left: 0; width: 100%;
-  padding: 7px 16px 9px; gap: 7px; justify-content: flex-end; align-items: center;
+  padding: 7px 88px 9px 16px; gap: 7px; justify-content: flex-start; align-items: center;
   font-size: 0.74rem; font-weight: 600; color: #c4a0fb;
   border-top: 1px solid var(--glass-border); background: rgba(255, 255, 255, 0.02);
 }
@@ -1096,6 +1102,9 @@ a { text-decoration: none; }
 .table-responsive-x.em-cartoes .nexo-table tbody td.celula-acoes .acoes { justify-content: flex-start; }
 .table-responsive-x.em-cartoes .nexo-table tbody td[colspan] { text-align: center !important; }
 .table-responsive-x.em-cartoes .dica-rolagem { display: none; }
+/* No cartão o botão pode quebrar o rótulo em vez de ultrapassar a largura do cartão. */
+.table-responsive-x.em-cartoes td .btn, .table-responsive-x.em-cartoes td .btn-ghost,
+.table-responsive-x.em-cartoes td .btn-nexo { white-space: normal; max-width: 100%; }
 
 /* Texto solto direto sobre o fundo (fora de cartão): claro e com sombra, como
    o subtítulo dos cabeçalhos de seção. */
@@ -1140,7 +1149,7 @@ body:has(> .nexobot) .nexo-toast-wrap { bottom: 96px; }
   box-shadow: var(--shadow-lg), var(--glass-shine);
 }
 .nexo-modal.is-perigo .modal-content { border-color: rgba(239, 68, 68, 0.42); }
-.nexo-modal .modal-header, .nexo-modal .modal-footer { border-color: var(--glass-border); padding: 16px 22px; }
+.nexo-modal .modal-header, .nexo-modal .modal-footer { border-color: var(--glass-border) !important; padding: 16px 22px; }
 .nexo-modal .modal-body { padding: 18px 22px; }
 .nexo-modal .modal-title { font-size: 1.02rem; font-weight: 700; }
 .nexo-modal .modal-footer { gap: 8px; }

@@ -422,15 +422,23 @@
             dz.classList.remove('is-erro');
             if (erro) erro.textContent = '';
           }
+          /* Estado inicial da dropzone: "Arquivo recebido" (slot já preenchido no
+             servidor) ou vazio. Também usado quando o navegador limpa o campo
+             (reabrir o seletor e cancelar) ou quando o arquivo é recusado. */
+          var jaRecebido = dz.classList.contains('is-recebido');
+          function limparSelecao() {
+            dz.classList.remove('is-selecionado');
+            dz.classList.toggle('is-recebido', jaRecebido);
+            if (label) label.textContent = label.getAttribute('data-vazio') || label.textContent;
+            if (estado) estado.textContent = estado.getAttribute('data-vazio') || '';
+          }
           function refletir() {
             limparErro();
             var arquivo = input.files && input.files[0];
-            if (!arquivo) return;
+            if (!arquivo) { limparSelecao(); return; }
             if (!valido(arquivo.name)) {
               input.value = '';
-              dz.classList.remove('is-selecionado');
-              if (label) label.textContent = label.getAttribute('data-vazio') || label.textContent;
-              if (estado) estado.textContent = estado.getAttribute('data-vazio') || '';
+              limparSelecao();
               mostrarErro('Formato não aceito: envie um arquivo ' + aceitos.join(' ou ') + '.');
               return;
             }
@@ -626,6 +634,9 @@
            só nomes maiores que isso recebem reticências, e o nome completo continua
            na tooltip, na descrição acessível e na tabela ABC. */
         var nomes = labels.map(function (t) { return NEXO.quebrarRotulo(t, estreito ? 18 : 26, 3); });
+        /* As barras ficam em posições numéricas (0, 1, 2…): dois produtos cujo nome
+           quebrado coincida continuam sendo duas barras, e o nome vai só no rótulo. */
+        var pos = labels.map(function (_, i) { return i; });
         var hoverBarra = '<b>%{customdata[0]}</b><br>Faturamento: <b>R$ %{x:,.2f}</b><br>Classe %{customdata[1]} · acumulado %{customdata[2]:.1f}%<extra></extra>';
         var resumo = labels.slice(0, 3).map(function (t, i) {
           return (i + 1) + 'º ' + t + ', R$ ' + NEXO.fmtBRL(values[i]) + (classes[i] ? ' (classe ' + classes[i] + ')' : '');
@@ -634,7 +645,7 @@
                            '. Os valores completos estão na tabela de classificação ABC.');
         var barras = {
           type: 'bar', orientation: 'h', name: 'Faturamento',
-          x: values, y: nomes, customdata: custom,
+          x: values, y: pos, customdata: custom,
           marker: { color: cores, line: { color: 'rgba(216, 194, 253, 0.55)', width: 1 } },
           hovertemplate: hoverBarra
         };
@@ -643,6 +654,7 @@
           xaxis: { tickprefix: 'R$ ', tickformat: ',.0f', rangemode: 'tozero', fixedrange: true, automargin: true,
                    tickfont: { size: 10.5, color: NEXO.colors.text } },
           yaxis: { autorange: 'reversed', automargin: true, fixedrange: true,
+                   tickmode: 'array', tickvals: pos, ticktext: nomes,
                    tickfont: { size: estreito ? 10.5 : 11, color: NEXO.colors.textStrong } }
         };
         if (estreito) {
@@ -669,7 +681,7 @@
           barras,
           {
             type: 'scatter', mode: 'lines+markers', name: '% acumulado',
-            x: acum, y: nomes, xaxis: 'x2',
+            x: acum, y: pos, xaxis: 'x2',
             line: { color: '#fbbf24', width: 2.5, shape: 'spline', smoothing: 0.6 },
             marker: { color: '#fbbf24', size: 7, line: { color: 'rgba(17,13,32,0.95)', width: 2 } },
             hovertemplate: '% acumulado: <b>%{x:.1f}%</b><extra></extra>'

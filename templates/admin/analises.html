@@ -125,14 +125,14 @@
    - 1 instância no DOM, reaproveitada por TODAS as linhas (1 trigger por linha).
    - O <form id="confirmDeleteForm"> tem action vazia: é preenchida em runtime
      pelo handler de show.bs.modal a partir do data-bs-url do botão clicado.
-   - Visual alinhado ao tema escuro do Hélio: bg-dark + border-secondary +
-     btn-close-white. Sem CSS adicional.
+   - Visual na identidade do painel: classes .nexo-modal.is-perigo (nexo.css) +
+     btn-close-white.
    ===================================================================== #}
 <div class="modal fade nexo-modal is-perigo" id="confirmDeleteModal" tabindex="-1"
      aria-labelledby="confirmDeleteLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header border-secondary">
+            <div class="modal-header">
                 <h5 class="modal-title d-flex align-items-center gap-2" id="confirmDeleteLabel">
                     <i class="bi bi-exclamation-triangle-fill text-danger"></i>
                     Confirmar exclusão
@@ -150,7 +150,7 @@
                     removidos do banco. <strong class="text-light">Esta ação não pode ser desfeita.</strong>
                 </p>
             </div>
-            <div class="modal-footer border-secondary">
+            <div class="modal-footer">
                 <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">
                     Cancelar
                 </button>
