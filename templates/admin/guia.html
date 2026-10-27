@@ -48,12 +48,14 @@
                         {% if t.id in suspeitos %}<span class="nexo-badge b-amber" title="{{ suspeitos[t.id] }}"><span class="dot"></span>Possível teste</span>{% endif %}</td>
                     <td class="t-mut t-mono">{{ (t.data_atualizacao or t.data_criacao).strftime('%d/%m/%Y') }}</td>
                     <td class="text-end">
-                        <a href="{{ url_for('admin.guia_editar', id=t.id) }}" class="btn-ghost btn-sm-x"><i class="bi bi-pencil"></i> Editar</a>
-                        <form method="POST" action="{{ url_for('admin.guia_deletar', id=t.id) }}" style="display:inline;"
-                              onsubmit="return confirm('Remover este tópico da Base de Conhecimento?');">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn-ghost is-danger btn-sm-x"><i class="bi bi-trash"></i></button>
-                        </form>
+                        <div class="acoes">
+                            <a href="{{ url_for('admin.guia_editar', id=t.id) }}" class="btn-ghost btn-sm-x" aria-label="Editar tópico: {{ t.pergunta }}"><i class="bi bi-pencil" aria-hidden="true"></i> Editar</a>
+                            <form method="POST" action="{{ url_for('admin.guia_deletar', id=t.id) }}" style="display:inline;"
+                                  onsubmit="return confirm('Remover este tópico da Base de Conhecimento?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-ghost is-danger btn-sm-x" title="Remover tópico" aria-label="Remover tópico: {{ t.pergunta }}"><i class="bi bi-trash" aria-hidden="true"></i></button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}

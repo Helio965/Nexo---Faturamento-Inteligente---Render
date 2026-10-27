@@ -35,7 +35,7 @@
             <tbody>
                 {% for a in analises %}
                 <tr>
-                    <td class="t-strong t-mono">{{ a.periodo_inicio.strftime('%d/%m/%Y') }} – {{ a.periodo_fim.strftime('%d/%m/%Y') }}</td>
+                    <td class="t-strong t-mono t-periodo">{{ m.periodo(a.periodo_inicio, a.periodo_fim) }}</td>
                     <td>{{ 'Quinzenal' if a.tipo_analise == 'QUINZENAL' else 'Mensal' }}</td>
                     <td class="t-mut t-mono">{{ a.relatorio.data_publicacao.strftime('%d/%m/%Y') if (a.relatorio and a.relatorio.data_publicacao) else '—' }}</td>
                     <td>{{ m.badge_analise(a.status_analise) }}</td>

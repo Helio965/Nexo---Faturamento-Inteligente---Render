@@ -89,11 +89,11 @@
 </div>
 
 {# ---- Pílulas de filtro dinâmico (sem reload) ---- #}
-<div class="abc-filter" id="abcFilter" role="tablist">
-    <button type="button" class="abc-pill is-active" data-abc-filter="ALL">Todos <span class="abc-pill-count">{{ analise.curva_abc|length }}</span></button>
-    <button type="button" class="abc-pill" data-abc-filter="A"><span class="abc-dot abc-a"></span>Classe A <span class="abc-pill-count">{{ cont['A'] }}</span></button>
-    <button type="button" class="abc-pill" data-abc-filter="B"><span class="abc-dot abc-b"></span>Classe B <span class="abc-pill-count">{{ cont['B'] }}</span></button>
-    <button type="button" class="abc-pill" data-abc-filter="C"><span class="abc-dot abc-c"></span>Classe C <span class="abc-pill-count">{{ cont['C'] }}</span></button>
+<div class="abc-filter" id="abcFilter" role="tablist" aria-label="Filtrar produtos por classe ABC">
+    <button type="button" class="abc-pill is-active" role="tab" aria-selected="true" aria-controls="abcTable" data-abc-filter="ALL">Todos <span class="abc-pill-count">{{ analise.curva_abc|length }}</span></button>
+    <button type="button" class="abc-pill" role="tab" aria-selected="false" aria-controls="abcTable" data-abc-filter="A"><span class="abc-dot abc-a" aria-hidden="true"></span>Classe A <span class="abc-pill-count">{{ cont['A'] }}</span></button>
+    <button type="button" class="abc-pill" role="tab" aria-selected="false" aria-controls="abcTable" data-abc-filter="B"><span class="abc-dot abc-b" aria-hidden="true"></span>Classe B <span class="abc-pill-count">{{ cont['B'] }}</span></button>
+    <button type="button" class="abc-pill" role="tab" aria-selected="false" aria-controls="abcTable" data-abc-filter="C"><span class="abc-dot abc-c" aria-hidden="true"></span>Classe C <span class="abc-pill-count">{{ cont['C'] }}</span></button>
 </div>
 
 <div class="table-wrap mb-3">
@@ -108,8 +108,8 @@
                     <td>{{ m.badge_abc(p.classe_abc) }}</td>
                     <td class="text-end t-mono">{% if p.quantidade is not none %}{{ m.num(p.quantidade) }}{% else %}—{% endif %}</td>
                     <td class="text-end t-mono">R$ {{ m.brl(p.faturamento) }}</td>
-                    <td class="text-end t-mono t-mut">{{ '%.1f'|format(p.percentual_individual|float) }}%</td>
-                    <td class="text-end t-mono t-mut">{{ '%.1f'|format(p.percentual_acumulado|float) }}%</td>
+                    <td class="text-end t-mono t-mut">{{ ('%.1f'|format(p.percentual_individual|float))|replace('.', ',') }}%</td>
+                    <td class="text-end t-mono t-mut">{{ ('%.1f'|format(p.percentual_acumulado|float))|replace('.', ',') }}%</td>
                 </tr>
                 {% endfor %}
                 <tr id="abcEmptyRow" style="display:none;"><td colspan="7" class="text-center t-mut" style="padding:22px;">Nenhum produto nesta classe.</td></tr>
@@ -145,7 +145,7 @@
 </div>
 <div class="nexo-card {{ 'ia-doc' if (rel and rel.gerado_por_ia) }}">
     {% if rel and rel.gerado_por_ia %}
-    <div class="ia-banner"><i class="bi bi-robot"></i> Gerado por <strong>Inteligência Artificial Nexo</strong> · síntese automática dos indicadores e da Curva ABC</div>
+    <div class="ia-banner"><i class="bi bi-robot" aria-hidden="true"></i><span>Gerado por <strong>Inteligência Artificial Nexo</strong> · síntese automática dos indicadores e da Curva ABC</span></div>
     {% endif %}
     <div class="nexo-card-body relatorio-doc">
         {% if rel.resumo_executivo %}
@@ -180,6 +180,8 @@
     xaxis: { fixedrange: true, tickfont: { size: 13, color: '#ece9f8' } },
     margin: { l: 64, r: 18, t: 32, b: 42 }, bargap: 0.45, height: 300
   });
+  NEXO.descrever('chartAnaliseCli', 'Compras x Vendas do período: compras R$ ' + NEXO.fmtBRL({{ (analise.indicador.total_comprado or 0)|float }}) +
+                 ', vendas R$ ' + NEXO.fmtBRL({{ (analise.indicador.faturamento_total or 0)|float }}) + '.');
 </script>
 {% if abc_chart %}
 <script>
@@ -203,8 +205,9 @@
       if (!btn) return;
       var alvo = btn.getAttribute('data-abc-filter');
 
-      filtro.querySelectorAll('.abc-pill').forEach(function (p) { p.classList.remove('is-active'); });
+      filtro.querySelectorAll('.abc-pill').forEach(function (p) { p.classList.remove('is-active'); p.setAttribute('aria-selected', 'false'); });
       btn.classList.add('is-active');
+      btn.setAttribute('aria-selected', 'true');
 
       var visiveis = 0;
       linhas.forEach(function (tr) {

@@ -74,11 +74,11 @@
 {% endcall %}
 
 {% call secao('Contratos próximos do vencimento', 'bi-calendar-event', painel.vencendo, 'Vigência termina nos próximos ' ~ painel.politica.dias_alerta_vencimento ~ ' dias.', 'Nenhum contrato vencendo no período.') %}
-{% for item in painel.vencendo %}{{ linha_empresa(item, 'termina em ' ~ item.contrato.data_fim.strftime('%d/%m/%Y') ~ ' (' ~ item.dias ~ ' dia(s))') }}{% endfor %}
+{% for item in painel.vencendo %}{{ linha_empresa(item, 'termina em ' ~ item.contrato.data_fim.strftime('%d/%m/%Y') ~ (' (amanhã)' if item.dias == 1 else (' (hoje)' if item.dias == 0 else ' (faltam ' ~ item.dias ~ ' dias)'))) }}{% endfor %}
 {% endcall %}
 
 {% call secao('Contratos que exigem atenção', 'bi-exclamation-triangle', painel.vencidos + painel.inconsistentes + painel.sem_contrato, 'Vigência encerrada sem renovação, status divergente do contrato ou regras ativas sem contrato.', 'Nenhuma pendência.') %}
-{% for item in painel.vencidos %}{{ linha_empresa(item, 'vigência encerrada há ' ~ item.dias ~ ' dia(s) sem renovação') }}{% endfor %}
+{% for item in painel.vencidos %}{{ linha_empresa(item, 'vigência encerrada há ' ~ item.dias ~ (' dia' if item.dias == 1 else ' dias') ~ ' sem renovação') }}{% endfor %}
 {% for item in painel.inconsistentes %}{{ linha_empresa(item, 'status da conta difere do contrato (esperado ' ~ item.esperado ~ ')') }}{% endfor %}
 {% for item in painel.sem_contrato %}{{ linha_empresa(item, 'regras ativas sem contrato vigente: portal bloqueado') }}{% endfor %}
 {% endcall %}

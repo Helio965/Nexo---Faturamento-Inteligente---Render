@@ -9,7 +9,7 @@
 <div class="page-head">
     <div>
         <h1>{{ nome }}</h1>
-        <p class="sub">{{ empresa.razao_social }} · <span class="t-mono">CNPJ {{ empresa.cnpj }}</span></p>
+        <p class="sub">{{ empresa.razao_social }} · <span class="t-mono">CNPJ {{ m.cnpj(empresa.cnpj) }}</span></p>
     </div>
     <div class="page-head-actions">
         <a href="{{ url_for('admin.empresas') }}" class="btn-ghost"><i class="bi bi-arrow-left"></i> Empresas</a>
@@ -161,7 +161,7 @@
                     <td class="t-mono t-mut">{{ k.id_contrato_anterior or '—' }}</td>
                     <td class="text-end">
                         {% if empresa.deletado_em is none %}
-                        <a class="btn-ghost btn-sm-x" href="{{ url_for('contratos.cobertura_nova', id_empresa=empresa.id_empresa, id_contrato=k.id_contrato) }}" title="Registrar período pago deste contrato"><i class="bi bi-cash-coin"></i></a>
+                        <a class="btn-ghost btn-sm-x" href="{{ url_for('contratos.cobertura_nova', id_empresa=empresa.id_empresa, id_contrato=k.id_contrato) }}" title="Registrar período pago deste contrato" aria-label="Registrar período pago do contrato nº {{ k.id_contrato }}"><i class="bi bi-cash-coin" aria-hidden="true"></i> Período pago</a>
                         {% endif %}
                     </td>
                 </tr>
@@ -195,7 +195,7 @@
                     <td>{% if cob.revogada_em %}<span class="nexo-badge b-red">REVOGADA</span><br><small class="t-mut">{{ cob.revogacao_motivo }}</small>{% else %}<span class="nexo-badge b-green">VIGENTE</span>{% endif %}</td>
                     <td class="text-end">
                         {% if not cob.revogada_em and empresa.deletado_em is none %}
-                        <a class="btn-ghost is-danger btn-sm-x" href="{{ url_for('contratos.cobertura_revogar', id_empresa=empresa.id_empresa, id_cobertura=cob.id_cobertura) }}" title="Revogar cobertura"><i class="bi bi-x-lg"></i></a>
+                        <a class="btn-ghost is-danger btn-sm-x" href="{{ url_for('contratos.cobertura_revogar', id_empresa=empresa.id_empresa, id_cobertura=cob.id_cobertura) }}" title="Revogar cobertura" aria-label="Revogar cobertura de {{ cob.periodo_inicio.strftime('%d/%m/%Y') }} a {{ cob.periodo_fim.strftime('%d/%m/%Y') }}"><i class="bi bi-x-lg" aria-hidden="true"></i> Revogar</a>
                         {% endif %}
                     </td>
                 </tr>

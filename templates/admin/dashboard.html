@@ -188,7 +188,7 @@
                 {% for a in analises[:6] %}
                 <tr>
                     <td class="t-strong">{{ a.empresa.nome_fantasia or a.empresa.razao_social }}</td>
-                    <td class="t-mut t-mono">{{ a.periodo_inicio.strftime('%d/%m/%Y') }} – {{ a.periodo_fim.strftime('%d/%m/%Y') }}</td>
+                    <td class="t-mut t-mono t-periodo">{{ m.periodo(a.periodo_inicio, a.periodo_fim) }}</td>
                     <td>{{ 'Quinzenal' if a.tipo_analise == 'QUINZENAL' else 'Mensal' }}</td>
                     <td>{{ m.badge_analise(a.status_analise) }}</td>
                     <td class="text-end">
@@ -245,6 +245,7 @@
         font: { size: 26, color: '#ffffff', family: 'JetBrains Mono, monospace' }
       }]
     });
+    NEXO.descrever('chartStatus', 'Empresas por status, ' + total + ' no total: ' + st.labels.map(function (l, i) { return l + ' ' + st.values[i]; }).join(', ') + '.');
   })();
 
   NEXO.staticPlot('chartPlano', [{
@@ -263,6 +264,9 @@
     xaxis: { tickfont: { size: 12, color: '#ece9f8' } },
     height: 240, margin: { l: 36, r: 12, t: 26, b: 36 }
   });
+  NEXO.descrever('chartPlano', 'Empresas por plano: ' + dashboardData.empresas_plano.labels.map(function (l, i) {
+    return l + ' ' + dashboardData.empresas_plano.values[i];
+  }).join(', ') + '.');
 
   NEXO.staticPlot('chartAnalisesStatus', [{
     type: 'bar',
@@ -279,9 +283,12 @@
   }], {
     margin: { l: 128, r: 30, t: 10, b: 34 },
     xaxis: { dtick: nexoPasso(dashboardData.analises_status.values), rangemode: 'tozero', tickformat: 'd', showgrid: true },
-    yaxis: { tickfont: { size: 12, color: '#ece9f8' }, autorange: 'reversed' },
+    yaxis: { tickfont: { size: 12, color: '#ece9f8' }, autorange: 'reversed', automargin: true },
     height: 240
   });
+  NEXO.descrever('chartAnalisesStatus', 'Análises por status: ' + dashboardData.analises_status.labels.map(function (l, i) {
+    return l + ' ' + dashboardData.analises_status.values[i];
+  }).join(', ') + '.');
 </script>
 {% endif %}
 {% endblock %}
