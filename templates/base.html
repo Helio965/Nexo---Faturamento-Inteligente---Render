@@ -596,6 +596,20 @@
         ctx.font = fonte;
         return ctx.measureText(String(texto)).width;
       };
+      /* Marcas "redondas" de 0 até o topo (passo 1, 2, 2,5 ou 5 × 10^k), com cerca
+         de `alvo` marcas: o eixo não depende da estimativa de largura do Plotly,
+         que com uma fonte mais larga que a Inter deixava rótulos sobrepostos. */
+      NEXO.marcasRedondas = function (topo, alvo) {
+        topo = Number(topo) || 0;
+        if (topo <= 0) return [0, 1];
+        var bruto = topo / Math.max(1, alvo);
+        var potencia = Math.pow(10, Math.floor(Math.log(bruto) / Math.LN10));
+        var fator = bruto / potencia;
+        var passo = (fator <= 1 ? 1 : fator <= 2 ? 2 : fator <= 2.5 ? 2.5 : fator <= 5 ? 5 : 10) * potencia;
+        var marcas = [];
+        for (var v = 0; v <= topo + passo * 0.001; v += passo) marcas.push(v);
+        return marcas;
+      };
       NEXO.quebrarRotulo = function (texto, porLinha, maxLinhas) {
         var linhas = [], atual = '';
         String(texto).split(/\s+/).forEach(function (palavra) {
@@ -666,9 +680,16 @@
           marker: { color: cores, line: { color: 'rgba(216, 194, 253, 0.55)', width: 1 } },
           hovertemplate: hoverBarra
         };
+        /* Eixo do faturamento com marcas redondas e compactas ("R$ 25 mil"), em
+           número proporcional à área útil (~1 a cada 90 px). */
+        var topo = Math.max.apply(null, values.map(function (v) { return Number(v) || 0; }).concat([0]));
+        var areaUtil = Math.max(80, (el.clientWidth || 600) - orcamento - 40);
+        var marcasLargo = NEXO.marcasRedondas(topo, Math.max(2, Math.min(6, Math.floor(areaUtil / 90))));
         var layout = {
           hovermode: 'closest', bargap: 0.32,
-          xaxis: { tickprefix: 'R$ ', tickformat: ',.0f', rangemode: 'tozero', fixedrange: true, automargin: true,
+          xaxis: { rangemode: 'tozero', fixedrange: true, automargin: true,
+                   tickmode: 'array', tickvals: marcasLargo,
+                   ticktext: marcasLargo.map(function (v, i) { return i ? 'R$ ' + NEXO.fmtCompacto(v) : '0'; }),
                    tickfont: { size: 10.5, color: NEXO.colors.text } },
           yaxis: { autorange: 'reversed', automargin: true, fixedrange: true,
                    tickmode: 'array', tickvals: pos, ticktext: nomes,
@@ -682,12 +703,11 @@
             return nome + '<br><span style="color:#fbbf24">' +
                    Number(acum[i] || 0).toFixed(1).replace('.', ',') + '% acum.</span>';
           });
-          /* Área útil de 100 a 200 px: só duas ou três marcas, com valores compactos
-             ("25 mil"), para os rótulos do eixo não se sobreporem. */
-          var topo = Math.max.apply(null, values.map(function (v) { return Number(v) || 0; }).concat([0]));
+          /* Área útil de 100 a 200 px: só duas ou três marcas (o topo é a última),
+             para os rótulos do eixo não se sobreporem. */
           var marcas = (el.clientWidth || 0) < 420 ? [0, topo] : [0, topo / 2, topo];
           layout.xaxis = Object.assign(layout.xaxis, {
-            tickmode: 'array', tickvals: marcas, range: [0, topo > 0 ? topo * 1.06 : 1], tickprefix: '',
+            tickvals: marcas, range: [0, topo > 0 ? topo * 1.06 : 1],
             ticktext: marcas.map(function (v, i) { return i ? 'R$ ' + NEXO.fmtCompacto(v) : '0'; })
           });
           NEXO.plot(id, [barras], Object.assign(layout, {
