@@ -552,6 +552,11 @@
           scrollZoom: false,
           editable: false
         }, config || {});
+        /* A caixa recebe a altura do gráfico: com `responsive: true` o Plotly apaga
+           layout.height no primeiro resize (girar o celular, teclado, barra de
+           endereço) e passaria a usar a altura da caixa — que, sem isto, cairia
+           para a min-height enquanto o SVG continuava alto, por cima do conteúdo. */
+        if (layout && isFinite(layout.height) && layout.height > 0) el.style.height = layout.height + 'px';
         Plotly.newPlot(el, traces, NEXO.plotlyLayout(layout), plotConfig);
       };
       NEXO.staticPlot = function (id, traces, layout) {
@@ -649,7 +654,28 @@
         var classes = data.classes || [];
         var acum = data.acumulado || [];
         var n = labels.length;
-        var estreito = (el.clientWidth || 600) < 560;
+        var larguraCaixa = el.clientWidth || (el.parentElement && el.parentElement.clientWidth) || 600;
+        var estreito = larguraCaixa < 560;
+        /* O modo (estreito/largo) é reavaliado quando a caixa muda de largura (girar o
+           celular, redimensionar a janela): o gráfico é redesenhado no modo certo. */
+        el._nexoPareto = { data: data, estreito: estreito };
+        if (!el._nexoObservador) {
+          var temporizador = null;
+          var reavaliar = function () {
+            clearTimeout(temporizador);
+            temporizador = setTimeout(function () {
+              var atual = (el.clientWidth || (el.parentElement && el.parentElement.clientWidth) || 600) < 560;
+              if (el._nexoPareto && atual !== el._nexoPareto.estreito) NEXO.plotParetoAbc(id, el._nexoPareto.data);
+            }, 150);
+          };
+          if (window.ResizeObserver) {
+            el._nexoObservador = new ResizeObserver(reavaliar);
+            el._nexoObservador.observe(el);
+          } else {
+            window.addEventListener('resize', reavaliar);
+            el._nexoObservador = true;
+          }
+        }
         var tom = { A: 'rgba(168, 85, 247, 0.92)', B: 'rgba(168, 85, 247, 0.6)', C: 'rgba(168, 85, 247, 0.34)' };
         var cores = classes.length ? classes.map(function (c) { return tom[c] || tom.A; }) : tom.A;
         var custom = labels.map(function (t, i) { return [t, classes[i] || '', Number(acum[i] || 0)]; });
@@ -661,7 +687,7 @@
            de o rótulo ser cortado pela margem. */
         var tamanhoTick = estreito ? 10.5 : 11;
         var mediaChar = NEXO.larguraTexto('Kit presente premium de café torrado especial 0123456789', tamanhoTick + 'px Inter, system-ui, sans-serif') / 56;
-        var orcamento = Math.max(96, (el.clientWidth || 600) * (estreito ? 0.42 : 0.34));
+        var orcamento = Math.max(96, larguraCaixa * (estreito ? 0.42 : 0.34));
         var porLinha = Math.max(10, Math.min(estreito ? 18 : 26, Math.floor(orcamento / (mediaChar || 6.5))));
         el.setAttribute('data-por-linha', porLinha);
         var nomes = labels.map(function (t) { return NEXO.quebrarRotulo(t, porLinha, 3); });
@@ -683,7 +709,13 @@
         /* Eixo do faturamento com marcas redondas e compactas ("R$ 25 mil"), em
            número proporcional à área útil (~1 a cada 90 px). */
         var topo = Math.max.apply(null, values.map(function (v) { return Number(v) || 0; }).concat([0]));
-        var areaUtil = Math.max(80, (el.clientWidth || 600) - orcamento - 40);
+        var areaUtil = Math.max(80, larguraCaixa - orcamento - 40);
+        /* Altura por produto a partir das linhas reais do rótulo (line-height 1,3 do
+           Plotly) mais folga, para rótulos vizinhos de 3–4 linhas não se tocarem. */
+        var alturaPara = function (rotulos, margens) {
+          var linhasMax = Math.max.apply(null, rotulos.map(function (r) { return String(r).split('<br>').length; }).concat([1]));
+          return Math.max(300, n * (Math.ceil(linhasMax * tamanhoTick * 1.3) + 10) + margens);
+        };
         var marcasLargo = NEXO.marcasRedondas(topo, Math.max(2, Math.min(6, Math.floor(areaUtil / 90))));
         var layout = {
           hovermode: 'closest', bargap: 0.32,
@@ -705,13 +737,13 @@
           });
           /* Área útil de 100 a 200 px: só duas ou três marcas (o topo é a última),
              para os rótulos do eixo não se sobreporem. */
-          var marcas = (el.clientWidth || 0) < 420 ? [0, topo] : [0, topo / 2, topo];
+          var marcas = larguraCaixa < 420 ? [0, topo] : [0, topo / 2, topo];
           layout.xaxis = Object.assign(layout.xaxis, {
             tickvals: marcas, range: [0, topo > 0 ? topo * 1.06 : 1],
             ticktext: marcas.map(function (v, i) { return i ? 'R$ ' + NEXO.fmtCompacto(v) : '0'; })
           });
           NEXO.plot(id, [barras], Object.assign(layout, {
-            height: Math.max(300, 60 * n + 70),
+            height: alturaPara(layout.yaxis.ticktext, 60),
             margin: { l: 8, r: 16, t: 10, b: 40 },
             showlegend: false
           }));
@@ -727,7 +759,7 @@
             hovertemplate: '% acumulado: <b>%{x:.1f}%</b><extra></extra>'
           }
         ], Object.assign(layout, {
-          height: Math.max(320, 44 * n + 96),
+          height: alturaPara(nomes, 170),
           margin: { l: 8, r: 24, t: 54, b: 40 },
           showlegend: true,
           legend: { x: 0, y: 1.14, yanchor: 'bottom' },
