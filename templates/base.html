@@ -587,6 +587,15 @@
       };
       /* Quebra um nome longo em até `maxLinhas` linhas de ~`porLinha` caracteres
          (nas palavras); só uma palavra maior que a linha recebe reticências. */
+      /* Largura de um texto na fonte efetiva (a que o navegador realmente usa:
+         Inter, ou a reserva do sistema quando a Inter não carregou). */
+      NEXO.larguraTexto = function (texto, fonte) {
+        var tela = NEXO._tela || (NEXO._tela = document.createElement('canvas'));
+        var ctx = tela.getContext && tela.getContext('2d');
+        if (!ctx) return String(texto).length * 6.5;
+        ctx.font = fonte;
+        return ctx.measureText(String(texto)).width;
+      };
       NEXO.quebrarRotulo = function (texto, porLinha, maxLinhas) {
         var linhas = [], atual = '';
         String(texto).split(/\s+/).forEach(function (palavra) {
@@ -630,10 +639,18 @@
         var tom = { A: 'rgba(168, 85, 247, 0.92)', B: 'rgba(168, 85, 247, 0.6)', C: 'rgba(168, 85, 247, 0.34)' };
         var cores = classes.length ? classes.map(function (c) { return tom[c] || tom.A; }) : tom.A;
         var custom = labels.map(function (t, i) { return [t, classes[i] || '', Number(acum[i] || 0)]; });
-        /* Até três linhas por nome (54 caracteres no celular, 78 no computador);
-           só nomes maiores que isso recebem reticências, e o nome completo continua
-           na tooltip, na descrição acessível e na tabela ABC. */
-        var nomes = labels.map(function (t) { return NEXO.quebrarRotulo(t, estreito ? 18 : 26, 3); });
+        /* Até três linhas por nome (até 18 caracteres por linha no celular, 26 no
+           computador); só nomes maiores que isso recebem reticências, e o nome
+           completo continua na tooltip, na descrição acessível e na tabela ABC.
+           O orçamento do rótulo é ~40 % da largura do gráfico: com uma fonte mais
+           larga que a Inter (reserva do sistema) as linhas ficam mais curtas em vez
+           de o rótulo ser cortado pela margem. */
+        var tamanhoTick = estreito ? 10.5 : 11;
+        var mediaChar = NEXO.larguraTexto('Kit presente premium de café torrado especial 0123456789', tamanhoTick + 'px Inter, system-ui, sans-serif') / 56;
+        var orcamento = Math.max(96, (el.clientWidth || 600) * (estreito ? 0.42 : 0.34));
+        var porLinha = Math.max(10, Math.min(estreito ? 18 : 26, Math.floor(orcamento / (mediaChar || 6.5))));
+        el.setAttribute('data-por-linha', porLinha);
+        var nomes = labels.map(function (t) { return NEXO.quebrarRotulo(t, porLinha, 3); });
         /* As barras ficam em posições numéricas (0, 1, 2…): dois produtos cujo nome
            quebrado coincida continuam sendo duas barras, e o nome vai só no rótulo. */
         var pos = labels.map(function (_, i) { return i; });
@@ -655,24 +672,27 @@
                    tickfont: { size: 10.5, color: NEXO.colors.text } },
           yaxis: { autorange: 'reversed', automargin: true, fixedrange: true,
                    tickmode: 'array', tickvals: pos, ticktext: nomes,
-                   tickfont: { size: estreito ? 10.5 : 11, color: NEXO.colors.textStrong } }
+                   tickfont: { size: tamanhoTick, color: NEXO.colors.textStrong } }
         };
         if (estreito) {
-          barras.text = acum.map(function (a) { return Number(a || 0).toFixed(1).replace('.', ',') + '% acum.'; });
-          barras.textposition = 'outside';
-          barras.cliponaxis = false;
-          barras.textfont = { size: 10.5, color: '#fbbf24', family: 'JetBrains Mono, monospace' };
-          /* Área útil de 70 a 150 px: só duas ou três marcas, com valores compactos
+          /* No celular o % acumulado vai na última linha do rótulo (em âmbar, como a
+             linha do computador), não fora da barra: sobra largura para o nome e
+             para o eixo em vez de uma margem direita de 84 px. */
+          layout.yaxis.ticktext = nomes.map(function (nome, i) {
+            return nome + '<br><span style="color:#fbbf24">' +
+                   Number(acum[i] || 0).toFixed(1).replace('.', ',') + '% acum.</span>';
+          });
+          /* Área útil de 100 a 200 px: só duas ou três marcas, com valores compactos
              ("25 mil"), para os rótulos do eixo não se sobreporem. */
           var topo = Math.max.apply(null, values.map(function (v) { return Number(v) || 0; }).concat([0]));
           var marcas = (el.clientWidth || 0) < 420 ? [0, topo] : [0, topo / 2, topo];
           layout.xaxis = Object.assign(layout.xaxis, {
-            tickmode: 'array', tickvals: marcas, range: [0, topo > 0 ? topo * 1.08 : 1], tickprefix: '',
+            tickmode: 'array', tickvals: marcas, range: [0, topo > 0 ? topo * 1.06 : 1], tickprefix: '',
             ticktext: marcas.map(function (v, i) { return i ? 'R$ ' + NEXO.fmtCompacto(v) : '0'; })
           });
           NEXO.plot(id, [barras], Object.assign(layout, {
-            height: Math.max(300, 50 * n + 70),
-            margin: { l: 8, r: 84, t: 10, b: 40 },
+            height: Math.max(300, 60 * n + 70),
+            margin: { l: 8, r: 16, t: 10, b: 40 },
             showlegend: false
           }));
           return;
