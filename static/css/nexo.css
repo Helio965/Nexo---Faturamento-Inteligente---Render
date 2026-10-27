@@ -1074,10 +1074,14 @@ a { text-decoration: none; }
 /* Cada célula vira um bloco (rótulo em cima, valor embaixo); o conteúdo continua
    em linha como foi escrito (dois selos lado a lado, texto que quebra). */
 .table-responsive-x.em-cartoes .nexo-table tbody td {
-  display: block;
+  display: block; min-width: 0;
   padding: 8px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   font-size: 0.9rem; white-space: normal; text-align: left !important; /* vence .text-end do Bootstrap */
+  /* Uma palavra sem espaços (referência, código, e-mail) quebra dentro do cartão
+     em vez de vazar dele e criar rolagem horizontal da página. */
+  overflow-wrap: anywhere;
 }
+.table-responsive-x.em-cartoes .nexo-table tbody tr { min-width: 0; }
 .table-responsive-x.em-cartoes .nexo-table tbody td:last-child { border-bottom: none; }
 .table-responsive-x.em-cartoes .nexo-table tbody td::before {
   content: attr(data-label);
