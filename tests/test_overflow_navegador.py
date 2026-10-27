@@ -186,13 +186,22 @@ _MEDIR = """() => {
     }
     const graficos = [...document.querySelectorAll('.chart-box')].map(c => {
         const cr = rect(c);
-        const ticks = [...c.querySelectorAll('.xtick text, .ytick text')].map(t => ({texto: t.textContent, b: rect(t)}));
+        const ticks = [...c.querySelectorAll('.xtick text, .ytick text')].map(t => ({texto: t.textContent, b: rect(t),
+            eixo: t.closest('.ytick') ? 'y' : 'x', girado: /rotate/.test(t.getAttribute('transform') || '')}));
         const cortados = ticks.filter(t => t.b.x0 < cr.x0 - 1 || t.b.x1 > cr.x1 + 1 || t.b.y1 > cr.y1 + 1).map(t => t.texto);
-        const xt = ticks.filter(t => t.texto).sort((a, b) => a.b.x0 - b.b.x0);
+        // Eixo X: rótulos na mesma linha não podem se interceptar (rótulos girados têm
+        // caixas que se cruzam sem os glifos se tocarem, por isso ficam de fora).
+        const xt = ticks.filter(t => t.texto && t.eixo === 'x' && !t.girado).sort((a, b) => a.b.x0 - b.b.x0);
         let sobrepostos = 0;
         for (let i = 1; i < xt.length; i++) if (xt[i].b.x0 < xt[i - 1].b.x1 - 1 && Math.abs(xt[i].b.y0 - xt[i - 1].b.y0) < 2 && Math.abs(xt[i].b.x0 - xt[i-1].b.x0) > 0) sobrepostos++;
+        // Eixo Y (nomes de 3–4 linhas empilhados): um rótulo começa abaixo de onde o anterior termina.
+        const yt = ticks.filter(t => t.texto && t.eixo === 'y').sort((a, b) => a.b.y0 - b.b.y0);
+        for (let i = 1; i < yt.length; i++) if (yt[i].b.y0 < yt[i - 1].b.y1 - 0.5) sobrepostos++;
+        const svg = c.querySelector('.main-svg');
+        const vaza = svg ? svg.getBoundingClientRect().bottom > cr.y1 + 2 : false;
         return {id: c.id, w: Math.round(cr.w), desenhado: !!c.querySelector('.main-svg'), truncados: ticks.filter(t => /…/.test(t.texto)).length,
-                porLinha: parseInt(c.getAttribute('data-por-linha') || '0', 10),
+                porLinha: parseInt(c.getAttribute('data-por-linha') || '0', 10), vaza,
+                largo: !!(c._fullLayout && c._fullLayout.xaxis2),
                 cortados: cortados.slice(0, 5), sobrepostos, papel: c.getAttribute('role'), rotulo: (c.getAttribute('aria-label') || '').length,
                 barras: c.querySelectorAll('.barlayer .point').length};
     });
@@ -389,6 +398,9 @@ class OverflowNavegadorTests(ContratosCase):
                 self.assertEqual(g["barras"], len(PRODUTOS_LONGOS), f"{contexto}: barras fundidas em {g['id']}")
             self.assertEqual(g["cortados"], [], f"{contexto}: rótulo cortado em {g['id']}")
             self.assertEqual(g["sobrepostos"], 0, f"{contexto}: rótulos sobrepostos em {g['id']}")
+            self.assertFalse(g["vaza"], f"{contexto}: SVG do gráfico mais alto que a caixa em {g['id']}")
+            if "Abc" in g["id"]:
+                self.assertEqual(g["largo"], g["w"] >= 560, f"{contexto}: Pareto no modo errado para {g['w']}px ({g['id']})")
             self.assertEqual(g["papel"], "img", f"{contexto}: gráfico sem alternativa textual ({g['id']})")
             self.assertGreater(g["rotulo"], 20, f"{contexto}: descrição vazia em {g['id']}")
         return m
@@ -558,6 +570,20 @@ class OverflowNavegadorTests(ContratosCase):
         self.assertIn(nome["rotulo"], nome["nome"])
         if nome["estado"]:
             self.assertIn(nome["estado"], nome["nome"])
+
+    def test_pareto_acompanha_o_redimensionamento(self):
+        """Girar o celular ou redimensionar a janela: a caixa do gráfico mantém a altura
+        do SVG (nada vaza sobre o conteúdo abaixo) e o Pareto troca de modo
+        (estreito ↔ largo) conforme a largura da caixa, sem rótulos sobrepostos."""
+        pagina = self.abrir(1366, 768)
+        self.entrar(pagina, "cliente-test@example.invalid")
+        self.ir(pagina, "/cliente/dashboard")
+        for largura, altura in ((360, 740), (1366, 768), (844, 390), (390, 844)):
+            pagina.set_viewport_size({"width": largura, "height": altura})
+            pagina.wait_for_timeout(700)
+            m = self.assert_layout(pagina, largura, f"/cliente/dashboard redimensionado @ {largura}px")
+            pareto = [g for g in m["graficos"] if g["id"] == "chartAbcCliente"]
+            self.assertTrue(pareto and pareto[0]["desenhado"], f"{largura}px: Pareto não desenhado")
 
     def test_filtro_abc_como_botoes_de_alternancia(self):
         """Os filtros da Curva ABC são botões de alternância (aria-pressed) num grupo
