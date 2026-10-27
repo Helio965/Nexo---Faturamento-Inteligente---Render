@@ -34,6 +34,8 @@ gráficos não são desenhados e as medições de gráfico não se aplicam. Habi
 por NEXO_TEST_BROWSER=1, como na CI.
 """
 
+import base64
+import hashlib
 import os
 import threading
 import unittest
@@ -54,6 +56,17 @@ except ImportError:  # dependência opcional de desenvolvimento
 
 _BROWSER = os.environ.get("NEXO_TEST_BROWSER") == "1" and sync_playwright is not None
 _PLOTLY_URL = _CDN + "plotly.js-dist-min@2.35.2/plotly.min.js"
+# sha384 do plotly.min.js 2.35.2 publicado no jsdelivr (a cópia local só é servida se conferir).
+_PLOTLY_SRI = "cCVCZkAjYNxaYKbM8lsArLznDF/SvMFr1jcZrvOpSTCa0W40ZAdLzHCEulnUa5i7"
+
+
+def _plotly_local():
+    pasta = os.environ.get("NEXO_TEST_CDN_DIR")
+    arquivo = Path(pasta) / "plotly.min.js" if pasta else None
+    if not arquivo or not arquivo.is_file():
+        return None
+    resumo = base64.b64encode(hashlib.sha384(arquivo.read_bytes()).digest()).decode()
+    return str(arquivo) if resumo == _PLOTLY_SRI else None
 
 LARGURAS = ((320, 568), (360, 780), (390, 844), (768, 1024), (1024, 768), (1366, 768), (1536, 864), (1920, 1080))
 ZOOM_150 = (911, 512, 1.5)  # 1366 px a 150%: viewport CSS menor, escala maior
@@ -203,14 +216,13 @@ class OverflowNavegadorTests(ContratosCase):
         self.navegador = self.pw.chromium.launch(executable_path=os.environ.get("NEXO_TEST_CHROMIUM") or None)
         self.addCleanup(self.navegador.close)
         self.cdn_local = _copias_locais_da_cdn()
-        pasta = os.environ.get("NEXO_TEST_CDN_DIR")
-        plotly = Path(pasta) / "plotly.min.js" if pasta else None
-        self.plotly_local = str(plotly) if plotly and plotly.is_file() else None
+        self.plotly_local = _plotly_local()
         self.erros_js = []
-        if len(self.cdn_local) < 2:
-            # Medir layout sem o bootstrap.min.css real (grade, utilitários, modais) não
-            # diz nada sobre o produto; o CI baixa as cópias e confere o hash SRI.
-            self.skipTest("Bootstrap 5.3.3 íntegro indisponível (NEXO_TEST_CDN_DIR)")
+        if len(self.cdn_local) < 2 or not self.plotly_local:
+            # Medir layout sem o bootstrap.min.css real (grade, utilitários, modais) ou
+            # sem os gráficos desenhados não diz nada sobre o produto; a CI baixa as
+            # cópias e confere o hash SRI. A omissão fica registrada como "skipped".
+            self.skipTest("Bootstrap 5.3.3 e Plotly 2.35.2 íntegros indisponíveis (NEXO_TEST_CDN_DIR)")
 
     def _parar_servidor(self):
         self.servidor.shutdown()
@@ -529,6 +541,43 @@ class OverflowNavegadorTests(ContratosCase):
         foco_visivel = pagina.evaluate("""() => { const dz = document.activeElement.closest('.dropzone');
             const cs = getComputedStyle(dz); return cs.outlineStyle !== 'none' && parseFloat(cs.outlineWidth) >= 2; }""")
         self.assertTrue(foco_visivel, "o foco no campo de arquivo não aparece na dropzone")
+        # O nome acessível é formado pelos textos visíveis (título do slot, estado e nome
+        # do arquivo), não por um aria-label que os substitua (WCAG 2.5.3).
+        nome = pagina.evaluate("""() => { const el = document.activeElement;
+            const ids = (el.getAttribute('aria-labelledby') || '').split(/\\s+/).filter(Boolean);
+            const texto = ids.map(id => (document.getElementById(id) || {}).textContent || '').join(' ');
+            const dz = el.closest('.dropzone');
+            return {nome: texto.replace(/\\s+/g, ' ').trim(), rotulo: dz.querySelector('.dz-title').textContent.trim(),
+                    estado: dz.querySelector('.dz-estado').textContent.trim(),
+                    slot: dz.closest('.upload-slot').querySelector('.upload-slot-head .title').textContent.trim(),
+                    ariaLabel: el.getAttribute('aria-label')}; }""")
+        self.assertIsNone(nome["ariaLabel"])
+        self.assertIn(nome["slot"], nome["nome"])
+        self.assertIn(nome["rotulo"], nome["nome"])
+        if nome["estado"]:
+            self.assertIn(nome["estado"], nome["nome"])
+
+    def test_filtro_abc_como_botoes_de_alternancia(self):
+        """Os filtros da Curva ABC são botões de alternância (aria-pressed) num grupo
+        nomeado, não "abas" sem o comportamento de abas; funcionam por teclado."""
+        pagina = self.abrir(1366, 768)
+        self.entrar(pagina, "cliente-test@example.invalid")
+        self.ir(pagina, f"/cliente/analise/{self.analise_id}")
+        grupo = pagina.locator("#abcFilter")
+        self.assertEqual(grupo.get_attribute("role"), "group")
+        self.assertTrue(grupo.get_attribute("aria-label"))
+        self.assertEqual(pagina.locator('#abcFilter [role="tab"], #abcFilter [aria-selected]').count(), 0)
+        todos = pagina.locator("#abcFilter .abc-pill").first
+        self.assertEqual(todos.get_attribute("aria-pressed"), "true")
+        classe_a = pagina.locator('#abcFilter .abc-pill[data-abc-filter="A"]')
+        classe_a.focus()
+        pagina.keyboard.press("Enter")
+        self.assertEqual(classe_a.get_attribute("aria-pressed"), "true")
+        self.assertEqual(todos.get_attribute("aria-pressed"), "false")
+        visiveis = pagina.evaluate("""() => [...document.querySelectorAll('#abcTable tbody tr[data-classe]')]
+            .filter(tr => getComputedStyle(tr).display !== 'none').map(tr => tr.getAttribute('data-classe'))""")
+        self.assertTrue(visiveis)
+        self.assertEqual(set(visiveis), {"A"})
 
     def test_upload_sem_arquivo_nao_faz_post(self):
         pagina = self.abrir(1366, 768)
@@ -654,6 +703,41 @@ class PaginasDeErroTests(ContratosCase):
         resposta = cliente.get("/api/rota-inexistente")
         self.assertEqual(resposta.status_code, 404)
         self.assertEqual(resposta.get_json()["fonte"], "local")
+
+    def test_erro_500_com_falha_de_banco_e_usuario_logado(self):
+        """Erro de banco no meio da requisição com usuário logado: a página de erro do
+        NEXO sai mesmo assim (o sininho, que roda em toda página, não derruba o handler
+        quando a consulta falha; no PostgreSQL a transação abortada é desfeita antes)."""
+        from sqlalchemy.exc import OperationalError
+        app = self.app
+        app.config["PROPAGATE_EXCEPTIONS"] = False  # usa os errorhandlers, como em produção
+
+        def _falha_de_banco():
+            raise OperationalError("SELECT 1", None, Exception("conexão perdida"))
+
+        try:
+            app.add_url_rule("/__teste/erro-500", "teste_erro_500", _falha_de_banco)
+        except AssertionError:  # aplicação já atendeu uma requisição
+            from werkzeug.routing import Rule
+            app.url_map.add(Rule("/__teste/erro-500", endpoint="teste_erro_500"))
+            app.view_functions["teste_erro_500"] = _falha_de_banco
+        cliente = app.test_client()
+        self._entrar(cliente, "cliente-test@example.invalid")
+
+        def _sininho_quebrado(*_a, **_k):
+            raise OperationalError("SELECT notificacao", None, Exception("current transaction is aborted"))
+
+        with patch("notifications.select", side_effect=_sininho_quebrado):
+            resposta = cliente.get("/__teste/erro-500")
+            self.assertEqual(resposta.status_code, 500)
+            corpo = resposta.get_data(as_text=True)
+            self.assertIn("Algo deu errado", corpo)
+            self.assertIn("Voltar ao painel", corpo)
+            self.assertNotIn("Internal Server Error", corpo)
+            # Numa página comum, o sininho em falha também não derruba a página.
+            painel = cliente.get("/cliente/dashboard")
+            self.assertEqual(painel.status_code, 200)
+            self.assertIn("Visão Geral", painel.get_data(as_text=True))
 
     def test_email_volta_preenchido_apos_senha_errada(self):
         cliente = self.app.test_client()
