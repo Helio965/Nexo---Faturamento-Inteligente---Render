@@ -25,11 +25,13 @@ e e-mail longos, produtos com nomes compridos, faturamento de nove dígitos):
   8. 404 dentro do portal: página do NEXO em português com link de volta
      (e JSON em /api/).
 
-Rede: somente o servidor local; CDN respondida localmente (Bootstrap mínimo ou
-cópias íntegras via NEXO_TEST_CDN_DIR, como em test_contratos_navegador). Plotly
-não é carregado por padrão: as medições de gráfico só rodam quando a cópia local
-existir (NEXO_TEST_CDN_DIR/plotly.min.js); caso contrário são puladas e o teste
-registra a limitação. Habilitado por NEXO_TEST_BROWSER=1, como na CI.
+Rede: somente o servidor local; a CDN é respondida localmente com as cópias
+íntegras de NEXO_TEST_CDN_DIR (hash SRI conferido, como em test_contratos_navegador).
+Sem o Bootstrap real a classe de layout é pulada com o motivo registrado (medir a
+grade sem a folha de estilo não diz nada sobre o produto); a CI baixa as cópias.
+Plotly só é carregado quando NEXO_TEST_CDN_DIR/plotly.min.js existir; sem ele os
+gráficos não são desenhados e as medições de gráfico não se aplicam. Habilitado
+por NEXO_TEST_BROWSER=1, como na CI.
 """
 
 import os
@@ -62,8 +64,10 @@ PRODUTOS_LONGOS = [
     "Kit presente premium de café especial torrado e moído com chocolate artesanal 70% cacau e caneca personalizada",
     "Caneca térmica inox 450 ml com tampa antivazamento e cabo emborrachado edição limitada",
     "Cesta de Natal grande com panetone artesanal, espumante e seleção de frutas secas importadas",
-    "Café especial torra média 500 g lote único da fazenda experimental da serra",
-    "Chá importado de folhas inteiras caixa com 20 sachês sortidos",
+    # Par "gêmeo": nomes iguais nos 100 primeiros caracteres (diferem só na cor). O
+    # Pareto encurta rótulos a 3 linhas, e os dois precisam continuar sendo duas barras.
+    "Café especial torra média 500 g lote único da fazenda experimental da serra embalagem a vácuo presente azul",
+    "Café especial torra média 500 g lote único da fazenda experimental da serra embalagem a vácuo presente verde",
     "Biscoito amanteigado artesanal lata decorativa 400 g",
     "Geleia de frutas vermelhas sem açúcar 250 g",
     "Mel orgânico de flores silvestres 500 g",
@@ -112,7 +116,15 @@ _MEDIR = """() => {
         const semRotulo = cartoes ? [...caixa.querySelectorAll('tbody tr:not([style*="none"]) td:not([colspan])')]
             .filter(td => td.textContent.trim() && !td.classList.contains('celula-acoes') && !td.getAttribute('data-label')).length : 0;
         const botoesForaDoCartao = cartoes ? [...caixa.querySelectorAll('tbody a, tbody button')].filter(b => { const r = rect(b); const tr = rect(b.closest('tr')); return r.w && (r.x1 > tr.x1 + 1 || r.x0 < tr.x0 - 1); }).length : 0;
-        return {rola: caixa.scrollWidth > caixa.clientWidth + 1, cartoes, encobertas, fixas: fixas.length,
+        // Dica "Deslize…": o texto inteiro fica fora da faixa esmaecida da máscara (72 px à direita).
+        const dica = caixa.querySelector('.dica-rolagem');
+        let dicaEsmaecida = false;
+        if (dica && visivel(dica) && !cartoes) {
+            const faixa = cr.x1 - 72;
+            const textos = [...dica.childNodes].filter(n => n.nodeType === 3 && n.textContent.trim());
+            for (const t of textos) { const r = document.createRange(); r.selectNodeContents(t); const tb = r.getBoundingClientRect(); if (tb.right > faixa + 1) dicaEsmaecida = true; }
+        }
+        return {rola: caixa.scrollWidth > caixa.clientWidth + 1, cartoes, encobertas, fixas: fixas.length, dicaEsmaecida,
                 focavel: caixa.tabIndex === 0, colunas: ths.length, semRotulo, botoesForaDoCartao,
                 ultimaAlcancavel: !ultimaColuna || cartoes || (ultimaColuna.x1 - cr.x0) <= caixa.scrollWidth + 1,
                 largura_caixa: cr.w, dentroDaTela: cr.x0 >= -1 && cr.x1 <= vw + 1};
@@ -149,9 +161,15 @@ _MEDIR = """() => {
         if (el.closest('script, style, template, svg')) continue;
         if (!visivel(el)) continue;
         const b = el.getBoundingClientRect(); if (!b.width || !b.height) continue;
-        let clip = false;
-        for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) { if (getComputedStyle(p).overflowX !== 'visible') { clip = true; break; } }
-        if (!clip && (b.left < -1 || b.right > vw + 1)) fora.push(desc(el));
+        // Limite visível do elemento: a viewport ou o ancestral mais próximo que recorta
+        // (overflow-x diferente de visible). Um controle além desse limite é inalcançável.
+        let lim = {left: 0, right: vw};
+        for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
+            if (getComputedStyle(p).overflowX !== 'visible') { const pr = p.getBoundingClientRect(); lim = {left: pr.left, right: pr.right, rola: p.scrollWidth > p.clientWidth + 1}; break; }
+        }
+        const controle = el.matches('a, button, input, select, textarea');
+        if (b.left < lim.left - 1 && (controle || lim.right === vw)) fora.push(desc(el) + ' x=' + Math.round(b.left));
+        else if (b.right > lim.right + 1 && !lim.rola && (controle || lim.right === vw)) fora.push(desc(el) + ' x1=' + Math.round(b.right));
     }
     const graficos = [...document.querySelectorAll('.chart-box')].map(c => {
         const cr = rect(c);
@@ -161,7 +179,8 @@ _MEDIR = """() => {
         let sobrepostos = 0;
         for (let i = 1; i < xt.length; i++) if (xt[i].b.x0 < xt[i - 1].b.x1 - 1 && Math.abs(xt[i].b.y0 - xt[i - 1].b.y0) < 2 && Math.abs(xt[i].b.x0 - xt[i-1].b.x0) > 0) sobrepostos++;
         return {id: c.id, w: Math.round(cr.w), desenhado: !!c.querySelector('.main-svg'), truncados: ticks.filter(t => /…$/.test(t.texto)).length,
-                cortados: cortados.slice(0, 5), sobrepostos, papel: c.getAttribute('role'), rotulo: (c.getAttribute('aria-label') || '').length};
+                cortados: cortados.slice(0, 5), sobrepostos, papel: c.getAttribute('role'), rotulo: (c.getAttribute('aria-label') || '').length,
+                barras: c.querySelectorAll('.barlayer .point').length};
     });
     return {rolagem_x: document.documentElement.scrollWidth > vw + 1, tabelas, kpis, nexobot, sidebar, fora: fora.slice(0, 10), graficos};
 }"""
@@ -188,6 +207,10 @@ class OverflowNavegadorTests(ContratosCase):
         plotly = Path(pasta) / "plotly.min.js" if pasta else None
         self.plotly_local = str(plotly) if plotly and plotly.is_file() else None
         self.erros_js = []
+        if len(self.cdn_local) < 2:
+            # Medir layout sem o bootstrap.min.css real (grade, utilitários, modais) não
+            # diz nada sobre o produto; o CI baixa as cópias e confere o hash SRI.
+            self.skipTest("Bootstrap 5.3.3 íntegro indisponível (NEXO_TEST_CDN_DIR)")
 
     def _parar_servidor(self):
         self.servidor.shutdown()
@@ -200,7 +223,7 @@ class OverflowNavegadorTests(ContratosCase):
     def dados_extensos(self):
         """Nomes, e-mails e produtos longos; faturamento de nove dígitos; uma empresa
         na lixeira; dois chamados; duas análises publicadas (histórico com 2 pontos)."""
-        from models import Analise, ChamadoSuporte, Empresa, MensagemSuporte, Plano, ProdutoCurvaABC, Segmento
+        from models import Analise, ChamadoSuporte, Empresa, MensagemSuporte, Plano, ProdutoCurvaABC, Segmento, UploadRelatorio
         s = self.db.session
         plano = s.scalar(self.db.select(Plano))
         segmento = Segmento(nome_segmento="MATERIAIS_DE_CONSTRUCAO_E_ACABAMENTOS")
@@ -215,7 +238,7 @@ class OverflowNavegadorTests(ContratosCase):
                        data_contratacao=date(2026, 1, 1), deletado_em=datetime(2026, 2, 20, 15, 30))
         s.add_all([longa, lixo])
         s.flush()
-        self.contratar(empresa_id=longa.id_empresa)
+        self.contrato_longo_id = self.contratar(empresa_id=longa.id_empresa).id_contrato
         # Referência sem espaços (140 caracteres): no modo cartões ela precisa quebrar
         # dentro do cartão, não vazar dele.
         self.pagar(date(2026, 1, 1), date(2026, 1, 31), empresa_id=longa.id_empresa,
@@ -244,8 +267,13 @@ class OverflowNavegadorTests(ContratosCase):
                                   quantidade=Decimal(1000 * (11 - pos)), faturamento=fat,
                                   percentual_individual=perc, percentual_acumulado=min(acumulado, Decimal("100")),
                                   classe_abc="A" if acumulado <= 80 else ("B" if acumulado <= 95 else "C")))
-        # Período em aberto: a página "Enviar relatórios" mostra as dropzones.
-        self.nova_analise(date(2026, 2, 1), date(2026, 2, 28))
+        # Período em aberto: a página "Enviar relatórios" mostra as dropzones; o
+        # relatório de vendas já foi recebido (dropzone no estado "Arquivo recebido").
+        aberta = self.nova_analise(date(2026, 2, 1), date(2026, 2, 28))
+        s.add(UploadRelatorio(id_analise=aberta.id_analise, id_usuario_admin=None, tipo_relatorio="VENDAS",
+                              nome_arquivo_original="vendas-fevereiro-2026-loja-matriz-e-filiais-consolidado.csv",
+                              caminho_arquivo="/tmp/inexistente.csv", extensao_arquivo="CSV", tamanho_arquivo=12,
+                              hash_arquivo="0" * 64, status_processamento="PENDENTE"))
         for i, (assunto, status) in enumerate([
                 ("Erro ao enviar planilha de compras em formato XLSX com várias abas e colunas mescladas", "ABERTO"),
                 ("Dúvida sobre o indicador de pressão de estoque do último período", "RESOLVIDO")]):
@@ -314,6 +342,7 @@ class OverflowNavegadorTests(ContratosCase):
         self.assertEqual(m["fora"], [], f"{contexto}: elementos fora da tela")
         for t in m["tabelas"]:
             self.assertEqual(t["encobertas"], 0, f"{contexto}: célula encoberta por célula fixa ({t})")
+            self.assertFalse(t["dicaEsmaecida"], f"{contexto}: dica de rolagem esmaecida pela máscara ({t})")
             self.assertEqual(t["fixas"], 0, f"{contexto}: ainda há célula fixa ({t})")
             self.assertTrue(t["dentroDaTela"], f"{contexto}: tabela fora da tela ({t})")
             if t["rola"] and not t["cartoes"]:
@@ -341,6 +370,9 @@ class OverflowNavegadorTests(ContratosCase):
             truncaveis = sum(1 for nome in PRODUTOS_LONGOS if _linhas_necessarias(nome, por_linha) > 3)
             permitidos = truncaveis if "Abc" in g["id"] else 0
             self.assertLessEqual(g["truncados"], permitidos, f"{contexto}: rótulo truncado em {g['id']}")
+            if "Abc" in g["id"]:
+                # Uma barra por produto, mesmo quando dois nomes encurtados coincidem.
+                self.assertEqual(g["barras"], len(PRODUTOS_LONGOS), f"{contexto}: barras fundidas em {g['id']}")
             self.assertEqual(g["cortados"], [], f"{contexto}: rótulo cortado em {g['id']}")
             self.assertEqual(g["sobrepostos"], 0, f"{contexto}: rótulos sobrepostos em {g['id']}")
             self.assertEqual(g["papel"], "img", f"{contexto}: gráfico sem alternativa textual ({g['id']})")
@@ -365,8 +397,12 @@ class OverflowNavegadorTests(ContratosCase):
 
     # ------------------------------------------------------------ cenários
     def paginas_admin(self):
+        base = f"/admin/empresas/{self.empresa_longa_id}"
         return ["/admin/dashboard", "/admin/empresas", "/admin/analises", "/admin/lixeira", "/admin/contratos",
-                "/admin/tickets", "/admin/guia", f"/admin/empresas/{self.empresa_longa_id}/detalhes"]
+                "/admin/tickets", "/admin/guia", f"{base}/detalhes",
+                # Formulários com linha de botões "Voltar / Confirmar": os dois precisam caber.
+                f"{base}/contratos/{self.contrato_longo_id}/prorrogar", f"{base}/contratos/{self.contrato_longo_id}/cobertura",
+                f"{base}/regras-contratuais/ativar"]
 
     def paginas_cliente(self):
         return ["/cliente/dashboard", f"/cliente/analise/{self.analise_id}", "/cliente/historico", "/cliente/upload",
@@ -513,6 +549,37 @@ class OverflowNavegadorTests(ContratosCase):
         campo.set_input_files({"name": "vendas-janeiro.csv", "mimeType": "text/csv", "buffer": b"produto;qtd\n"})
         self.assertIn("vendas-janeiro.csv", pagina.locator(".dropzone .dz-title").first.text_content())
         self.assertIn("Selecionado para envio", pagina.locator(".dropzone .dz-estado").first.text_content())
+        # O navegador limpa o campo (reabrir o seletor e cancelar): a dropzone volta ao
+        # estado inicial em vez de continuar afirmando que há um arquivo selecionado.
+        campo.set_input_files([])
+        self.assertNotIn("Selecionado", pagina.locator(".dropzone .dz-estado").first.text_content())
+        self.assertFalse(pagina.locator(".dropzone").first.evaluate("e => e.classList.contains('is-selecionado')"))
+
+    def test_upload_ja_recebido_volta_ao_estado_recebido(self):
+        """Slot com arquivo recebido: escolher um arquivo inválido ou cancelar a seleção
+        devolve "Arquivo recebido" (texto, ícone e borda), sem estado misto."""
+        pagina = self.abrir(1366, 768)
+        self.entrar(pagina, "cliente-test@example.invalid")
+        self.ir(pagina, "/cliente/upload")
+        recebidos = pagina.locator(".dropzone.is-recebido")
+        self.assertEqual(recebidos.count(), 1, "o relatório de vendas já recebido não aparece como recebido")
+        # Localizador estável (por posição): a classe is-recebido sai e volta durante o teste.
+        indice = pagina.locator(".dropzone").evaluate_all("els => els.findIndex(e => e.classList.contains('is-recebido'))")
+        dz = pagina.locator(".dropzone").nth(indice)
+        nome_recebido = dz.locator(".dz-title").text_content().strip()
+        self.assertIn(".csv", nome_recebido)
+        campo = dz.locator("input[type=file]")
+        campo.set_input_files({"name": "novo.csv", "mimeType": "text/csv", "buffer": b"a;b\n"})
+        self.assertFalse(dz.evaluate("e => e.classList.contains('is-recebido')"))
+        campo.set_input_files({"name": "errado.pdf", "mimeType": "application/pdf", "buffer": b"%PDF-1.4"})
+        self.assertIn("Formato não aceito", dz.locator(".dz-erro").text_content())
+        self.assertTrue(dz.evaluate("e => e.classList.contains('is-recebido') && !e.classList.contains('is-selecionado')"))
+        self.assertEqual(dz.locator(".dz-estado").text_content().strip(), "Arquivo recebido")
+        self.assertEqual(dz.locator(".dz-title").text_content().strip(), nome_recebido)
+        campo.set_input_files({"name": "novo.csv", "mimeType": "text/csv", "buffer": b"a;b\n"})
+        campo.set_input_files([])
+        self.assertTrue(dz.evaluate("e => e.classList.contains('is-recebido')"))
+        self.assertEqual(dz.locator(".dz-title").text_content().strip(), nome_recebido)
 
     def test_pagina_nao_encontrada_dentro_do_portal(self):
         pagina = self.abrir(1366, 768)
