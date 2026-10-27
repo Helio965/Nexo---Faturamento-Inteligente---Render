@@ -344,6 +344,38 @@ def create_app(config_name: str = None) -> Flask:
                                mensagem="Você fez muitas requisições em pouco tempo. "
                                         "Aguarde um minuto e tente novamente."), 429
 
+    # Páginas de erro na identidade do NEXO (antes: a página padrão do servidor,
+    # branca e em inglês). O status HTTP não muda; chamadas /api/ recebem JSON.
+    def _painel_url():
+        """Link de volta ao painel do perfil logado; None sem sessão (ou se o banco
+        estiver indisponível, caso do erro 500)."""
+        try:
+            if current_user.is_authenticated:
+                return url_for("admin.dashboard" if current_user.is_admin else "cliente.dashboard")
+        except Exception:  # noqa: BLE001
+            pass
+        return None
+
+    def _pagina_erro(status, titulo, mensagem):
+        if request.path.startswith("/api/"):
+            return _erro_api(mensagem, status)
+        return render_template("erro_simples.html", titulo=titulo, mensagem=mensagem,
+                               painel_url=_painel_url(), codigo=status), status
+
+    @app.errorhandler(404)
+    def _nao_encontrado(e):
+        return _pagina_erro(404, "Página não encontrada",
+                            "O endereço não existe ou o item foi removido. Confira o link ou volte ao painel.")
+
+    @app.errorhandler(403)
+    def _acesso_negado(e):
+        return _pagina_erro(403, "Acesso negado", "Você não tem permissão para abrir esta página.")
+
+    @app.errorhandler(500)
+    def _erro_interno(e):
+        return _pagina_erro(500, "Algo deu errado",
+                            "Ocorreu um erro inesperado. Tente novamente em instantes.")
+
     # Atrás de proxy reverso (Render, Railway, nginx...): confia nos cabeçalhos
     # X-Forwarded-For/Proto de N saltos (PROXY_FIX_HOPS). Sem isso, TODOS os
     # usuários aparecem com o IP do proxy (o rate limit do login viraria global)

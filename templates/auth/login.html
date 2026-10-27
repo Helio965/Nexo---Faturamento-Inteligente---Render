@@ -46,17 +46,19 @@
             </div>
         </div>
         <div class="mb-4">
-            <div class="d-flex justify-content-between align-items-baseline">
-                <label for="senha" class="nexo-label">Senha</label>
-                <a href="{{ url_for('auth.recuperar_senha') }}" class="auth-forgot" style="font-size:0.8rem;color:#c4a0fb;text-decoration:none;">Esqueci minha senha</a>
-            </div>
+            <label for="senha" class="nexo-label">Senha</label>
             <div class="password-field">
+                {# Sem placeholder de "••••••••": parecia uma senha já preenchida. #}
                 <input type="password" name="senha" id="senha" class="form-control"
-                       placeholder="••••••••" required autocomplete="current-password">
+                       required autocomplete="current-password">
                 <button type="button" class="password-toggle" id="toggleSenha"
                         aria-label="Mostrar senha" title="Mostrar senha">
                     <i class="bi bi-eye" id="toggleSenhaIcon" aria-hidden="true"></i>
                 </button>
+            </div>
+            {# Depois do campo (e não antes dele) a ordem de Tab fica e-mail → senha → esqueci → entrar. #}
+            <div class="text-end mt-2">
+                <a href="{{ url_for('auth.recuperar_senha') }}" class="auth-forgot" style="font-size:0.8rem;color:#c4a0fb;text-decoration:none;">Esqueci minha senha</a>
             </div>
         </div>
         <button type="submit" class="btn-nexo auth-submit w-100 justify-content-center">

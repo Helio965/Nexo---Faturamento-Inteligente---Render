@@ -311,7 +311,7 @@ def login():
                     resposta.headers["Cache-Control"] = "no-store"
                     return resposta
                 flash("Esta conta está desativada. Contacte o administrador.", "danger")
-                return render_template("auth/login.html")
+                return render_template("auth/login.html", email_digitado=email)
 
             # Efetua o login na sessão (sem "remember": cookie morre ao fechar o
             # navegador). Carimba a sessão com o BOOT_ID atual para que um
@@ -335,7 +335,8 @@ def login():
         # Mensagem genérica por motivos de segurança (não revelar se o erro foi o e-mail ou a senha)
         flash("E-mail ou senha incorretos.", "danger")
 
-    return render_template("auth/login.html")
+    # Depois de uma tentativa errada, o e-mail digitado volta preenchido (só a senha é redigitada).
+    return render_template("auth/login.html", email_digitado=request.form.get("email", "").strip())
 
 
 @auth_bp.route("/logout")
