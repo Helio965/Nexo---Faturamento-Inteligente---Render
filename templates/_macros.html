@@ -89,9 +89,29 @@
 {%- endif -%}
 {%- endmacro -%}
 
-{# ---- Nome de segmento legível: LOJA_DE_TINTAS -> Loja De Tintas ---- #}
+{# ---- Nome de segmento legível: LOJA_DE_TINTAS -> Loja de tintas; um nome já
+      escrito normalmente ("Moda e Acessórios") é exibido como foi cadastrado ---- #}
 {%- macro segmento(nome) -%}
-{{- (nome or '—')|replace('_', ' ')|title -}}
+{%- set n = (nome or '—')|string -%}
+{%- if '_' in n or n == n|upper -%}{{ n|replace('_', ' ')|lower|capitalize }}{%- else -%}{{ n }}{%- endif -%}
+{%- endmacro -%}
+
+{# ---- Período "início – fim": cada data fica inteira numa linha, mas a célula pode
+      quebrar entre as duas quando a coluna é estreita ---- #}
+{%- macro periodo(inicio, fim) -%}
+<span class="t-nowrap">{{ inicio.strftime('%d/%m/%Y') }}</span> – <span class="t-nowrap">{{ fim.strftime('%d/%m/%Y') }}</span>
+{%- endmacro -%}
+
+{# ---- E-mail longo: ponto de quebra depois do "@" (em vez de cortar no meio de uma palavra) ---- #}
+{%- macro email(valor) -%}
+{%- set v = (valor or '')|string -%}
+{%- if '@' in v -%}{{ v.split('@', 1)[0] }}@<wbr>{{ v.split('@', 1)[1] }}{%- else -%}{{ v or '—' }}{%- endif -%}
+{%- endmacro -%}
+
+{# ---- CNPJ com máscara: 99000000000101 -> 99.000.000/0001-01 (outros tamanhos, como veio) ---- #}
+{%- macro cnpj(valor) -%}
+{%- set d = (valor or '')|string|replace('.', '')|replace('/', '')|replace('-', '')|trim -%}
+{%- if d|length == 14 -%}{{ d[0:2] }}.{{ d[2:5] }}.{{ d[5:8] }}/{{ d[8:12] }}-{{ d[12:14] }}{%- else -%}{{ valor or '—' }}{%- endif -%}
 {%- endmacro -%}
 
 {# ---- Aviso padrão do Indicador de Pressão de Estoque (regra de negócio) ---- #}

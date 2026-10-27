@@ -191,7 +191,10 @@ a { text-decoration: none; }
 }
 .auth-eyebrow span { display: block; margin-top: 2px; color: var(--text-dim); font-size: 0.68rem; font-weight: 600; letter-spacing: 0.05em; }
 .auth-title { font-size: 1.5rem; font-weight: 800; margin: 0 0 4px; }
-.auth-sub { color: var(--text-muted); font-size: 0.86rem; margin: 0; }
+.auth-sub { color: #b7b2d3; font-size: 0.86rem; margin: 0; text-wrap: balance; }
+/* Textos auxiliares das telas de acesso: o cinza antigo ficava abaixo de 4,5:1. */
+.auth-wrap { --text-dim: #9d98ba; }
+.auth-aside { text-wrap: balance; }
 .access-switch {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -326,6 +329,7 @@ a { text-decoration: none; }
   color: #b4b0cf;
   font-weight: 500; font-size: 0.9rem;
   position: relative;
+  min-width: 0;
   transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, transform 0.2s var(--ease-out);
 }
 .nav-item i {
@@ -355,10 +359,13 @@ a { text-decoration: none; }
   border-color: rgba(255, 255, 255, 0.18);
   box-shadow: 0 6px 18px -5px var(--primary-glow), inset 0 1px 0 rgba(255, 255, 255, 0.35);
 }
-.nav-item.active::before {
+/* Ponto do item ativo: um item do flex depois do rótulo (não um pseudo-elemento
+   absoluto), então nunca fica em cima de um nome longo como "Base de
+   Conhecimento"; se faltar espaço, o rótulo quebra a linha e o ponto fica ao lado. */
+.nav-item.active::after {
   content: "";
-  position: absolute; right: 12px; top: 50%;
-  width: 6px; height: 6px; margin-top: -3px; border-radius: 50%;
+  flex: 0 0 auto; margin-left: auto;
+  width: 6px; height: 6px; border-radius: 50%;
   background: #e4d2ff;
   box-shadow: 0 0 10px 2px var(--primary-glow);
 }
@@ -582,11 +589,15 @@ a { text-decoration: none; }
   text-shadow: 0 2px 18px rgba(var(--kpi-accent, 168, 85, 247), 0.28);
   /* Dígitos de largura igual no JetBrains Mono evitam "respiração" entre valores. */
   font-variant-numeric: tabular-nums;
-  /* Valor sempre numa linha ("R$" junto do número). Quando não cabe, o script
-     do shell reduz a fonte desse valor; sem JS, o overflow do .kpi-tile corta. */
+  /* Valor numa linha ("R$" junto do número). Quando não cabe, o script do shell
+     reduz a fonte até 18px e, se ainda não couber, deixa o valor quebrar a linha
+     (nunca corta nem encolhe a ponto de ficar ilegível). */
   white-space: nowrap;
+  overflow-wrap: anywhere;
   min-width: 0;
 }
+/* Nome de produto nos cartões de destaque: quebra a linha em vez de estourar. */
+.kpi-tile .fw-bold { overflow-wrap: anywhere; }
 .kpi-value small { font-family: var(--font-sans); font-size: 0.95rem; font-weight: 600; color: #b7b2d3; text-shadow: none; }
 .kpi-foot { margin-top: 8px; font-size: 0.8rem; color: #a7a2c6; }
 .kpi-foot .pill { font-family: var(--font-mono); font-weight: 600; }
@@ -679,6 +690,11 @@ a { text-decoration: none; }
 .app-shell .btn-nexo:hover { background: var(--grad-cta-hover); }
 .btn-nexo:active { transform: translateY(0); }
 .btn-nexo:disabled, .btn-nexo.disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; transform: none; }
+/* Ação destrutiva confirmada (cancelar contrato, revogar cobertura): vermelho, não o roxo das ações comuns. */
+.btn-nexo.is-danger, .app-shell .btn-nexo.is-danger { background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%); box-shadow: 0 10px 24px -10px rgba(239, 68, 68, 0.55); }
+.btn-nexo.is-danger:hover, .app-shell .btn-nexo.is-danger:hover { background: linear-gradient(135deg, #991b1b 0%, #b91c1c 100%); }
+/* Rótulo do botão numa linha só (nunca "Nova / empresa" em duas). */
+.btn-nexo, .btn-ghost { white-space: nowrap; }
 
 .btn-ghost {
   background: var(--surface-2);
@@ -702,7 +718,9 @@ a { text-decoration: none; }
 }
 .btn-ghost:hover { background: var(--surface-3); border-color: var(--border-strong); color: var(--text); }
 .app-shell .btn-ghost:hover { background: rgba(168, 85, 247, 0.14); border-color: var(--glass-border-2); color: #fff; }
-.btn-ghost.is-danger:hover { background: var(--danger-bg); color: #fca5a5; border-color: rgba(239,68,68,0.3); }
+/* Destrutiva discreta: já sinalizada em repouso (no toque não existe hover). */
+.btn-ghost.is-danger { color: #fca5a5; border-color: rgba(239, 68, 68, 0.3); }
+.btn-ghost.is-danger:hover, .app-shell .btn-ghost.is-danger:hover { background: var(--danger-bg); color: #fecaca; border-color: rgba(239, 68, 68, 0.48); }
 
 /* Override do Bootstrap p/ manter consistência onde .btn-* já é usado */
 [data-bs-theme="dark"] .btn-primary { background: var(--grad); border: none; box-shadow: 0 8px 20px -8px var(--primary-glow); }
@@ -716,48 +734,78 @@ a { text-decoration: none; }
 /* ===================== FORMULÁRIOS ============================== */
 .form-section-title { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--primary); margin: 6px 0 4px; }
 .nexo-label { font-size: 0.82rem; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; display: block; }
-.nexo-label .req { color: var(--primary); }
+.nexo-label .req { color: #c4a0fb; }
 
+/* Só a cor de fundo é sobrescrita: o atalho `background` zerava a seta do
+   .form-select (background-image do Bootstrap) e os selects viravam campos de texto. */
 .form-control, .form-select {
-  background: var(--bg-2);
+  background-color: var(--bg-2);
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: var(--radius-sm);
   padding: 11px 14px;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
 }
+.form-select { padding-right: 2.4rem; }
 /* No painel, campos translúcidos sobre o vidro (login e acesso seguem opacos). */
 .app-shell .form-control, .app-shell .form-select {
-  background: rgba(9, 7, 20, 0.62);
+  background-color: rgba(9, 7, 20, 0.62);
   border-color: rgba(255, 255, 255, 0.1);
 }
 .form-control::placeholder { color: var(--text-dim); }
 .form-control:focus, .form-select:focus {
-  background: var(--bg-2);
+  background-color: var(--bg-2);
   border-color: var(--primary-2);
   box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.18);
   color: var(--text);
 }
-.app-shell .form-control:focus, .app-shell .form-select:focus { background: rgba(9, 7, 20, 0.78); }
-.form-control:disabled, .form-select:disabled { background: var(--surface); opacity: 0.7; }
+.app-shell .form-control:focus, .app-shell .form-select:focus { background-color: rgba(9, 7, 20, 0.78); }
+.form-control:disabled, .form-select:disabled { background-color: var(--surface); opacity: 0.7; }
+/* Caixa de seleção na paleta (a do Bootstrap era quase invisível desmarcada e azul marcada). */
+.app-shell .form-check-input {
+  width: 1.15em; height: 1.15em; margin-top: 0.2em;
+  background-color: rgba(9, 7, 20, 0.62); border: 1px solid rgba(255, 255, 255, 0.42);
+}
+.app-shell .form-check-input:checked { background-color: var(--primary-3); border-color: var(--primary); }
+.app-shell .form-check-input:focus { border-color: var(--primary-2); box-shadow: 0 0 0 3px rgba(168, 85, 247, 0.25); }
+.app-shell .form-check-label { color: var(--text); }
 .form-text, .field-hint { color: var(--text-dim); font-size: 0.8rem; }
 .input-group-text { background: var(--surface-3); border-color: var(--border); color: var(--text-muted); }
 
 /* ===================== DROPZONE / UPLOAD ======================== */
+/* A dropzone é um <label> em bloco (largura total do slot). O campo de arquivo
+   fica escondido só visualmente: continua na ordem de Tab (Enter/Espaço abrem o
+   seletor) e o foco aparece na própria dropzone. Estados: is-recebido (arquivo já
+   enviado antes), is-selecionado (arquivo escolhido agora), is-erro. */
 .dropzone {
+  position: relative; display: block; width: 100%;
   border: 1.5px dashed var(--border-strong);
   border-radius: var(--radius);
   background: rgba(255, 255, 255, 0.015);
-  padding: 30px 24px;
+  padding: 26px 20px;
   text-align: center;
   transition: border-color 0.18s ease, background 0.18s ease;
   cursor: pointer;
 }
 .dropzone:hover, .dropzone.is-drag { border-color: var(--primary-2); background: var(--primary-soft); }
+.dropzone:has(input:focus-visible) { outline: 2px solid var(--primary-2); outline-offset: 3px; border-color: var(--primary-2); }
 .dropzone .dz-icon { font-size: 2.1rem; color: var(--primary); margin-bottom: 8px; }
-.dropzone .dz-title { font-weight: 600; }
+.dropzone .dz-estado { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a49cc4; margin-bottom: 3px; }
+.dropzone .dz-estado:empty { display: none; }
+.dropzone .dz-title { font-weight: 600; overflow-wrap: anywhere; }
 .dropzone .dz-hint { font-size: 0.82rem; color: var(--text-dim); }
-.dropzone input[type="file"] { display: none; }
+.dropzone .dz-erro { display: none; margin-top: 8px; font-size: 0.82rem; font-weight: 600; color: #fca5a5; }
+.dropzone.is-erro { border-color: rgba(239, 68, 68, 0.6); }
+.dropzone.is-erro .dz-erro { display: block; }
+.dropzone.is-recebido { border-style: solid; border-color: rgba(34, 197, 94, 0.38); }
+.dropzone.is-recebido .dz-icon { color: #6ee7a8; }
+.dropzone.is-recebido .dz-estado { color: #6ee7a8; }
+.dropzone.is-selecionado { border-style: solid; border-color: var(--primary-2); background: var(--primary-soft); }
+.dropzone.is-selecionado .dz-estado { color: #d8c2fd; }
+.dropzone input[type="file"] {
+  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; opacity: 0;
+}
 
 .upload-slot {
   border: 1px solid var(--glass-border);
@@ -878,6 +926,9 @@ a { text-decoration: none; }
 
 /* ===================== RELATÓRIO ESTRATÉGICO ==================== */
 .relatorio-doc { max-width: 880px; }
+/* Formulários contratuais: mesma largura dos avisos e do resumo acima deles (antes,
+   980 px fixos deixavam três bordas direitas diferentes na página). */
+.form-contrato { max-width: none; }
 .relatorio-block { margin-bottom: 26px; }
 .relatorio-block .rb-label {
   display: flex; align-items: center; gap: 9px;
@@ -963,19 +1014,28 @@ a { text-decoration: none; }
 .nexo-card-head.px-0 .sub { color: #e2dff2; text-shadow: 0 1px 10px rgba(8, 6, 18, 0.85); }
 .nexo-card-head.px-0:has(h2 > .bi:first-child) .sub { margin-left: 42px; }
 
-/* Tabelas: datas não quebram; respiro menor em telas estreitas. Quando a tabela
-   rola na horizontal, a coluna de ações fica fixa à direita (o script do shell
-   marca o contêiner com .tem-rolagem e a coluna com .col-acoes). */
+/* Tabelas: datas não quebram; respiro menor em telas estreitas. Nenhuma coluna
+   fica fixa por cima das outras (a coluna de ações fixa encobria Status, E-mail,
+   Publicado e "Movido em"). Uma tabela mais larga que o contêiner rola na
+   horizontal dentro dele: a borda direita esmaece enquanto há colunas à direita,
+   uma dica "deslize" fica visível até o fim da rolagem e o contêiner aceita foco
+   e setas. Quando a tabela precisaria de bem mais que a largura disponível, o
+   script do shell a reorganiza em cartões (.em-cartoes: uma linha por cartão,
+   cada valor com o rótulo da coluna lido de data-label). */
 .nexo-table td.t-mono { white-space: nowrap; }
-.table-responsive-x.tem-rolagem .nexo-table .col-acoes {
-  position: sticky; right: 0; z-index: 1;
-  background: rgb(21, 16, 39);
-  box-shadow: inset 1px 0 0 var(--glass-border), -16px 0 18px -14px rgba(3, 0, 12, 0.9);
-}
-.table-responsive-x.tem-rolagem .nexo-table thead .col-acoes { background: rgb(27, 22, 47); }
-.table-responsive-x.tem-rolagem .nexo-table tbody tr:hover .col-acoes { background: rgb(36, 22, 62); }
-/* Sem coluna fixa (ela cobriria dados demais): a borda direita esmaece enquanto
-   ainda há colunas para rolar, e some ao chegar ao fim. */
+/* Período "início – fim": pode quebrar entre as duas datas (cada data fica inteira). */
+.nexo-table td.t-periodo { white-space: normal; }
+.t-nowrap { white-space: nowrap; }
+.nexo-table .col-nome { min-width: 190px; }
+.nexo-table .t-email { overflow-wrap: anywhere; min-width: 200px; }
+/* Ações da linha: botões lado a lado, quebrando em duas fileiras quando a coluna
+   fica estreita (a tabela encolhe a coluna em vez de empurrar as outras). */
+.nexo-table .acoes { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+.nexo-table .acoes .btn-ghost, .nexo-table .acoes .btn { white-space: nowrap; }
+.table-responsive-x { position: relative; scrollbar-width: thin; scrollbar-color: rgba(196, 160, 251, 0.45) transparent; }
+.table-responsive-x::-webkit-scrollbar { height: 8px; }
+.table-responsive-x::-webkit-scrollbar-thumb { background: rgba(196, 160, 251, 0.35); border-radius: 999px; }
+.table-responsive-x:focus-visible { outline: 2px solid var(--primary-2); outline-offset: -2px; }
 .table-responsive-x.rola-mais {
   -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 72px), rgba(0, 0, 0, 0.18));
   mask-image: linear-gradient(90deg, #000 calc(100% - 72px), rgba(0, 0, 0, 0.18));
@@ -983,6 +1043,55 @@ a { text-decoration: none; }
 /* Navegando pelo teclado dentro da tabela, nada fica esmaecido. */
 .table-responsive-x.rola-mais:has(:focus-visible) { -webkit-mask-image: none; mask-image: none; }
 .table-responsive-x :is(a, button) { scroll-margin-inline: 6px; }
+/* Dica de rolagem: fixa à esquerda do contêiner (acompanha a rolagem) e some ao
+   chegar ao fim das colunas. */
+.dica-rolagem {
+  display: none; position: sticky; left: 0; width: 100%;
+  padding: 7px 16px 9px; gap: 7px; justify-content: flex-end; align-items: center;
+  font-size: 0.74rem; font-weight: 600; color: #c4a0fb;
+  border-top: 1px solid var(--glass-border); background: rgba(255, 255, 255, 0.02);
+}
+.table-responsive-x.rola-mais .dica-rolagem { display: flex; }
+/* ---- Modo cartões ---- */
+.table-responsive-x.em-cartoes { overflow: visible; -webkit-mask-image: none; mask-image: none; }
+.table-responsive-x.em-cartoes .nexo-table { display: block; }
+.table-responsive-x.em-cartoes .nexo-table thead {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+.table-responsive-x.em-cartoes .nexo-table tbody {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+  gap: 12px; padding: 12px;
+}
+.table-responsive-x.em-cartoes .nexo-table tbody tr {
+  display: flex; flex-direction: column;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid var(--glass-border); border-radius: 16px;
+  padding: 4px 0 6px; box-shadow: var(--glass-shine);
+}
+.table-responsive-x.em-cartoes .nexo-table tbody tr:hover { background: rgba(168, 85, 247, 0.08); box-shadow: inset 0 0 0 1px var(--glass-border-2); }
+.table-responsive-x.em-cartoes .nexo-table tbody tr:has(> td[colspan]) { grid-column: 1 / -1; }
+/* Cada célula vira um bloco (rótulo em cima, valor embaixo); o conteúdo continua
+   em linha como foi escrito (dois selos lado a lado, texto que quebra). */
+.table-responsive-x.em-cartoes .nexo-table tbody td {
+  display: block;
+  padding: 8px 16px; border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 0.9rem; white-space: normal; text-align: left !important; /* vence .text-end do Bootstrap */
+}
+.table-responsive-x.em-cartoes .nexo-table tbody td:last-child { border-bottom: none; }
+.table-responsive-x.em-cartoes .nexo-table tbody td::before {
+  content: attr(data-label);
+  display: block; margin-bottom: 3px;
+  font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a49cc4;
+}
+.table-responsive-x.em-cartoes .nexo-table tbody td:not([data-label])::before,
+.table-responsive-x.em-cartoes .nexo-table tbody td[data-label=""]::before { display: none; }
+.table-responsive-x.em-cartoes .nexo-table tbody td:first-child { font-size: 1rem; padding-top: 12px; }
+.table-responsive-x.em-cartoes .nexo-table tbody td.t-mono { white-space: normal; }
+.table-responsive-x.em-cartoes .nexo-table tbody td.celula-acoes { padding-top: 12px; padding-bottom: 10px; }
+.table-responsive-x.em-cartoes .nexo-table tbody td.celula-acoes .acoes { justify-content: flex-start; }
+.table-responsive-x.em-cartoes .nexo-table tbody td[colspan] { text-align: center !important; }
+.table-responsive-x.em-cartoes .dica-rolagem { display: none; }
 
 /* Texto solto direto sobre o fundo (fora de cartão): claro e com sombra, como
    o subtítulo dos cabeçalhos de seção. */
@@ -993,8 +1102,8 @@ a { text-decoration: none; }
 @media (min-width: 576px) and (max-width: 1199.98px) {
   .app-shell .row > .col-sm-6:last-child:nth-child(odd):has(> .kpi-tile) { width: 100%; }
 }
-@media (max-width: 1199.98px) {
-  .nexo-table thead th, .nexo-table tbody td { padding-left: 16px; padding-right: 16px; }
+@media (max-width: 1599.98px) {
+  .nexo-table thead th, .nexo-table tbody td { padding-left: 14px; padding-right: 14px; }
 }
 @media (max-width: 575.98px) {
   .nexo-table thead th, .nexo-table tbody td { padding: 12px 14px; }
@@ -1002,10 +1111,44 @@ a { text-decoration: none; }
   .page-head-actions .search-box { flex: 1 1 100%; width: 100%; max-width: none; }
 }
 
-/* NexoBot: some com a gaveta aberta; o fim da página não fica sob o botão. */
+/* NexoBot: some com a gaveta aberta; o fim da página não fica sob o botão; os
+   avisos em tempo real sobem para não cobrir o botão (os dois ficavam no mesmo canto). */
 .nexobot { transition: opacity 0.2s ease, visibility 0.2s ease; }
 .app-shell.nav-open ~ .nexobot { opacity: 0; visibility: hidden; pointer-events: none; }
 body:has(> .nexobot) .app-shell .page { padding-bottom: 104px; }
+body:has(> .nexobot) .nexo-toast-wrap { bottom: 96px; }
+
+/* Link "Pular para o conteúdo": invisível até receber foco pelo teclado. */
+.skip-link {
+  position: absolute; left: 12px; top: -80px; z-index: 2000;
+  padding: 10px 16px; border-radius: 12px;
+  background: var(--grad-cta); color: #fff; font-weight: 600; text-decoration: none;
+  box-shadow: var(--shadow-lg);
+  transition: top 0.15s ease;
+}
+.skip-link:focus { top: 12px; outline: 2px solid #fff; outline-offset: 2px; }
+.page:focus { outline: none; }
+
+/* Modais na identidade do painel (antes: cinza padrão do Bootstrap). */
+.nexo-modal .modal-content {
+  background: rgba(17, 13, 32, 0.97); color: var(--text);
+  border: 1px solid var(--glass-border-2); border-radius: 20px;
+  box-shadow: var(--shadow-lg), var(--glass-shine);
+}
+.nexo-modal.is-perigo .modal-content { border-color: rgba(239, 68, 68, 0.42); }
+.nexo-modal .modal-header, .nexo-modal .modal-footer { border-color: var(--glass-border); padding: 16px 22px; }
+.nexo-modal .modal-body { padding: 18px 22px; }
+.nexo-modal .modal-title { font-size: 1.02rem; font-weight: 700; }
+.nexo-modal .modal-footer { gap: 8px; }
+.nexo-modal .btn { border-radius: 12px; padding: 9px 16px; font-weight: 600; font-size: 0.88rem; }
+.nexo-modal .btn-outline-light { border-color: var(--glass-border-2); color: var(--text); background: rgba(255, 255, 255, 0.04); }
+.nexo-modal .btn-outline-light:hover { background: rgba(168, 85, 247, 0.14); border-color: var(--glass-border-2); color: #fff; }
+.nexo-modal .btn-warning { background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%); border: none; color: #1a1206; }
+.nexo-modal .btn-danger { background: linear-gradient(135deg, #b91c1c 0%, #ef4444 100%); border: none; color: #fff; }
+.nexo-modal .text-muted { color: #b2adcf !important; }
+.nexo-modal .btn:focus-visible { outline: 2px solid #d8c2fd; outline-offset: 2px; box-shadow: none; }
+.modal-backdrop { background-color: rgba(6, 4, 14, 0.72); }
+.modal-backdrop.show { opacity: 1; }
 
 /* Foco visível nos itens do sino (a rolagem da lista cortava o anel externo). */
 .bell-item:focus-visible { outline: 2px solid #c4a0fb; outline-offset: -2px; background: rgba(168, 85, 247, 0.12); }
@@ -1046,8 +1189,21 @@ body:has(> .nexobot) .app-shell .page { padding-bottom: 104px; }
   .user-meta { display: none; }
   .user-chip { padding: 3px; }
 }
+/* Gaveta em paisagem (pouca altura): rodapé compacto para caberem mais itens. */
+@media (max-width: 991.98px) and (max-height: 480px) {
+  .sidebar-brand { padding: 10px 14px; }
+  .sidebar-foot { padding: 6px 8px; gap: 4px; }
+  .sidebar-session { padding: 5px 8px; }
+  .nav-item { margin-bottom: 2px; padding-top: 3px; padding-bottom: 3px; }
+  .nav-item i { width: 30px; height: 30px; }
+}
 @media (max-width: 575.98px) {
   .topbar-title small { display: none; }
+  /* Título da página em até duas linhas, em vez de "Enviar relatórios E…". */
+  .topbar-title {
+    white-space: normal; font-size: 0.98rem; line-height: 1.2;
+    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  }
   .nexo-card-head { padding: 16px 18px 14px; }
   .nexo-card-body { padding: 16px 18px 18px; }
   .kpi-tile { padding: 18px 18px 16px; }
@@ -1317,8 +1473,9 @@ input, textarea, select, option,
 .bell-menu {
   padding: 0;
   /* Dentro da topbar (que já desfoca) o backdrop-filter do menu não enxerga a
-     página; o fundo quase opaco garante a leitura. */
-  background: rgba(17, 13, 32, 0.96);
+     página; o fundo opaco garante a leitura (a 4% de transparência o texto da
+     página aparecia por trás). */
+  background: rgba(17, 13, 32, 0.99);
   border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow: 0 24px 60px -18px rgba(0,0,0,0.78), 0 0 0 1px rgba(168,85,247,0.07);
 }
@@ -1428,7 +1585,7 @@ input, textarea, select, option,
    =================================================================== */
 .nexo-card.ia-doc { border-color: rgba(168, 85, 247, 0.3); overflow: hidden; }
 .ia-banner {
-  display: flex; align-items: center; gap: 9px;
+  display: flex; align-items: center; flex-wrap: wrap; gap: 6px 9px;
   padding: 11px 22px; font-size: 0.82rem; color: #d8c2fd;
   background: linear-gradient(90deg, rgba(168,85,247,0.16), rgba(124,58,237,0.05));
   border-bottom: 1px solid rgba(168, 85, 247, 0.25);
@@ -1649,8 +1806,6 @@ input, textarea, select, option,
 /* ---- Tela média e grande: painel flutuante ---- */
 @media (min-width: 640px) {
   .nexobot { right: 24px; bottom: 24px; }
-  .nexobot-launcher { padding: 0 18px 0 16px; }
-  .nexobot-launcher-label { display: inline; }
   .nexobot.is-open .nexobot-launcher { display: inline-flex; }
   .nexobot-panel {
     position: absolute; inset: auto 0 72px auto; width: 400px; max-width: calc(100vw - 32px);
@@ -1666,6 +1821,12 @@ input, textarea, select, option,
   .nb-bubble { max-width: 86%; font-size: 0.9rem; }
   .nexobot-input { font-size: 0.92rem; }
   .nexobot-hint { display: block; }
+}
+/* O rótulo "NexoBot" só com a sidebar fixa (≥ 992 px): no tablet a pílula larga
+   cobria títulos dos cartões; o botão redondo tem metade da largura. */
+@media (min-width: 992px) {
+  .nexobot-launcher { padding: 0 18px 0 16px; }
+  .nexobot-launcher-label { display: inline; }
 }
 @media (min-width: 1200px) {
   .nexobot-panel { width: 420px; height: 660px; }
@@ -1745,3 +1906,6 @@ input, textarea, select, option,
 .evento-detalhes { margin: 6px 0 0; padding: 0; list-style: none; color: var(--text-muted); font-size: 0.8rem; }
 .evento-detalhes li { overflow-wrap: anywhere; }
 .conta-encerrada-texto { margin: 0 0 14px; color: var(--text-muted); font-size: 0.95rem; line-height: 1.6; }
+/* Páginas de erro (403/404/429/500): código discreto acima do título. */
+.erro-codigo { margin: 0 0 2px; font-family: var(--font-mono); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.12em; color: #c4a0fb; }
+.erro-card .conta-encerrada-texto { text-wrap: balance; }
