@@ -430,7 +430,13 @@ a { text-decoration: none; }
    translúcida, sem degraus visíveis. O desfoque fica em duas camadas decorativas
    (::before forte, com máscara em degradê; ::after suave, inteira) e não no
    próprio .topbar: um backdrop-filter no pai limitaria o que as camadas "veem"
-   e cortaria o menu do sino. As camadas não interceptam cliques. */
+   e cortaria o menu do sino. As camadas não interceptam cliques.
+   As camadas cobrem também a caixa da borda (inset: -1px) e o anel da borda e o
+   brilho interno são pintados pela camada de cima (::after): se ficassem no
+   próprio .topbar, sairiam POR BAIXO do desfoque (brilho invisível) e a borda de
+   1 px ficaria sobre conteúdo nítido, sem desfoque. Custo: dois backdrop-filter
+   de largura total; quem prefere menos efeitos tem o fallback de
+   prefers-reduced-transparency (uma superfície quase opaca, sem desfoque). */
 .topbar {
   position: sticky; top: var(--shell-gap);
   height: var(--topbar-h);
@@ -438,13 +444,13 @@ a { text-decoration: none; }
   margin: var(--shell-gap) var(--shell-gap) 0 0;
   padding: 0 14px 0 24px;
   background: transparent;
-  border: 1px solid var(--glass-border);
+  border: 1px solid transparent;
   border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-glass), var(--glass-shine);
+  box-shadow: var(--shadow-glass);
   z-index: 1020;
 }
 .topbar::before, .topbar::after {
-  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  content: ""; position: absolute; inset: -1px; border-radius: inherit;
   pointer-events: none; z-index: -1;
 }
 /* Camada forte: desfoque intenso + véu escuro, 100 % no topo → 0 % na base. */
@@ -460,15 +466,23 @@ a { text-decoration: none; }
   background: rgba(16, 12, 30, 0.22);
   -webkit-backdrop-filter: var(--topbar-blur-suave);
   backdrop-filter: var(--topbar-blur-suave);
+  /* Anel da borda e brilho interno, por cima do desfoque. */
+  box-shadow: inset 0 0 0 1px var(--glass-border), var(--glass-shine);
 }
 /* Sem backdrop-filter (ou com transparência reduzida): superfície quase opaca,
    num único degradê, sem camadas. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .topbar { background: linear-gradient(180deg, rgba(14, 10, 28, 0.97) 0%, rgba(17, 13, 32, 0.93) 100%); }
+  .topbar {
+    background: linear-gradient(180deg, rgba(14, 10, 28, 0.97) 0%, rgba(17, 13, 32, 0.93) 100%);
+    border-color: var(--glass-border); box-shadow: var(--shadow-glass), var(--glass-shine);
+  }
   .topbar::before, .topbar::after { display: none; }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .topbar { background: linear-gradient(180deg, rgba(14, 10, 28, 0.98) 0%, rgba(17, 13, 32, 0.96) 100%); }
+  .topbar {
+    background: linear-gradient(180deg, rgba(14, 10, 28, 0.98) 0%, rgba(17, 13, 32, 0.96) 100%);
+    border-color: var(--glass-border); box-shadow: var(--shadow-glass), var(--glass-shine);
+  }
   .topbar::before, .topbar::after { display: none; }
 }
 .topbar-title { font-size: 1.12rem; font-weight: 700; flex: 1; min-width: 0; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -673,6 +687,9 @@ a { text-decoration: none; }
   box-shadow: inset 3px 0 0 var(--primary);
 }
 .nexo-table tbody tr:last-child td { border-bottom: none; }
+/* Tabelas com linha-placeholder oculta no fim (Análises, Empresas, Curva ABC):
+   a última linha VISÍVEL também fica sem divisória. */
+.nexo-table tbody tr:nth-last-child(1 of :not([hidden])) td { border-bottom: none; }
 .nexo-table .t-strong { font-weight: 600; }
 .nexo-table .t-mut { color: var(--text-muted); }
 .nexo-table .t-mono { font-family: var(--font-mono); }
@@ -1240,7 +1257,8 @@ a.empresa-card:hover .ec-seta, a.empresa-card:focus-visible .ec-seta { color: #e
 .nexo-table tbody td:first-child:last-child {
   border-image: linear-gradient(90deg, transparent 0, var(--divisoria) var(--recuo-divisoria), var(--divisoria) calc(100% - var(--recuo-divisoria)), transparent 100%) 1;
 }
-.nexo-table tbody tr:last-child td { border-image: none; }
+.nexo-table tbody tr:last-child td,
+.nexo-table tbody tr:nth-last-child(1 of :not([hidden])) td { border-image: none; }
 /* Realce ao passar o mouse: fundo nas células (não na linha) com as pontas
    arredondadas e o traço roxo acompanhando o canto, em vez da barra reta. */
 .nexo-table tbody tr:hover { background: transparent; box-shadow: none; }

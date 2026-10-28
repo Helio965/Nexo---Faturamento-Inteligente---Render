@@ -86,7 +86,7 @@
                     </td>
                 </tr>
                 {% endfor %}
-                <tr id="semResultados" style="display:none;">
+                <tr id="semResultados" hidden>
                     <td colspan="9" class="text-center text-dim" style="padding:28px;">Nenhuma análise corresponde aos filtros.</td>
                 </tr>
             </tbody>
@@ -125,10 +125,10 @@
         var okE = !qe || row.getAttribute('data-empresa') === qe;
         var okS = !qs || row.getAttribute('data-status') === qs;
         var show = okE && okS;
-        row.style.display = show ? '' : 'none';
+        row.hidden = !show;
         if (show) vis++;
       });
-      if (semResultados) semResultados.style.display = vis === 0 ? '' : 'none';
+      if (semResultados) semResultados.hidden = vis !== 0;
     }
     if (fe) fe.addEventListener('change', aplicar);
     if (fs) fs.addEventListener('change', aplicar);

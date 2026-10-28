@@ -43,6 +43,8 @@ _MEDIR_TOPBAR = """() => {
         main_x0: m.left, main_x1: m.right, vw,
         sticky: getComputedStyle(topbar).position,
         fundo_proprio: getComputedStyle(topbar).backgroundColor,
+        borda_propria: getComputedStyle(topbar).borderTopColor,
+        anel: depois.boxShadow, cobertura: {antes: antes.inset || antes.top, depois: depois.inset || depois.top},
         forte: {filtro: antes.backdropFilter || antes.webkitBackdropFilter, mascara: antes.maskImage || antes.webkitMaskImage,
                 eventos: antes.pointerEvents, z: antes.zIndex, conteudo: antes.content},
         suave: {filtro: depois.backdropFilter || depois.webkitBackdropFilter, mascara: depois.maskImage || depois.webkitMaskImage,
@@ -96,6 +98,13 @@ class GerenciamentoNavegadorTests(NavegadorCase):
         pagina.click("#limparBuscaGerenciar")
         self.assertEqual(pagina.locator("#buscaGerenciar").input_value(), "")
         self.assertEqual(pagina.locator(".empresa-card:visible").count(), cartoes.count())
+        # 9a: sem acento encontra o nome acentuado ("paraiba" → "Vale do Paraíba"), e só ele.
+        pagina.fill("#buscaGerenciar", "paraiba")
+        pagina.wait_for_timeout(200)
+        self.assertTrue(pagina.locator(f'.empresa-card[href$="/{self.empresa_longa_id}"]').is_visible())
+        self.assertEqual(pagina.locator(".empresa-card:visible").count(), 1)
+        pagina.fill("#buscaGerenciar", "")
+        pagina.wait_for_timeout(200)
         # 9b: grade acessível (lista real, cartão = link sem role) e busca por CNPJ
         #     digitado sem máscara numa empresa gravada com máscara.
         self.assertEqual(pagina.locator("ul#gradeEmpresas > li > a.empresa-card").count(), cartoes.count())
@@ -201,6 +210,11 @@ class GerenciamentoNavegadorTests(NavegadorCase):
                     self.assertEqual(m["forte"]["eventos"], "none", ctx)
                     self.assertEqual(m["suave"]["eventos"], "none", ctx)
                     self.assertEqual(m["fundo_proprio"], "rgba(0, 0, 0, 0)", f"{ctx}: o desfoque fica nas camadas, não num fundo opaco")
+                    # Anel da borda e brilho pintados pela camada de cima, que cobre também a borda (inset -1px).
+                    self.assertEqual(m["borda_propria"], "rgba(0, 0, 0, 0)", f"{ctx}: a borda do .topbar deve ser transparente ({m['borda_propria']})")
+                    self.assertIn("inset", m["anel"], f"{ctx}: o ::after deve pintar o anel e o brilho ({m['anel']})")
+                    self.assertEqual(m["cobertura"]["antes"], "-1px", ctx)
+                    self.assertEqual(m["cobertura"]["depois"], "-1px", ctx)
                     # Faixa de ponta a ponta da área principal (desktop) ou da tela (celular).
                     if largura >= 992:
                         self.assertLessEqual(abs(m["x0"] - m["main_x0"]), 1, f"{ctx}: começa no limite da área de conteúdo ({m})")
@@ -269,6 +283,15 @@ class GerenciamentoNavegadorTests(NavegadorCase):
         self.assertIn("inset", h["sombra"], h)
         self.assertEqual(h["linha"], "none", "a barra reta da linha inteira deve ter saído")
         self.assertNotEqual(h["fundo"], "rgba(0, 0, 0, 0)", h)
+        # Última linha VISÍVEL sem divisória, mesmo com a linha-placeholder oculta no fim do tbody.
+        u = pagina.evaluate("""() => {
+            const linhas = [...document.querySelectorAll('.nexo-table tbody tr')].filter(r => !r.hidden && getComputedStyle(r).display !== 'none');
+            const ult = linhas[linhas.length - 1]; const cs = getComputedStyle(ult.cells[0]);
+            return {placeholder_oculto_no_fim: !!document.querySelector('.nexo-table tbody tr:last-child[hidden]'),
+                    borda: cs.borderBottomWidth, imagem: cs.borderImageSource}; }""")
+        self.assertTrue(u["placeholder_oculto_no_fim"], u)
+        self.assertEqual(u["borda"], "0px", f"a última linha visível não deve ter divisória: {u}")
+        self.assertEqual(u["imagem"], "none", u)
         self.assert_layout(pagina, 1366, "/admin/analises @ 1366px (bordas)")
 
 
