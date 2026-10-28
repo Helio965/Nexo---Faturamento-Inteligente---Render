@@ -8,7 +8,7 @@
 | Data | 27/10/2026 |
 | Branch de trabalho | `claude/awesome-pascal-0ho42m` (branch desta sessão; o nome sugerido `fix/nexo-correcao-overflow-responsividade-20261027` não foi usado porque a sessão publica apenas na branch designada) |
 | SHA inicial (auditado) | `0f4a53e9003452dc66c0322a0269a22f52a96f5f` (`main`, merge do PR #31) |
-| SHA final | «SHA_FINAL» |
+| SHA final | `0eab887` (último commit de código; os commits seguintes na branch só atualizam este relatório) |
 | Ambiente | Cópia descartável do código fora do repositório; SQLite temporário com as migrações reais; dados fictícios (`@example.invalid`, CNPJs com prefixo 99); rede bloqueada, CDN servida de cópias locais; relógio da política contratual fixado em 02/03/2026 10:00 (São Paulo). Nenhum acesso ao Render, ao Supabase ou a banco real. |
 | Navegadores | Chrome for Testing 153.0.8010.12 (Chromium) via Playwright 1.56.0, pt-BR, fuso America/Sao_Paulo. Firefox e WebKit não estão instalados no ambiente; ficam registrados como limitação. |
 | Larguras | 320, 360, 390, 768, 1024, 1366, 1440, 1536 e 1920 px; zoom de 125%, 150% e 200% sobre 1366 px (viewport CSS menor com escala maior); paisagem 844×390. |
@@ -134,7 +134,36 @@ Não foram alterados: modelos, migrações, regras contratuais, ETL, PDFs, APIs,
 
 ## 7. Evidências visuais
 
-«EVIDENCIAS»
+Todas as capturas são reais, feitas pelo Chromium (Playwright) sobre o código indicado, com dados fictícios; nenhuma imagem ilustrativa. As capturas completas (PNG) ficam fora do repositório; o pacote `NEXO_AUDITORIA_CORRECOES_FRONTEND.zip` (entregue ao proprietário fora do Git, caminho informado na resposta final) contém:
+
+- `antes_depois/` — 18 composições ANTES (`0f4a53e`) × DEPOIS (`0eab887`), lado a lado, recortadas na região do problema (lista abaixo);
+- `capturas/antes/` e `capturas/depois/` — as 151 capturas completas de cada rodada (JPEG), nas 9 larguras, 3 zooms e paisagem, para admin, cliente e público;
+- `metricas/medicoes_{antes,depois}.json` — as medições do navegador (células encobertas, KPIs, NexoBot, sidebar, elementos fora da tela, rótulos dos gráficos) por página e largura, e `registro_capturas_*.json` (viewport, escala, código);
+- `manifesto_capturas.json` — índice das composições com viewport, recorte e commits;
+- `resultados_testes.txt`, `arquivos_modificados.txt`, este relatório e, em `extras/`, as reproduções em PostgreSQL da página de erro, o log da CI e o resumo da revisão adversarial.
+
+| ID | Composição | Viewport | O que mostra |
+|---|---|---|---|
+| FE-01 | `FE-01_admin_analises_1366.jpg` | 1366x768 | Análises: colunas Criação/Publicado encobertas pela coluna fixa → rolagem indicada, nenhuma coluna encoberta |
+| FE-01 | `FE-01_admin_analises_1440.jpg` | 1440x900 | Análises a 1440 px |
+| FE-01 | `FE-01_admin_analises_390.jpg` | 390x844 @2x | Análises no celular: tabela espremida → cartões com rótulo em cada valor |
+| FE-02 | `FE-02_admin_lixeira_1366.jpg` | 1366x768 | Lixeira: 'Movido em' e botões encobertos → data legível, botões separados |
+| FE-02 | `FE-02_admin_lixeira_390.jpg` | 390x844 @2x | Lixeira no celular |
+| FE-03 | `FE-03_admin_empresas_1366.jpg` | 1366x768 | Empresas: Status e E-mail encobertos → rolagem indicada |
+| FE-03 | `FE-03_admin_empresas_768.jpg` | 768x1024 @2x | Empresas no tablet: coluna fixa sobre 4 colunas → cartões em duas colunas |
+| FE-03 | `FE-03_admin_empresas_390.jpg` | 390x844 @2x | Empresas no celular |
+| FE-04 | `FE-04_admin_contratos_320.jpg` | 320x568 @2x | Contratos no celular compacto: Detalhe encoberto → cartões |
+| FE-05 | `FE-05_cliente_dashboard_1366.jpg` | 1366x768 | Pareto: rótulos diagonais truncados e sobrepostos → barras horizontais com nome em até 3 linhas |
+| FE-05 | `FE-05_cliente_dashboard_390.jpg` | 390x844 @2x | Pareto no celular |
+| FE-06 | `FE-06_admin_guia_1366.jpg` | 1366x768 | Sidebar: ponto do item ativo a 3 px de 'Base de Conhecimento' → ponto como item do flex |
+| FE-07 | `FE-07_cliente_upload_1366.jpg` | 1366x768 | Envio de relatórios: arquivo recebido parecia selecionado → estado 'Arquivo recebido' e dropzone acessível |
+| FE-08 | `FE-08_cliente_dashboard_768.jpg` | 768x1024 @2x | Dashboard do cliente no tablet: lançador do NexoBot menor |
+| FE-09 | `FE-09_cliente_historico_390.jpg` | 390x844 @2x | Histórico no celular: Status escondido → cartões |
+| FE-10 | `FE-10_admin_dashboard_390.jpg` | 390x844 @2x | Dashboard admin no celular: tabelas com coluna fixa → cartões |
+| FE-11 | `FE-11_cliente_analise_1366.jpg` | 1366x768 | Análise detalhada: percentuais com ponto → vírgula; selects/KPIs |
+| FE-12 | `FE-12_admin_empresa_detalhe_390.jpg` | 390x844 @2x | Detalhes da empresa no celular: ações com rótulo visível |
+
+Medições-resumo (mesma sonda nas duas rodadas, 151 capturas cada): células encobertas por coluna fixa **70 → 0**; indicador da sidebar encostado no rótulo **9 → 0**; pares de rótulos de gráfico sobrepostos **27 → 0**; rótulos de gráfico com reticências **25 capturas (até 10 rótulos cada) → 17 capturas com 1 rótulo** (o nome de 111 caracteres, inteiro na tooltip e na tabela); páginas com rolagem horizontal **0 → 0**; NexoBot sobre conteúdo no topo da página **29 → 30** (inerente ao botão flutuante; no fim da página, 0).
 
 ## 8. Riscos e limitações
 
