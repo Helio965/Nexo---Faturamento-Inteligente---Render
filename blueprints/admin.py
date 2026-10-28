@@ -1182,8 +1182,14 @@ def analise_excluir(id_empresa, id_analise):
     if request.form.get("confirmar") != "sim":
         abort(400)
     ok, mensagem = _excluir_analise(analise)
+    if ok:
+        # Ação irreversível: fica registrada (quem, qual análise, de qual empresa).
+        current_app.logger.info(
+            "Análise %s da empresa %s excluída pelo admin %s.",
+            id_analise, id_empresa, current_user.id_usuario,
+        )
     flash(mensagem, "success" if ok else "danger")
-    return redirect(url_for("admin.analises_empresa", id_empresa=empresa.id_empresa))
+    return redirect(url_for("admin.analises_empresa", id_empresa=id_empresa))
 
 
 # =====================================================================

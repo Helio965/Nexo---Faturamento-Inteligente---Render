@@ -777,7 +777,9 @@ a { text-decoration: none; }
 .trilha-sep { color: #6f6894; }
 /* Grade de cartões de empresa (seleção): vidro roxo translúcido, cantos de 20 px,
    cubo da marca, nome fantasia, razão social, CNPJ e contagem de análises. */
-.empresa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 14px; }
+.empresa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 14px; list-style: none; padding: 0; margin: 0; }
+.empresa-grid > li { display: flex; min-width: 0; }
+.empresa-grid > li > .empresa-card { flex: 1 1 auto; }
 .empresa-card {
   display: flex; align-items: center; gap: 14px; min-width: 0;
   padding: 16px 16px 16px 18px;

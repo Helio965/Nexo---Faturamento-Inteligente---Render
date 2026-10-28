@@ -17,6 +17,7 @@ local íntegra, dados fictícios); habilitado por NEXO_TEST_BROWSER=1.
 
 import os
 import unittest
+from datetime import date
 
 from tests.test_overflow_navegador import LARGURAS, NavegadorCase
 
@@ -54,8 +55,20 @@ _MEDIR_TOPBAR = """() => {
 
 
 class GerenciamentoNavegadorTests(NavegadorCase):
+    def _empresa_mascarada(self):
+        """Empresa fictícia cujo CNPJ foi gravado com máscara (o cadastro permite)."""
+        from models import Empresa
+        base = self.db.session.get(Empresa, self.empresa_id)
+        self.db.session.add(Empresa(
+            id_segmento=base.id_segmento, id_plano_atual=base.id_plano_atual,
+            cnpj="11.222.333/0001-44", razao_social="Empresa Mascarada Fictícia Ltda",
+            nome_fantasia="Mascarada Teste", email_contato="mascarada@example.invalid",
+            data_contratacao=date(2026, 1, 1)))
+        self.db.session.commit()
+
     # ------------------------------------------------------- gerenciamento
     def test_fluxo_editar_cartoes_busca_selecao_e_exclusao(self):
+        self._empresa_mascarada()
         pagina = self.abrir(1366, 768)
         self.entrar(pagina, "admin-test@example.invalid")
         self.ir(pagina, "/admin/analises")
@@ -83,12 +96,28 @@ class GerenciamentoNavegadorTests(NavegadorCase):
         pagina.click("#limparBuscaGerenciar")
         self.assertEqual(pagina.locator("#buscaGerenciar").input_value(), "")
         self.assertEqual(pagina.locator(".empresa-card:visible").count(), cartoes.count())
+        # 9b: grade acessível (lista real, cartão = link sem role) e busca por CNPJ
+        #     digitado sem máscara numa empresa gravada com máscara.
+        self.assertEqual(pagina.locator("ul#gradeEmpresas > li > a.empresa-card").count(), cartoes.count())
+        self.assertEqual(pagina.locator(".empresa-card[role]").count(), 0)
+        self.assertTrue(pagina.get_by_role("link", name=nome).first.is_visible())
+        pagina.fill("#buscaGerenciar", "11222333000144")
+        pagina.wait_for_timeout(200)
+        self.assertEqual(pagina.locator(".empresa-card:visible").count(), 1)
+        self.assertTrue(pagina.locator('.empresa-card[data-cnpj="11222333000144"]').is_visible())
+        pagina.fill("#buscaGerenciar", "11.222.333/0001")
+        pagina.wait_for_timeout(200)
+        self.assertEqual(pagina.locator(".empresa-card:visible").count(), 1)
+        pagina.fill("#buscaGerenciar", "")
+        pagina.wait_for_timeout(200)
+        self.assertEqual(pagina.locator(".empresa-card:visible").count(), cartoes.count())
         # 10: seleção pelo teclado (Tab até o cartão e Enter) e pelo clique.
         alvo = pagina.locator(f'.empresa-card[href$="/{self.empresa_id}"]')
         alvo.focus()
         pagina.keyboard.press("Enter")
         pagina.wait_for_url(f"**/admin/analises/gerenciar/{self.empresa_id}")
         self.assertTrue(pagina.locator("#empresaSelecionada").is_visible())
+        self.assertTrue(pagina.get_by_role("group", name="Empresa selecionada").is_visible())
         # 11: só as análises desta empresa (todas as linhas pertencem a ela; a da outra empresa não aparece).
         linhas = pagina.locator("#tabelaAnalisesEmpresa tbody tr[data-analise]")
         total = linhas.count()
@@ -114,9 +143,12 @@ class GerenciamentoNavegadorTests(NavegadorCase):
         # 16-18: confirmar exclui só a escolhida; as outras e a empresa permanecem.
         primeira.locator(".btn-excluir-analise").click()
         pagina.wait_for_selector("#confirmExcluirAnalise.show")
-        pagina.click("#btnConfirmarExclusao")
-        pagina.wait_for_url(f"**/admin/analises/gerenciar/{self.empresa_id}")
-        self.assertIn("excluída", pagina.locator(".alert").first.text_content())
+        # A URL já é a da empresa: espera-se a navegação real do POST → redirect → GET,
+        # e a flash de sucesso da nova página, antes de contar as linhas.
+        with pagina.expect_navigation(wait_until="load"):
+            pagina.click("#btnConfirmarExclusao")
+        pagina.wait_for_selector(".flash-stack .alert", state="visible")
+        self.assertIn("excluída", pagina.locator(".flash-stack .alert").first.text_content())
         self.assertEqual(pagina.locator("#tabelaAnalisesEmpresa tbody tr[data-analise]").count(), total - 1)
         self.assertEqual(pagina.locator(f'#tabelaAnalisesEmpresa tr[data-analise="{id_alvo}"]').count(), 0)
         self.assertTrue(pagina.locator("#empresaSelecionada").is_visible())

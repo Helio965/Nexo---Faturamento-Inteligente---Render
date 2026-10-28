@@ -31,12 +31,15 @@
 {% if empresas %}
 {# Cada empresa é um cartão-link (teclado: Tab + Enter). A exclusão de análises só
    existe na tela seguinte, depois de a empresa ser escolhida. #}
-<div class="empresa-grid" id="gradeEmpresas" role="list" aria-label="Empresas cadastradas">
+<ul class="empresa-grid" id="gradeEmpresas" role="list" aria-label="Empresas cadastradas">
     {% for e in empresas %}
     {% set total = contagem.get(e.id_empresa, 0) %}
-    <a class="empresa-card" role="listitem" href="{{ url_for('admin.analises_empresa', id_empresa=e.id_empresa) }}"
-       data-busca="{{ (e.nome_fantasia or '') ~ ' ' ~ e.razao_social ~ ' ' ~ e.cnpj ~ ' ' ~ m.cnpj(e.cnpj) | lower }}"
-       aria-label="{{ e.nome_fantasia or e.razao_social }}: gerenciar {{ total }} análise{{ 's' if total != 1 }}">
+    <li class="empresa-item">
+    {# O <a> fica sem role e sem aria-label: assim os leitores de tela o anunciam como
+       link e leem o conteúdo visível (nome, razão social, CNPJ, contagem, plano, status). #}
+    <a class="empresa-card" href="{{ url_for('admin.analises_empresa', id_empresa=e.id_empresa) }}"
+       data-busca="{{ ((e.nome_fantasia or '') ~ ' ' ~ e.razao_social ~ ' ' ~ e.cnpj ~ ' ' ~ m.cnpj(e.cnpj)) | lower }}"
+       data-cnpj="{{ e.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | replace(' ', '') }}">
         <span class="ec-icone" aria-hidden="true">
             <img src="{{ url_for('static', filename='img/nexo-cubo-transparente.png') }}" alt="" width="253" height="279" decoding="async">
         </span>
@@ -57,8 +60,9 @@
         </span>
         <span class="ec-seta" aria-hidden="true"><i class="bi bi-chevron-right"></i></span>
     </a>
+    </li>
     {% endfor %}
-</div>
+</ul>
 <div class="empty-state empty-state-sm" id="semResultados" style="display:none;">
     <div class="es-icon"><i class="bi bi-search"></i></div>
     <h3>Nenhuma empresa encontrada para a busca.</h3>
@@ -78,7 +82,8 @@
 
 {% block extra_js %}
 <script>
-  /* Busca client-side pelos dados do cartão (nome fantasia, razão social, CNPJ). */
+  /* Busca client-side pelos dados do cartão (nome fantasia, razão social, CNPJ —
+     com ou sem máscara, mesmo quando o cadastro guardou o CNPJ pontuado). */
   (function () {
     var input = document.getElementById('buscaGerenciar');
     var grade = document.getElementById('gradeEmpresas');
@@ -90,12 +95,16 @@
     function normalizar(t) {
       return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
     }
+    function digitos(t) { return String(t || '').replace(/\D/g, ''); }
     function filtrar() {
       var q = normalizar(input.value.trim());
+      /* Consulta feita só de dígitos e pontuação de CNPJ: compara também sem máscara. */
+      var qCnpj = (q && /^[\d.\/\-\s]+$/.test(q)) ? digitos(q) : '';
       var visiveis = 0;
       cartoes.forEach(function (c) {
-        var ok = !q || normalizar(c.getAttribute('data-busca')).indexOf(q) !== -1;
-        c.style.display = ok ? '' : 'none';
+        var ok = !q || normalizar(c.getAttribute('data-busca')).indexOf(q) !== -1 ||
+                 (qCnpj !== '' && digitos(c.getAttribute('data-cnpj')).indexOf(qCnpj) !== -1);
+        (c.closest('li') || c).style.display = ok ? '' : 'none';
         if (ok) visiveis++;
       });
       if (vazio) vazio.style.display = visiveis === 0 ? '' : 'none';

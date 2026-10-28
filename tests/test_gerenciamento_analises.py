@@ -120,6 +120,29 @@ class GerenciamentoAnalisesTests(ContratosCase):
         self.assertNotIn("/excluir/", html)
         self.assertNotIn("Excluir análise", html)
 
+    def test_gerenciar_cartoes_sao_links_em_lista_real_e_buscaveis_por_cnpj_sem_mascara(self):
+        """Acessibilidade e busca: cada cartão é um <a> dentro de <li> (sem role que
+        apague a semântica de link) e o CNPJ gravado com máscara também sai sem pontuação
+        no atributo usado pela busca; a empresa selecionada é um grupo nomeado."""
+        from models import Empresa
+        self._admin()
+        base = self.db.session.get(Empresa, self.empresa_id)
+        self.db.session.add(Empresa(
+            id_segmento=base.id_segmento, id_plano_atual=base.id_plano_atual,
+            cnpj="11.222.333/0001-44", razao_social="Empresa Mascarada Fictícia Ltda",
+            nome_fantasia="Mascarada Teste", email_contato="mascarada@example.invalid",
+            data_contratacao=date(2026, 1, 1)))
+        self.db.session.commit()
+        html = self._pagina("/admin/analises/gerenciar")
+        self.assertIn('<ul class="empresa-grid" id="gradeEmpresas" role="list"', html)
+        self.assertEqual(html.count('<li class="empresa-item">'), 3)
+        self.assertEqual(html.count('class="empresa-card"'), 3)
+        self.assertNotIn('role="listitem"', html)
+        self.assertIn('data-cnpj="11222333000144"', html)
+        self.assertIn('data-cnpj="0000000000000', html)
+        html_empresa = self._pagina(f"/admin/analises/gerenciar/{self.empresa_id}")
+        self.assertIn('id="empresaSelecionada" role="group" aria-label="Empresa selecionada"', html_empresa)
+
     def test_gerenciar_nao_lista_empresa_da_lixeira(self):
         from datetime import datetime
         from models import Empresa
