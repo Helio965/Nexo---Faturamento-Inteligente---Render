@@ -13,9 +13,11 @@
     <div class="page-head-actions">
         {% if empresas %}
         <div class="search-box">
-            <i class="bi bi-search"></i>
-            <input type="text" id="buscaEmpresa" class="form-control" placeholder="Buscar por nome, CNPJ, plano…" autocomplete="off">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input type="search" id="buscaEmpresa" class="form-control" placeholder="Buscar por nome, CNPJ, plano…" autocomplete="off"
+                   aria-label="Buscar empresa por nome, CNPJ, segmento, plano ou e-mail" aria-controls="tabelaEmpresas">
         </div>
+        <p class="visually-hidden" id="buscaResultado" aria-live="polite"></p>
         {% endif %}
         <a href="{{ url_for('admin.lixeira') }}" class="btn-ghost">
             <i class="bi bi-trash"></i> Lixeira{% if na_lixeira %} <span class="nexo-badge b-muted">{{ na_lixeira }}</span>{% endif %}
@@ -42,33 +44,41 @@
             </thead>
             <tbody>
                 {% for e in empresas %}
+                {% set nome_empresa = e.nome_fantasia or e.razao_social %}
                 <tr>
-                    <td class="t-strong">{{ e.razao_social }}</td>
+                    <td class="t-strong col-nome">{{ e.razao_social }}</td>
                     <td class="t-mut">{{ e.nome_fantasia or '—' }}</td>
-                    <td class="t-mono t-mut">{{ e.cnpj }}</td>
+                    <td class="t-mono t-mut">{{ m.cnpj(e.cnpj) }}</td>
                     <td>{{ m.segmento(e.segmento.nome_segmento if e.segmento else None) }}</td>
                     <td>{{ m.badge_plano(e.plano_atual.nome_plano if e.plano_atual else '—') }}</td>
                     <td>{{ m.badge_conta(e.status_conta) }}</td>
-                    <td class="t-mut">{{ e.email_contato }}</td>
-                    <td class="text-end t-mut" style="white-space:nowrap;">
-                        <a href="{{ url_for('contratos.empresa_detalhe', id_empresa=e.id_empresa) }}" class="btn-ghost btn-sm-x" title="Detalhes, contratos e períodos pagos"><i class="bi bi-file-earmark-text"></i> Detalhes</a>
-                        <a href="{{ url_for('admin.analises') }}" class="btn-ghost btn-sm-x"><i class="bi bi-clipboard-data"></i> Análises</a>
-                        <a href="{{ url_for('admin.empresa_editar', id_empresa=e.id_empresa) }}" class="btn-ghost btn-sm-x" title="Editar empresa"><i class="bi bi-pencil"></i></a>
-                        {# Trigger do modal central — o <form method=POST> real vive UMA única vez
-                           no fim do bloco; sua action é preenchida em runtime a partir do data-bs-url. #}
-                        <button type="button" class="btn-ghost is-danger btn-sm-x"
-                                data-bs-toggle="modal" data-bs-target="#confirmDeleteEmpresaModal"
-                                data-bs-url="{{ url_for('admin.empresa_excluir', id_empresa=e.id_empresa) }}"
-                                data-bs-empresa="{{ e.nome_fantasia or e.razao_social }}"
-                                data-bs-email="{{ e.email_contato }}"
-                                title="Mover para a lixeira" aria-label="Mover para a lixeira">
-                            <i class="bi bi-trash"></i>
-                        </button>
+                    <td class="t-mut t-email">{{ m.email(e.email_contato) }}</td>
+                    <td class="text-end">
+                        {# Nome da empresa no nome acessível de cada botão: as 24 linhas deixam de ter
+                           botões "Detalhes"/"Editar" idênticos para quem usa leitor de tela. #}
+                        <div class="acoes">
+                            <a href="{{ url_for('contratos.empresa_detalhe', id_empresa=e.id_empresa) }}" class="btn-ghost btn-sm-x" title="Detalhes, contratos e períodos pagos" aria-label="Detalhes de {{ nome_empresa }}"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> Detalhes</a>
+                            <a href="{{ url_for('admin.analises', empresa=e.id_empresa) }}" class="btn-ghost btn-sm-x" aria-label="Análises de {{ nome_empresa }}"><i class="bi bi-clipboard-data" aria-hidden="true"></i> Análises</a>
+                            <a href="{{ url_for('admin.empresa_editar', id_empresa=e.id_empresa) }}" class="btn-ghost btn-sm-x" title="Editar empresa" aria-label="Editar {{ nome_empresa }}"><i class="bi bi-pencil" aria-hidden="true"></i></a>
+                            {# Trigger do modal central — o <form method=POST> real vive UMA única vez
+                               no fim do bloco; sua action é preenchida em runtime a partir do data-bs-url. #}
+                            <button type="button" class="btn-ghost is-danger btn-sm-x"
+                                    data-bs-toggle="modal" data-bs-target="#confirmDeleteEmpresaModal"
+                                    data-bs-url="{{ url_for('admin.empresa_excluir', id_empresa=e.id_empresa) }}"
+                                    data-bs-empresa="{{ nome_empresa }}"
+                                    data-bs-email="{{ e.email_contato }}"
+                                    title="Mover para a lixeira" aria-label="Mover {{ nome_empresa }} para a lixeira">
+                                <i class="bi bi-trash" aria-hidden="true"></i>
+                            </button>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
                 <tr id="semResultados" style="display:none;">
-                    <td colspan="8" class="text-center text-dim" style="padding:28px;">Nenhuma empresa encontrada para a busca.</td>
+                    <td colspan="8" class="text-center text-dim" style="padding:28px;">
+                        Nenhuma empresa encontrada para a busca.
+                        <button type="button" class="btn-ghost btn-sm-x ms-2" id="limparBusca"><i class="bi bi-x-lg" aria-hidden="true"></i> Limpar busca</button>
+                    </td>
                 </tr>
             </tbody>
         </table>
@@ -90,11 +100,11 @@
      runtime pelo handler de show.bs.modal a partir do data-bs-url do botão.
    - Ação reversível: o cliente vai para a lixeira, não é apagado do banco.
    ===================================================================== #}
-<div class="modal fade" id="confirmDeleteEmpresaModal" tabindex="-1"
+<div class="modal fade nexo-modal" id="confirmDeleteEmpresaModal" tabindex="-1"
      aria-labelledby="confirmDeleteEmpresaLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content bg-dark text-light border border-secondary">
-            <div class="modal-header border-secondary">
+        <div class="modal-content">
+            <div class="modal-header">
                 <h5 class="modal-title d-flex align-items-center gap-2" id="confirmDeleteEmpresaLabel">
                     <i class="bi bi-trash text-warning"></i>
                     Mover para a lixeira
@@ -113,7 +123,7 @@
                     a qualquer momento em <strong class="text-light">Empresas → Lixeira</strong>.
                 </p>
             </div>
-            <div class="modal-footer border-secondary">
+            <div class="modal-footer">
                 <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">
                     Cancelar
                 </button>
@@ -131,25 +141,35 @@
 
 {% block extra_js %}
 <script>
-  /* Busca client-side (vanilla, sem AJAX): filtra linhas pelo texto. */
+  /* Busca client-side (vanilla, sem AJAX): filtra linhas pelo texto das células
+     de dados (os rótulos dos botões ficam de fora: "análises" não casava com todas). */
   (function () {
     var input = document.getElementById('buscaEmpresa');
     var tabela = document.getElementById('tabelaEmpresas');
     if (!input || !tabela) return;
     var semResultados = document.getElementById('semResultados');
+    var resultado = document.getElementById('buscaResultado');
+    var limpar = document.getElementById('limparBusca');
     var linhas = Array.prototype.slice.call(tabela.tBodies[0].rows).filter(function (r) {
       return r.id !== 'semResultados';
     });
-    input.addEventListener('input', function () {
+    linhas.forEach(function (row) {
+      row.setAttribute('data-busca', Array.prototype.slice.call(row.cells, 0, -1)
+        .map(function (c) { return c.textContent; }).join(' ').replace(/\s+/g, ' ').toLowerCase());
+    });
+    function filtrar() {
       var q = input.value.trim().toLowerCase();
       var visiveis = 0;
       linhas.forEach(function (row) {
-        var match = row.textContent.toLowerCase().indexOf(q) !== -1;
+        var match = row.getAttribute('data-busca').indexOf(q) !== -1;
         row.style.display = match ? '' : 'none';
         if (match) visiveis++;
       });
       if (semResultados) semResultados.style.display = visiveis === 0 ? '' : 'none';
-    });
+      if (resultado) resultado.textContent = q ? (visiveis + ' empresa(s) encontrada(s) para "' + q + '"') : '';
+    }
+    input.addEventListener('input', filtrar);
+    if (limpar) limpar.addEventListener('click', function () { input.value = ''; filtrar(); input.focus(); });
   })();
 
   /* ---- Modal de confirmação de exclusão de empresa ----

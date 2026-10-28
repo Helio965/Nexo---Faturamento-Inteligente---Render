@@ -13,7 +13,7 @@
 <div class="page-head">
     <div>
         <h1>{{ titulo }}</h1>
-        <p class="sub">{{ nome }} · <span class="t-mono">CNPJ {{ empresa.cnpj }}</span></p>
+        <p class="sub">{{ nome }} · <span class="t-mono">CNPJ {{ m.cnpj(empresa.cnpj) }}</span></p>
     </div>
     <div class="page-head-actions">
         <a href="{{ url_for('contratos.empresa_detalhe', id_empresa=empresa.id_empresa) }}" class="btn-ghost"><i class="bi bi-arrow-left"></i> Voltar</a>
@@ -49,7 +49,7 @@
 </div>
 {% endif %}
 
-<form method="POST" class="relatorio-doc" style="max-width:980px;">
+<form method="POST" class="relatorio-doc form-contrato">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     {% if contrato %}<input type="hidden" name="versao" value="{{ contrato.versao }}">{% endif %}
     <div class="nexo-card mb-4">

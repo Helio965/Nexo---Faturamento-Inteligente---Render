@@ -47,7 +47,7 @@
             <div class="col-12 col-md-5">
                 <div class="kpi-label">Empresa</div>
                 <div class="fw-bold" style="font-size:1.05rem;">{{ empresa.razao_social }}</div>
-                <div class="t-mono text-dim" style="font-size:0.85rem;">CNPJ {{ empresa.cnpj }}</div>
+                <div class="t-mono text-dim" style="font-size:0.85rem;">CNPJ {{ m.cnpj(empresa.cnpj) }}</div>
             </div>
             <div class="col-6 col-md-3">
                 <div class="kpi-label">Plano</div>
@@ -188,7 +188,7 @@
             <tbody>
                 {% for a in analises[:5] %}
                 <tr>
-                    <td class="t-mono t-mut">{{ a.periodo_inicio.strftime('%d/%m/%Y') }} – {{ a.periodo_fim.strftime('%d/%m/%Y') }}</td>
+                    <td class="t-mono t-mut t-periodo">{{ m.periodo(a.periodo_inicio, a.periodo_fim) }}</td>
                     <td>{{ 'Quinzenal' if a.tipo_analise == 'QUINZENAL' else 'Mensal' }}</td>
                     <td>{{ m.badge_analise(a.status_analise) }}</td>
                     <td class="text-end">
@@ -214,7 +214,7 @@
             <tbody>
                 {% for a in analises_em_andamento %}
                 <tr>
-                    <td class="t-mono t-mut">{{ a.periodo_inicio.strftime('%d/%m/%Y') }} – {{ a.periodo_fim.strftime('%d/%m/%Y') }}</td>
+                    <td class="t-mono t-mut t-periodo">{{ m.periodo(a.periodo_inicio, a.periodo_fim) }}</td>
                     <td>{{ 'Quinzenal' if a.tipo_analise == 'QUINZENAL' else 'Mensal' }}</td>
                     <td>{{ m.badge_analise(a.status_analise) }}</td>
                 </tr>
@@ -298,6 +298,9 @@
       margin: { l: 64, r: 18, t: 32, b: 42 },
       bargap: 0.45
     });
+    NEXO.descrever('chartCliente', 'Compras x Vendas do período: ' + labels.map(function (l, i) {
+      return l + ' R$ ' + nexoFmtBRL(values[i]);
+    }).join(', ') + '.');
 
     if (typeof Plotly !== 'undefined') {
       window.setTimeout(function () {
@@ -354,7 +357,8 @@
     }], {
       margin: { l: 10, r: 10, t: 18, b: 16 },
       height: 240
-    });
+    }, { displayModeBar: false });  /* um número só: zoom e pan não fazem sentido */
+    NEXO.descrever('chartPressaoCliente', 'Indicador de Pressão de Estoque: R$ ' + nexoFmtBRL(v) + ' (' + legenda + ').');
 
     if (typeof Plotly !== 'undefined') {
       window.setTimeout(function () {

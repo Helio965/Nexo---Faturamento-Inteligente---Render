@@ -35,6 +35,8 @@
    .claude/prompt_context.md regra 4).
    =================================================================== #}
 {% if current_user.is_authenticated %}
+{# Primeiro item da ordem de Tab: pula sidebar, topbar e sino direto para o conteúdo. #}
+<a class="skip-link" href="#conteudo">Pular para o conteúdo</a>
 <div class="app-shell" id="appShell">
 
     <aside class="sidebar" id="sidebar">
@@ -163,7 +165,7 @@
             </div>
         </header>
 
-        <main class="page">
+        <main class="page" id="conteudo" tabindex="-1">
 {% else %}
 <div class="auth-wrap">
 {% endif %}
@@ -178,14 +180,14 @@
                         {% set dismiss_auto = category in ['success', 'info'] %}
                         {% set cat = 'danger' if category == 'error' else category %}
                         {% set icons = {'success': 'bi-check-circle-fill', 'danger': 'bi-exclamation-octagon-fill', 'warning': 'bi-exclamation-triangle-fill', 'info': 'bi-info-circle-fill'} %}
-                        <div class="alert alert-{{ cat }} d-flex align-items-start gap-2 {{ 'fade show' if dismiss_auto else 'alert-dismissible fade show' }}"
+                        {# Toda mensagem pode ser fechada à mão; as de sucesso/informação também
+                           somem sozinhas, mas a contagem pausa com o mouse ou o foco sobre elas. #}
+                        <div class="alert alert-{{ cat }} d-flex align-items-start gap-2 alert-dismissible fade show"
                              role="alert"
-                             {% if dismiss_auto %}data-auto-dismiss-ms="4200"{% endif %}>
+                             {% if dismiss_auto %}data-auto-dismiss-ms="6000"{% endif %}>
                             <i class="bi {{ icons.get(cat, 'bi-info-circle-fill') }} flash-icon" aria-hidden="true"></i>
                             <div class="flash-text">{{ message }}</div>
-                            {% if not dismiss_auto %}
                             <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Fechar"></button>
-                            {% endif %}
                         </div>
                         {% endfor %}
                     </div>
@@ -268,51 +270,96 @@
         });
       })();
 
-      /* ---- Valores dos KPIs: sempre numa linha; reduz a fonte só se não couber ---- */
+      /* ---- Valores dos KPIs: numa linha enquanto couber; a fonte só diminui até
+             18px e, se ainda não couber, o valor quebra a linha (nunca é cortado) ---- */
       (function () {
         function ajustarKpis() {
           document.querySelectorAll('.kpi-value').forEach(function (el) {
             el.style.fontSize = '';
+            el.style.whiteSpace = '';
             var tamanho = parseFloat(window.getComputedStyle(el).fontSize);
-            while (el.scrollWidth > el.clientWidth + 1 && tamanho > 16) {
+            while (el.scrollWidth > el.clientWidth + 1 && tamanho > 18) {
               tamanho -= 1;
               el.style.fontSize = tamanho + 'px';
             }
+            if (el.scrollWidth > el.clientWidth + 1) el.style.whiteSpace = 'normal';
           });
         }
-        /* ---- Tabelas largas: coluna de ações fixa à direita durante a rolagem ---- */
-        /* Sem coluna fixa, a borda direita esmaece enquanto ainda há colunas à direita. */
+        /* ---- Tabelas largas ----
+           Nenhuma coluna fica fixa por cima das outras. A tabela mais larga que o
+           contêiner rola dentro dele: a borda direita esmaece e uma dica "deslize"
+           aparece enquanto houver colunas à direita; o contêiner recebe foco e as
+           setas o rolam. Quando a tabela precisaria de bem mais que a largura
+           disponível (celular, tablet, zoom alto), ela vira uma grade de cartões:
+           uma linha por cartão, cada valor com o rótulo da coluna (data-label). */
+        var ACOES = /^a[çc](ão|ões|ao|oes)$/i;
+        function nomeDaTabela(caixa) {
+          var bloco = caixa.closest('.table-wrap, .nexo-card');
+          var titulo = bloco && bloco.querySelector('h2, h3');
+          return titulo ? titulo.textContent.replace(/\s+/g, ' ').trim() : 'Tabela';
+        }
+        function prepararTabela(caixa) {
+          if (caixa.dataset.pronta) return;
+          caixa.dataset.pronta = '1';
+          var tabela = caixa.querySelector('table');
+          if (tabela) {
+            var cabecalhos = Array.prototype.slice.call(tabela.querySelectorAll('thead th'));
+            var rotulos = cabecalhos.map(function (th) { return th.textContent.replace(/\s+/g, ' ').trim(); });
+            var ultimaEhAcoes = rotulos.length > 0 && ACOES.test(rotulos[rotulos.length - 1]);
+            /* Papéis explícitos: a semântica de tabela sobrevive ao display dos cartões. */
+            tabela.setAttribute('role', 'table');
+            tabela.querySelectorAll('tr').forEach(function (linha) { linha.setAttribute('role', 'row'); });
+            cabecalhos.forEach(function (th) { th.setAttribute('role', 'columnheader'); });
+            tabela.querySelectorAll('tbody tr').forEach(function (linha) {
+              Array.prototype.forEach.call(linha.cells, function (td, i) {
+                td.setAttribute('role', 'cell');
+                if (td.hasAttribute('colspan')) return;
+                if (!td.hasAttribute('data-label') && rotulos[i]) td.setAttribute('data-label', rotulos[i]);
+                if (ultimaEhAcoes && i === linha.cells.length - 1) td.classList.add('celula-acoes');
+              });
+            });
+          }
+          var dica = document.createElement('div');
+          dica.className = 'dica-rolagem';
+          dica.setAttribute('aria-hidden', 'true');
+          dica.innerHTML = '<i class="bi bi-arrow-left-right"></i> Deslize para ver as outras colunas';
+          caixa.appendChild(dica);
+          caixa.addEventListener('scroll', function () { marcarDica(caixa); }, { passive: true });
+          /* Foco pelo teclado num botão meio escondido: traz o botão inteiro para a vista. */
+          caixa.addEventListener('focusin', function (e) {
+            var alvo = e.target;
+            if (alvo && alvo !== caixa && alvo.scrollIntoView && alvo.matches && alvo.matches(':focus-visible')) {
+              alvo.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+            }
+          });
+          /* Com o contêiner focado, as setas rolam a tabela. */
+          caixa.addEventListener('keydown', function (e) {
+            if (e.target !== caixa) return;
+            if (e.key === 'ArrowRight') { caixa.scrollLeft += 80; e.preventDefault(); }
+            else if (e.key === 'ArrowLeft') { caixa.scrollLeft -= 80; e.preventDefault(); }
+          });
+        }
         function marcarDica(caixa) {
           var resta = caixa.scrollWidth - caixa.clientWidth - caixa.scrollLeft;
-          caixa.classList.toggle('rola-mais', resta > 2 && !caixa.classList.contains('tem-rolagem'));
+          caixa.classList.toggle('rola-mais', resta > 2 && !caixa.classList.contains('em-cartoes'));
         }
         function marcarTabelas() {
           document.querySelectorAll('.table-responsive-x').forEach(function (caixa) {
-            var cabecalho = caixa.querySelector('thead tr');
-            var ultima = cabecalho && cabecalho.lastElementChild;
-            var ehAcoes = !!ultima && /^a[çc](ão|ões|ao|oes)$/i.test(ultima.textContent.trim());
+            prepararTabela(caixa);
+            caixa.classList.remove('em-cartoes');
             var rola = caixa.scrollWidth > caixa.clientWidth + 1;
-            /* Só fixa a coluna se os dados mantiverem ao menos metade da largura
-               (em Empresas no celular ela ocuparia ~90% e cobriria a tabela inteira). */
-            var estreita = ehAcoes && ultima.getBoundingClientRect().width <= caixa.clientWidth * 0.5;
-            caixa.classList.toggle('tem-rolagem', rola && estreita);
-            marcarDica(caixa);
-            if (!caixa.dataset.dica) {
-              caixa.dataset.dica = '1';
-              caixa.addEventListener('scroll', function () { marcarDica(caixa); }, { passive: true });
-              /* Foco pelo teclado num botão meio escondido: traz o botão inteiro para a vista. */
-              caixa.addEventListener('focusin', function (e) {
-                var alvo = e.target;
-                if (alvo && alvo.scrollIntoView && alvo.matches && alvo.matches(':focus-visible')) {
-                  alvo.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-                }
-              });
+            var cartoes = rola && caixa.scrollWidth > caixa.clientWidth * 1.35 && !!caixa.querySelector('tbody tr');
+            caixa.classList.toggle('em-cartoes', cartoes);
+            if (rola && !cartoes) {
+              caixa.setAttribute('tabindex', '0');
+              caixa.setAttribute('role', 'region');
+              caixa.setAttribute('aria-label', nomeDaTabela(caixa) + ': tabela com rolagem horizontal');
+            } else {
+              caixa.removeAttribute('tabindex');
+              caixa.removeAttribute('role');
+              caixa.removeAttribute('aria-label');
             }
-            if (!ehAcoes) return;
-            caixa.querySelectorAll('tr').forEach(function (linha) {
-              var celula = linha.lastElementChild;
-              if (celula && !celula.hasAttribute('colspan')) celula.classList.add('col-acoes');
-            });
+            marcarDica(caixa);
           });
         }
         function ajustar() { ajustarKpis(); marcarTabelas(); }
@@ -323,19 +370,106 @@
           window.clearTimeout(espera);
           espera = window.setTimeout(ajustar, 120);
         });
+        window.NEXO = window.NEXO || {};
+        NEXO.ajustarLayout = ajustar;
       })();
 
-      /* ---- Fecha automaticamente confirmações globais leves ---- */
+      /* ---- Confirmações leves somem sozinhas; a contagem pausa com o mouse ou o
+             foco sobre a mensagem, e todas têm o botão de fechar ---- */
       document.querySelectorAll('[data-auto-dismiss-ms]').forEach(function (alertEl) {
-        var delay = Number(alertEl.getAttribute('data-auto-dismiss-ms')) || 4200;
-        window.setTimeout(function () {
+        var delay = Number(alertEl.getAttribute('data-auto-dismiss-ms')) || 6000;
+        var timer;
+        function fechar() {
           if (window.bootstrap && bootstrap.Alert) {
             bootstrap.Alert.getOrCreateInstance(alertEl).close();
           } else {
             alertEl.remove();
           }
-        }, delay);
+        }
+        function armar() { window.clearTimeout(timer); timer = window.setTimeout(fechar, delay); }
+        function pausar() { window.clearTimeout(timer); }
+        alertEl.addEventListener('mouseenter', pausar);
+        alertEl.addEventListener('focusin', pausar);
+        alertEl.addEventListener('mouseleave', armar);
+        alertEl.addEventListener('focusout', armar);
+        armar();
       });
+
+      /* ---- Dropzones de envio de arquivo (cliente e administrador) ----
+         O campo de arquivo continua na ordem de Tab (escondido só visualmente);
+         arrastar e soltar coloca o arquivo no campo; o nome, o estado e os erros
+         aparecem na própria dropzone; enviar sem arquivo é barrado antes do POST. */
+      (function () {
+        document.querySelectorAll('[data-dz]').forEach(function (dz) {
+          var input = dz.querySelector('[data-dz-input]');
+          var label = dz.querySelector('[data-dz-label]');
+          var estado = dz.querySelector('[data-dz-estado]');
+          var erro = dz.querySelector('[data-dz-erro]');
+          var form = dz.closest('form');
+          if (!input) return;
+          var aceitos = (input.getAttribute('accept') || '').split(',')
+            .map(function (s) { return s.trim().toLowerCase(); }).filter(Boolean);
+          function valido(nome) {
+            if (!aceitos.length) return true;
+            var n = String(nome).toLowerCase();
+            return aceitos.some(function (ext) { return n.slice(-ext.length) === ext; });
+          }
+          function mostrarErro(texto) {
+            dz.classList.add('is-erro');
+            if (erro) erro.textContent = texto;
+          }
+          function limparErro() {
+            dz.classList.remove('is-erro');
+            if (erro) erro.textContent = '';
+          }
+          /* Estado inicial da dropzone: "Arquivo recebido" (slot já preenchido no
+             servidor) ou vazio. Também usado quando o navegador limpa o campo
+             (reabrir o seletor e cancelar) ou quando o arquivo é recusado. */
+          var jaRecebido = dz.classList.contains('is-recebido');
+          function limparSelecao() {
+            dz.classList.remove('is-selecionado');
+            dz.classList.toggle('is-recebido', jaRecebido);
+            if (label) label.textContent = label.getAttribute('data-vazio') || label.textContent;
+            if (estado) estado.textContent = estado.getAttribute('data-vazio') || '';
+          }
+          function refletir() {
+            limparErro();
+            var arquivo = input.files && input.files[0];
+            if (!arquivo) { limparSelecao(); return; }
+            if (!valido(arquivo.name)) {
+              input.value = '';
+              limparSelecao();
+              mostrarErro('Formato não aceito: envie um arquivo ' + aceitos.join(' ou ') + '.');
+              return;
+            }
+            dz.classList.add('is-selecionado');
+            dz.classList.remove('is-recebido');
+            if (estado) estado.textContent = 'Selecionado para envio';
+            if (label) label.textContent = arquivo.name;
+          }
+          input.addEventListener('change', refletir);
+          ['dragenter', 'dragover'].forEach(function (ev) {
+            dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.add('is-drag'); });
+          });
+          dz.addEventListener('dragleave', function (e) { e.preventDefault(); dz.classList.remove('is-drag'); });
+          dz.addEventListener('drop', function (e) {
+            e.preventDefault();
+            dz.classList.remove('is-drag');
+            var arquivos = e.dataTransfer && e.dataTransfer.files;
+            if (!arquivos || !arquivos.length) return;
+            try { input.files = arquivos; } catch (_) { /* sem suporte: o clique continua funcionando */ }
+            refletir();
+          });
+          if (form) {
+            form.addEventListener('submit', function (e) {
+              if (input.files && input.files.length) return;
+              e.preventDefault();
+              mostrarErro('Selecione um arquivo antes de enviar.');
+              input.focus();
+            });
+          }
+        });
+      })();
 
       /* ---- Helper de Plotly em tema escuro NEXO ----
          Uso nos templates:
@@ -418,6 +552,11 @@
           scrollZoom: false,
           editable: false
         }, config || {});
+        /* A caixa recebe a altura do gráfico: com `responsive: true` o Plotly apaga
+           layout.height no primeiro resize (girar o celular, teclado, barra de
+           endereço) e passaria a usar a altura da caixa — que, sem isto, cairia
+           para a min-height enquanto o SVG continuava alto, por cima do conteúdo. */
+        if (layout && isFinite(layout.height) && layout.height > 0) el.style.height = layout.height + 'px';
         Plotly.newPlot(el, traces, NEXO.plotlyLayout(layout), plotConfig);
       };
       NEXO.staticPlot = function (id, traces, layout) {
@@ -439,76 +578,202 @@
          negativa elimina o contorno branco (espessura + 2) que o Plotly desenha. */
       NEXO.spike = { spikecolor: 'rgba(196,160,251,0.6)', spikethickness: -2, spikedash: 'dot' };
 
-      /* ---- GRÁFICO DE PARETO da Curva ABC (combo barras + linha) ----
+      /* ---- Utilidades de apresentação ---- */
+      NEXO.fmtBRL = function (v) {
+        return Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      };
+      /* Valor compacto para eixos estreitos: 25000 -> "25 mil", 1200000 -> "1,2 mi". */
+      NEXO.fmtCompacto = function (v) {
+        v = Number(v) || 0;
+        var a = Math.abs(v);
+        if (a >= 1e6) return (v / 1e6).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mi';
+        if (a >= 1e3) return (v / 1e3).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + ' mil';
+        return v.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+      };
+      /* Quebra um nome longo em até `maxLinhas` linhas de ~`porLinha` caracteres
+         (nas palavras); só uma palavra maior que a linha recebe reticências. */
+      /* Largura de um texto na fonte efetiva (a que o navegador realmente usa:
+         Inter, ou a reserva do sistema quando a Inter não carregou). */
+      NEXO.larguraTexto = function (texto, fonte) {
+        var tela = NEXO._tela || (NEXO._tela = document.createElement('canvas'));
+        var ctx = tela.getContext && tela.getContext('2d');
+        if (!ctx) return String(texto).length * 6.5;
+        ctx.font = fonte;
+        return ctx.measureText(String(texto)).width;
+      };
+      /* Marcas "redondas" de 0 até o topo (passo 1, 2, 2,5 ou 5 × 10^k), com cerca
+         de `alvo` marcas: o eixo não depende da estimativa de largura do Plotly,
+         que com uma fonte mais larga que a Inter deixava rótulos sobrepostos. */
+      NEXO.marcasRedondas = function (topo, alvo) {
+        topo = Number(topo) || 0;
+        if (topo <= 0) return [0, 1];
+        var bruto = topo / Math.max(1, alvo);
+        var potencia = Math.pow(10, Math.floor(Math.log(bruto) / Math.LN10));
+        var fator = bruto / potencia;
+        var passo = (fator <= 1 ? 1 : fator <= 2 ? 2 : fator <= 2.5 ? 2.5 : fator <= 5 ? 5 : 10) * potencia;
+        var marcas = [];
+        for (var v = 0; v <= topo + passo * 0.001; v += passo) marcas.push(v);
+        return marcas;
+      };
+      NEXO.quebrarRotulo = function (texto, porLinha, maxLinhas) {
+        var linhas = [], atual = '';
+        String(texto).split(/\s+/).forEach(function (palavra) {
+          if (!atual) atual = palavra;
+          else if ((atual + ' ' + palavra).length <= porLinha) atual += ' ' + palavra;
+          else { linhas.push(atual); atual = palavra; }
+        });
+        if (atual) linhas.push(atual);
+        linhas = linhas.map(function (l) { return l.length > porLinha + 4 ? l.slice(0, porLinha + 3) + '…' : l; });
+        if (linhas.length > maxLinhas) {
+          linhas = linhas.slice(0, maxLinhas);
+          linhas[maxLinhas - 1] = linhas[maxLinhas - 1].replace(/…?$/, '…');
+        }
+        return linhas.join('<br>');
+      };
+      /* Alternativa textual do gráfico para leitores de tela (role="img" + resumo). */
+      NEXO.descrever = function (id, texto) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.setAttribute('role', 'img');
+        el.setAttribute('aria-label', texto);
+      };
+
+      /* ---- GRÁFICO DE PARETO da Curva ABC ----
          data = { labels:[...], values:[...], classes:[...], acumulado:[...] }
-         - Barras verticais (eixo Y esquerdo): faturamento absoluto por produto,
-           em roxo da identidade NEXO (look premium / Pareto clássico).
-         - Linha + marcadores (eixo Y2 direito, 0–100%): % acumulado de
-           faturamento (calculado no back-end via pandas cumsum).
-         - Tooltip unificado por produto: faturamento (+ Classe ABC) e % acum. */
+         Barras HORIZONTAIS: o nome do produto fica no eixo vertical, em até duas
+         linhas, sem rótulos diagonais nem cortes; o nome completo também vai na
+         tooltip. Em tela larga, o % acumulado é a linha âmbar (eixo superior,
+         0–100%, com a referência de 80% da classe A); em tela estreita ele é
+         escrito no fim de cada barra. Classe ABC no tom da barra e na tooltip. */
       NEXO.plotParetoAbc = function (id, data) {
         if (!data || !data.labels || !data.labels.length) return;
-        var labels = data.labels;                 /* já em ordem de ranking (desc) */
+        var el = document.getElementById(id);
+        if (!el) return;
+        var labels = data.labels.map(String);     /* já em ordem de ranking (desc) */
         var values = data.values;
         var classes = data.classes || [];
         var acum = data.acumulado || [];
-        var el = document.getElementById(id);
-        var estreito = !!el && el.clientWidth < 560;
-        /* Nomes longos de produto: só o rótulo do eixo é encurtado (ticktext); a
-           categoria e a tooltip continuam com o nome completo. */
-        var limite = estreito ? 12 : 22;
-        var curtos = labels.map(function (t) {
-          t = String(t);
-          return t.length > limite ? t.slice(0, limite - 1) + '…' : t;
-        });
-        /* Classe ABC na própria barra: o mesmo roxo, mais intenso na classe A. */
+        var n = labels.length;
+        var larguraCaixa = el.clientWidth || (el.parentElement && el.parentElement.clientWidth) || 600;
+        var estreito = larguraCaixa < 560;
+        /* O modo (estreito/largo) é reavaliado quando a caixa muda de largura (girar o
+           celular, redimensionar a janela): o gráfico é redesenhado no modo certo. */
+        el._nexoPareto = { data: data, estreito: estreito };
+        if (!el._nexoObservador) {
+          var temporizador = null;
+          var reavaliar = function () {
+            clearTimeout(temporizador);
+            temporizador = setTimeout(function () {
+              var atual = (el.clientWidth || (el.parentElement && el.parentElement.clientWidth) || 600) < 560;
+              if (el._nexoPareto && atual !== el._nexoPareto.estreito) NEXO.plotParetoAbc(id, el._nexoPareto.data);
+            }, 150);
+          };
+          if (window.ResizeObserver) {
+            el._nexoObservador = new ResizeObserver(reavaliar);
+            el._nexoObservador.observe(el);
+          } else {
+            window.addEventListener('resize', reavaliar);
+            el._nexoObservador = true;
+          }
+        }
         var tom = { A: 'rgba(168, 85, 247, 0.92)', B: 'rgba(168, 85, 247, 0.6)', C: 'rgba(168, 85, 247, 0.34)' };
+        var cores = classes.length ? classes.map(function (c) { return tom[c] || tom.A; }) : tom.A;
+        var custom = labels.map(function (t, i) { return [t, classes[i] || '', Number(acum[i] || 0)]; });
+        /* Até três linhas por nome (até 18 caracteres por linha no celular, 26 no
+           computador); só nomes maiores que isso recebem reticências, e o nome
+           completo continua na tooltip, na descrição acessível e na tabela ABC.
+           O orçamento do rótulo é ~40 % da largura do gráfico: com uma fonte mais
+           larga que a Inter (reserva do sistema) as linhas ficam mais curtas em vez
+           de o rótulo ser cortado pela margem. */
+        var tamanhoTick = estreito ? 10.5 : 11;
+        var mediaChar = NEXO.larguraTexto('Kit presente premium de café torrado especial 0123456789', tamanhoTick + 'px Inter, system-ui, sans-serif') / 56;
+        var orcamento = Math.max(96, larguraCaixa * (estreito ? 0.42 : 0.34));
+        var porLinha = Math.max(10, Math.min(estreito ? 18 : 26, Math.floor(orcamento / (mediaChar || 6.5))));
+        el.setAttribute('data-por-linha', porLinha);
+        var nomes = labels.map(function (t) { return NEXO.quebrarRotulo(t, porLinha, 3); });
+        /* As barras ficam em posições numéricas (0, 1, 2…): dois produtos cujo nome
+           quebrado coincida continuam sendo duas barras, e o nome vai só no rótulo. */
+        var pos = labels.map(function (_, i) { return i; });
+        var hoverBarra = '<b>%{customdata[0]}</b><br>Faturamento: <b>R$ %{x:,.2f}</b><br>Classe %{customdata[1]} · acumulado %{customdata[2]:.1f}%<extra></extra>';
+        var resumo = labels.slice(0, 3).map(function (t, i) {
+          return (i + 1) + 'º ' + t + ', R$ ' + NEXO.fmtBRL(values[i]) + (classes[i] ? ' (classe ' + classes[i] + ')' : '');
+        }).join('; ');
+        NEXO.descrever(id, 'Gráfico de Pareto da Curva ABC com ' + n + ' produtos: ' + resumo +
+                           '. Os valores completos estão na tabela de classificação ABC.');
+        var barras = {
+          type: 'bar', orientation: 'h', name: 'Faturamento',
+          x: values, y: pos, customdata: custom,
+          marker: { color: cores, line: { color: 'rgba(216, 194, 253, 0.55)', width: 1 } },
+          hovertemplate: hoverBarra
+        };
+        /* Eixo do faturamento com marcas redondas e compactas ("R$ 25 mil"), em
+           número proporcional à área útil (~1 a cada 90 px). */
+        var topo = Math.max.apply(null, values.map(function (v) { return Number(v) || 0; }).concat([0]));
+        var areaUtil = Math.max(80, larguraCaixa - orcamento - 40);
+        /* Altura por produto a partir das linhas reais do rótulo (line-height 1,3 do
+           Plotly) mais folga, para rótulos vizinhos de 3–4 linhas não se tocarem. */
+        var alturaPara = function (rotulos, margens) {
+          var linhasMax = Math.max.apply(null, rotulos.map(function (r) { return String(r).split('<br>').length; }).concat([1]));
+          return Math.max(300, n * (Math.ceil(linhasMax * tamanhoTick * 1.3) + 10) + margens);
+        };
+        var marcasLargo = NEXO.marcasRedondas(topo, Math.max(2, Math.min(6, Math.floor(areaUtil / 90))));
+        var layout = {
+          hovermode: 'closest', bargap: 0.32,
+          xaxis: { rangemode: 'tozero', fixedrange: true, automargin: true,
+                   tickmode: 'array', tickvals: marcasLargo,
+                   ticktext: marcasLargo.map(function (v, i) { return i ? 'R$ ' + NEXO.fmtCompacto(v) : '0'; }),
+                   tickfont: { size: 10.5, color: NEXO.colors.text } },
+          yaxis: { autorange: 'reversed', automargin: true, fixedrange: true,
+                   tickmode: 'array', tickvals: pos, ticktext: nomes,
+                   tickfont: { size: tamanhoTick, color: NEXO.colors.textStrong } }
+        };
+        if (estreito) {
+          /* No celular o % acumulado vai na última linha do rótulo (em âmbar, como a
+             linha do computador), não fora da barra: sobra largura para o nome e
+             para o eixo em vez de uma margem direita de 84 px. */
+          layout.yaxis.ticktext = nomes.map(function (nome, i) {
+            return nome + '<br><span style="color:#fbbf24">' +
+                   Number(acum[i] || 0).toFixed(1).replace('.', ',') + '% acum.</span>';
+          });
+          /* Área útil de 100 a 200 px: só duas ou três marcas (o topo é a última),
+             para os rótulos do eixo não se sobreporem. */
+          var marcas = larguraCaixa < 420 ? [0, topo] : [0, topo / 2, topo];
+          layout.xaxis = Object.assign(layout.xaxis, {
+            tickvals: marcas, range: [0, topo > 0 ? topo * 1.06 : 1],
+            ticktext: marcas.map(function (v, i) { return i ? 'R$ ' + NEXO.fmtCompacto(v) : '0'; })
+          });
+          NEXO.plot(id, [barras], Object.assign(layout, {
+            height: alturaPara(layout.yaxis.ticktext, 60),
+            margin: { l: 8, r: 16, t: 10, b: 40 },
+            showlegend: false
+          }));
+          return;
+        }
         NEXO.plot(id, [
-          {
-            type: 'bar', name: 'Faturamento',
-            x: labels, y: values, yaxis: 'y',
-            marker: {
-              color: classes.length ? classes.map(function (c) { return tom[c] || tom.A; }) : tom.A,
-              line: { color: 'rgba(216, 194, 253, 0.55)', width: 1 }
-            },
-            width: 0.6,
-            customdata: classes,
-            hovertemplate: 'Faturamento: <b>R$ %{y:,.2f}</b>  ·  Classe %{customdata}<extra></extra>'
-          },
+          barras,
           {
             type: 'scatter', mode: 'lines+markers', name: '% acumulado',
-            x: labels, y: acum, yaxis: 'y2',
+            x: acum, y: pos, xaxis: 'x2',
             line: { color: '#fbbf24', width: 2.5, shape: 'spline', smoothing: 0.6 },
             marker: { color: '#fbbf24', size: 7, line: { color: 'rgba(17,13,32,0.95)', width: 2 } },
-            hovertemplate: '% acumulado: <b>%{y:.1f}%</b><extra></extra>'
+            hovertemplate: '% acumulado: <b>%{x:.1f}%</b><extra></extra>'
           }
-        ], {
-          height: estreito ? 320 : 330,
-          margin: estreito ? { l: 8, r: 8, t: 36, b: 8 } : { l: 66, r: 58, t: 36, b: 96 },
-          hovermode: 'x unified',
+        ], Object.assign(layout, {
+          height: alturaPara(nomes, 170),
+          margin: { l: 8, r: 24, t: 54, b: 40 },
           showlegend: true,
-          legend: { x: 0, y: 1.02, yanchor: 'bottom' },
-          bargap: 0.34,
+          legend: { x: 0, y: 1.14, yanchor: 'bottom' },
           /* Referência de 80% (fronteira da classe A) no eixo do acumulado. */
           shapes: [{
-            type: 'line', xref: 'paper', x0: 0, x1: 1, yref: 'y2', y0: 80, y1: 80,
+            type: 'line', xref: 'x2', x0: 80, x1: 80, yref: 'paper', y0: 0, y1: 1,
             line: { color: 'rgba(251, 191, 36, 0.45)', width: 1, dash: 'dot' }
           }],
-          xaxis: Object.assign({
-            tickangle: -38, tickfont: { size: 10, color: NEXO.colors.text }, fixedrange: true,
-            tickmode: 'array', tickvals: labels, ticktext: curtos
-          }, NEXO.spike),
-          yaxis: {
-            title: estreito ? { text: '' } : { text: 'Faturamento', font: { size: 11, color: NEXO.colors.text } },
-            tickprefix: 'R$ ', tickformat: ',.0f', rangemode: 'tozero', fixedrange: true
-          },
-          yaxis2: {
-            title: estreito ? { text: '' } : { text: '% acumulado', font: { size: 11, color: '#fbbf24' } },
-            overlaying: 'y', side: 'right', range: [0, 100], ticksuffix: '%',
+          xaxis2: {
+            overlaying: 'x', side: 'top', range: [0, 100], ticksuffix: '%', dtick: 20,
             showgrid: false, zeroline: false, showline: false, fixedrange: true,
-            tickfont: { color: '#fbbf24', size: 11 }
+            tickfont: { color: '#fbbf24', size: 10.5 }
           }
-        });
+        }));
       };
 
       /* ---- Gráfico de LINHA temporal Vendas x Compras ----
@@ -517,6 +782,33 @@
          em âmbar (par legível também para daltonismo vermelho-verde). */
       NEXO.plotLinhaTemporal = function (id, data) {
         if (!data || !data.labels || data.labels.length < 2) return;
+        var el = document.getElementById(id);
+        if (!el) return;
+        NEXO.descrever(id, 'Histórico comparativo de vendas e compras por período: ' + data.labels.map(function (rotulo, i) {
+          return rotulo + ': vendas R$ ' + NEXO.fmtBRL(data.vendas[i]) + ', compras R$ ' + NEXO.fmtBRL(data.compras[i]);
+        }).join('; ') + '.');
+        /* Eixo de categorias mostra todos os rótulos por padrão: com muitos períodos
+           num gráfico estreito (celular) eles se sobrepõem. Mostra um a cada `passo`
+           (~64 px por rótulo) e reavalia o passo quando a caixa muda de largura;
+           todos os pontos continuam na linha, na tooltip e na descrição. */
+        var distintos = new Set(data.labels).size;
+        var passoPara = function () {
+          var largura = el.clientWidth || (el.parentElement && el.parentElement.clientWidth) || 600;
+          var util = Math.max(120, largura - 82);
+          return Math.max(1, Math.ceil(distintos / Math.max(2, Math.floor(util / 64))));
+        };
+        var passo = passoPara();
+        if (!el._nexoObservador && window.ResizeObserver) {
+          var temporizador = null;
+          el._nexoObservador = new ResizeObserver(function () {
+            clearTimeout(temporizador);
+            temporizador = setTimeout(function () {
+              var novo = passoPara();
+              if (novo !== passo && window.Plotly && el.data) { passo = novo; Plotly.relayout(el, { 'xaxis.dtick': novo }); }
+            }, 150);
+          });
+          el._nexoObservador.observe(el);
+        }
         /* Linhas suaves; só Vendas tem área, em degradê que some na base (duas
            áreas sobrepostas virariam um cinza turvo). */
         NEXO.plot(id, [
@@ -545,10 +837,10 @@
           /* Folga nas pontas para os marcadores não colarem nas bordas. A conta usa
              categorias distintas: duas quinzenas do mesmo mês repetem o rótulo. */
           xaxis: Object.assign({
-            type: 'category', range: [-0.25, new Set(data.labels).size - 0.75],
-            fixedrange: true, tickfont: { size: 12, color: NEXO.colors.text }
+            type: 'category', range: [-0.25, distintos - 0.75], tick0: 0, dtick: passo,
+            fixedrange: true, tickfont: { size: 12, color: NEXO.colors.text }, automargin: true
           }, NEXO.spike),
-          height: 280, margin: { l: 64, r: 18, t: 36, b: 42 }
+          height: 320, margin: { l: 64, r: 18, t: 36, b: 42 }
         });
       };
     </script>

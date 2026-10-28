@@ -43,7 +43,7 @@
     <div class="col-12 col-md-6">
         <div class="upload-slot {{ 'is-done' if (slot.up and slot.up.status_processamento == 'PROCESSADO') else ('is-error' if (slot.up and slot.up.status_processamento == 'ERRO') else '') }}">
             <div class="upload-slot-head">
-                <div class="title"><i class="bi bi-filetype-csv"></i> {{ slot.titulo }}</div>
+                <div class="title" id="dzTituloAdmin{{ slot.tipo }}"><i class="bi bi-filetype-csv"></i> {{ slot.titulo }}</div>
                 {% if slot.up %}{{ m.badge_upload(slot.up.status_processamento) }}{% else %}<span class="nexo-badge b-muted">NÃO ENVIADO</span>{% endif %}
             </div>
             <p class="field-hint">{{ slot.desc }} · CSV ou XLSX</p>
@@ -56,13 +56,17 @@
             <form method="POST" action="{{ url_for('admin.analise_upload', id_analise=analise.id_analise) }}" enctype="multipart/form-data">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="tipo_relatorio" value="{{ slot.tipo }}">
-                <label class="dropzone" data-dz>
-                    <div class="dz-icon"><i class="bi bi-cloud-arrow-up"></i></div>
-                    <div class="dz-title" data-dz-label>{{ slot.up.nome_arquivo_original if slot.up else 'Arraste o arquivo ou clique para selecionar' }}</div>
-                    <div class="dz-hint">Formatos aceitos: .csv, .xlsx</div>
-                    <input type="file" name="arquivo" accept=".csv,.xlsx" data-dz-input>
+                <label class="dropzone {{ 'is-recebido' if slot.up }}" data-dz>
+                    <div class="dz-icon"><i class="bi {{ 'bi-file-earmark-check' if slot.up else 'bi-cloud-arrow-up' }}" aria-hidden="true"></i></div>
+                    <div class="dz-estado" id="dzEstadoAdmin{{ slot.tipo }}" data-dz-estado data-vazio="{{ 'Arquivo recebido' if slot.up else '' }}">{{ 'Arquivo recebido' if slot.up else '' }}</div>
+                    <div class="dz-title" id="dzNomeAdmin{{ slot.tipo }}" data-dz-label data-vazio="{{ slot.up.nome_arquivo_original if slot.up else 'Arraste o arquivo ou clique para selecionar' }}">{{ slot.up.nome_arquivo_original if slot.up else 'Arraste o arquivo ou clique para selecionar' }}</div>
+                    <div class="dz-hint" id="dzHintAdmin{{ slot.tipo }}">{{ 'Para reenviar, arraste ou selecione um arquivo novo (.csv ou .xlsx)' if slot.up else 'Formatos aceitos: .csv, .xlsx' }}</div>
+                    <div class="dz-erro" data-dz-erro role="alert"></div>
+                    <input type="file" name="arquivo" accept=".csv,.xlsx" data-dz-input
+                           {# Nome acessível com os textos visíveis (título do slot, estado e nome do arquivo). #}
+                           aria-labelledby="dzTituloAdmin{{ slot.tipo }} dzEstadoAdmin{{ slot.tipo }} dzNomeAdmin{{ slot.tipo }}" aria-describedby="dzHintAdmin{{ slot.tipo }}">
                 </label>
-                <button type="submit" class="btn-ghost w-100 justify-content-center mt-3"><i class="bi bi-upload"></i> {{ 'Reenviar' if slot.up else 'Enviar' }} {{ slot.tipo|capitalize }}</button>
+                <button type="submit" class="btn-ghost w-100 justify-content-center mt-3"><i class="bi bi-upload" aria-hidden="true"></i> {{ 'Reenviar' if slot.up else 'Enviar' }} {{ slot.tipo|capitalize }}</button>
             </form>
         </div>
     </div>
@@ -141,23 +145,5 @@
 {% endif %}
 {% endblock %}
 
-{% block extra_js %}
-<script>
-  /* Dropzone visual: reflete o arquivo escolhido e o estado de drag (sem AJAX). */
-  document.querySelectorAll('[data-dz]').forEach(function (dz) {
-    var input = dz.querySelector('[data-dz-input]');
-    var label = dz.querySelector('[data-dz-label]');
-    if (input) {
-      input.addEventListener('change', function () {
-        if (input.files && input.files.length && label) label.textContent = input.files[0].name;
-      });
-    }
-    ['dragenter', 'dragover'].forEach(function (ev) {
-      dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.add('is-drag'); });
-    });
-    ['dragleave', 'drop'].forEach(function (ev) {
-      dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.remove('is-drag'); });
-    });
-  });
-</script>
-{% endblock %}
+{# O comportamento das dropzones (teclado, arrastar e soltar, estados e validação) é
+   compartilhado com o envio do cliente e fica em base.html. #}

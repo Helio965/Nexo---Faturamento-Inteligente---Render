@@ -230,7 +230,13 @@ def analises():
         .where(Empresa.deletado_em.is_(None))
         .order_by(Empresa.razao_social.asc())
     ).scalars().all()
-    return render_template("admin/analises.html", analises=rows, empresas=empresas_filtro)
+    # ?empresa=<id> (botão "Análises" da lista de empresas) pré-seleciona o filtro
+    # da página; o filtro em si continua no navegador, sem consulta extra.
+    empresa_selecionada = request.args.get("empresa", "")
+    if not empresa_selecionada.isdigit():
+        empresa_selecionada = ""
+    return render_template("admin/analises.html", analises=rows, empresas=empresas_filtro,
+                           empresa_selecionada=empresa_selecionada)
 
 
 @admin_bp.route("/analises/nova", methods=["GET", "POST"])

@@ -188,21 +188,37 @@ def contexto_sininho(usuario) -> dict:
     Dados do sininho para o usuário autenticado: contagem de não-lidas e as
     5 notificações mais recentes. Usado pelo context processor (toda página).
     """
-    if usuario is None or not getattr(usuario, "is_authenticated", False):
-        return {"notif_nao_lidas": 0, "notif_recentes": []}
+    vazio = {"notif_nao_lidas": 0, "notif_recentes": []}
+    if usuario is None:
+        return vazio
 
-    nao_lidas = db.session.execute(
-        select(db.func.count(Notificacao.id_notificacao)).where(
-            Notificacao.id_usuario == usuario.id_usuario,
-            Notificacao.lida.is_(False),
-        )
-    ).scalar() or 0
+    try:
+        # is_authenticated pode consultar o banco (instância expirada após um
+        # rollback): fica dentro da proteção, como as consultas abaixo.
+        if not getattr(usuario, "is_authenticated", False):
+            return vazio
+        nao_lidas = db.session.execute(
+            select(db.func.count(Notificacao.id_notificacao)).where(
+                Notificacao.id_usuario == usuario.id_usuario,
+                Notificacao.lida.is_(False),
+            )
+        ).scalar() or 0
 
-    recentes = db.session.execute(
-        select(Notificacao)
-        .where(Notificacao.id_usuario == usuario.id_usuario)
-        .order_by(Notificacao.data_criacao.desc(), Notificacao.id_notificacao.desc())
-        .limit(5)
-    ).scalars().all()
+        recentes = db.session.execute(
+            select(Notificacao)
+            .where(Notificacao.id_usuario == usuario.id_usuario)
+            .order_by(Notificacao.data_criacao.desc(), Notificacao.id_notificacao.desc())
+            .limit(5)
+        ).scalars().all()
+    except Exception as exc:  # noqa: BLE001
+        # Roda em toda página (context processor), inclusive nas páginas de erro:
+        # com o banco indisponível ou a transação abortada, a página sai sem o
+        # sininho em vez de virar a página branca do servidor.
+        logger.warning("Sininho indisponível (%s): página renderizada sem notificações.", type(exc).__name__)
+        try:
+            db.session.rollback()
+        except Exception:  # noqa: BLE001
+            pass
+        return vazio
 
     return {"notif_nao_lidas": int(nao_lidas), "notif_recentes": recentes}

@@ -32,30 +32,33 @@
             </thead>
             <tbody>
                 {% for e in empresas %}
+                {% set nome_empresa = e.nome_fantasia or e.razao_social %}
                 <tr>
-                    <td class="t-strong">{{ e.razao_social }}</td>
+                    <td class="t-strong col-nome">{{ e.razao_social }}</td>
                     <td class="t-mut">{{ e.nome_fantasia or '—' }}</td>
-                    <td class="t-mono t-mut">{{ e.cnpj }}</td>
+                    <td class="t-mono t-mut">{{ m.cnpj(e.cnpj) }}</td>
                     <td>{{ m.badge_plano(e.plano_atual.nome_plano if e.plano_atual else '—') }}</td>
-                    <td class="t-mut">{{ e.email_contato }}</td>
+                    <td class="t-mut t-email">{{ m.email(e.email_contato) }}</td>
                     <td class="t-mut t-mono">{{ e.deletado_em.strftime('%d/%m/%Y %H:%M') if e.deletado_em else '—' }}</td>
-                    <td class="text-end t-mut" style="white-space:nowrap;">
-                        {# Restaurar: ação reversível e segura → POST direto (botão verde). #}
-                        <form method="POST" action="{{ url_for('admin.empresa_restaurar', id_empresa=e.id_empresa) }}" class="d-inline m-0">
-                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                            <button type="submit" class="btn btn-success btn-sm" title="Restaurar cliente">
-                                <i class="bi bi-arrow-counterclockwise"></i> Restaurar
+                    <td class="text-end">
+                        {# Dois botões separados, na identidade do painel: restaurar (reversível, POST
+                           direto) e excluir (crítico: abre o modal de confirmação). #}
+                        <div class="acoes">
+                            <form method="POST" action="{{ url_for('admin.empresa_restaurar', id_empresa=e.id_empresa) }}" class="d-inline m-0">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn-ghost btn-sm-x" title="Restaurar cliente" aria-label="Restaurar {{ nome_empresa }}">
+                                    <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Restaurar
+                                </button>
+                            </form>
+                            <button type="button" class="btn-ghost is-danger btn-sm-x"
+                                    data-bs-toggle="modal" data-bs-target="#confirmPurgeModal"
+                                    data-bs-url="{{ url_for('admin.empresa_excluir_permanente', id_empresa=e.id_empresa) }}"
+                                    data-bs-empresa="{{ nome_empresa }}"
+                                    data-bs-email="{{ e.email_contato }}"
+                                    title="Excluir permanentemente" aria-label="Excluir permanentemente {{ nome_empresa }}">
+                                <i class="bi bi-trash3" aria-hidden="true"></i> Excluir
                             </button>
-                        </form>
-                        {# Excluir permanente: ação crítica → abre modal de confirmação. #}
-                        <button type="button" class="btn btn-danger btn-sm"
-                                data-bs-toggle="modal" data-bs-target="#confirmPurgeModal"
-                                data-bs-url="{{ url_for('admin.empresa_excluir_permanente', id_empresa=e.id_empresa) }}"
-                                data-bs-empresa="{{ e.nome_fantasia or e.razao_social }}"
-                                data-bs-email="{{ e.email_contato }}"
-                                title="Excluir permanentemente" aria-label="Excluir permanentemente">
-                            <i class="bi bi-trash3"></i> Excluir permanente
-                        </button>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
@@ -77,11 +80,11 @@
    1 instância reaproveitada por todas as linhas; a action do form é
    preenchida em runtime pelo handler de show.bs.modal.
    ===================================================================== #}
-<div class="modal fade" id="confirmPurgeModal" tabindex="-1"
+<div class="modal fade nexo-modal is-perigo" id="confirmPurgeModal" tabindex="-1"
      aria-labelledby="confirmPurgeLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content bg-dark text-light border border-danger">
-            <div class="modal-header border-secondary">
+        <div class="modal-content">
+            <div class="modal-header">
                 <h5 class="modal-title d-flex align-items-center gap-2" id="confirmPurgeLabel">
                     <i class="bi bi-exclamation-octagon-fill text-danger"></i>
                     Exclusão permanente
@@ -103,7 +106,7 @@
                     </div>
                 </div>
             </div>
-            <div class="modal-footer border-secondary">
+            <div class="modal-footer">
                 <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">
                     Cancelar
                 </button>
