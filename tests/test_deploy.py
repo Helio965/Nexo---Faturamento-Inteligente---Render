@@ -54,7 +54,10 @@ class DeployTests(DeployTestCase):
             self.assertEqual(compare_metadata(context, self.db.metadata), [])
 
     def test_health_routes_and_database_failure(self):
-        self.assertEqual(self.client.get("/healthz").json, {"status": "ok"})
+        saude = self.client.get("/healthz").json
+        self.assertEqual(saude["status"], "ok")
+        # Fora do Render não há RENDER_GIT_COMMIT: o campo existe e diz "desconhecida".
+        self.assertEqual(saude["versao"], "desconhecida")
         response = self.client.get("/healthz/db")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json["db"], "ok")

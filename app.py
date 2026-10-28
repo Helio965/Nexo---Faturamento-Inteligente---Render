@@ -298,10 +298,15 @@ def create_app(config_name: str = None) -> Flask:
     def como_aderir():
         return render_template("como_aderir.html")
 
-    # Health check simples para verificar se a app subiu.
+    # Health check simples para verificar se a app subiu. Inclui o commit
+    # publicado (o Render injeta RENDER_GIT_COMMIT em cada deploy; fora dele o
+    # campo diz "desconhecida"): permite conferir, sem login, qual versão está
+    # no ar e comparar com a `main` do GitHub.
+    versao_publicada = (os.environ.get("RENDER_GIT_COMMIT") or "").strip()[:7] or "desconhecida"
+
     @app.route("/healthz")
     def healthz():
-        return {"status": "ok"}, 200
+        return {"status": "ok", "versao": versao_publicada}, 200
 
     # Health check do BANCO: faz um SELECT 1 no Postgres. Pensado para um
     # monitor externo (ex.: UptimeRobot a cada 5 min), que assim mantém o host
