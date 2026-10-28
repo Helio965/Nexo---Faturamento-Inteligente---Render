@@ -99,7 +99,9 @@
 {# ---- Período "início – fim": cada data fica inteira numa linha, mas a célula pode
       quebrar entre as duas quando a coluna é estreita ---- #}
 {%- macro periodo(inicio, fim) -%}
-<span class="t-nowrap">{{ inicio.strftime('%d/%m/%Y') }}</span> – <span class="t-nowrap">{{ fim.strftime('%d/%m/%Y') }}</span>
+{#- O travessão fica preso à primeira data: numa coluna estreita o período quebra em
+    duas linhas ("01/02/2026 –" / "28/02/2026"), nunca com o travessão sozinho. -#}
+<span class="t-nowrap">{{ inicio.strftime('%d/%m/%Y') }} –</span> <span class="t-nowrap">{{ fim.strftime('%d/%m/%Y') }}</span>
 {%- endmacro -%}
 
 {# ---- E-mail longo: ponto de quebra depois do "@" (em vez de cortar no meio de uma palavra) ---- #}
