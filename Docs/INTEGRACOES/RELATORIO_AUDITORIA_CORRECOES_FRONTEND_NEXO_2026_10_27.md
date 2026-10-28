@@ -130,7 +130,43 @@ Não foram alterados: modelos, migrações, regras contratuais, ETL, PDFs, APIs,
 
 ## 9. GitHub
 
-«GITHUB»
+| Item | Valor |
+|---|---|
+| Repositório | `Helio965/Nexo---Faturamento-Inteligente---Render` |
+| Base | `main` em `0f4a53e9003452dc66c0322a0269a22f52a96f5f` |
+| Branch | `claude/awesome-pascal-0ho42m` (branch designada desta sessão; nome sugerido `fix/nexo-correcao-overflow-responsividade-20261027` registrado, não usado) |
+| Pull request | [#32 — NEXO: correção de cortes de informações, tabelas, gráficos e responsividade](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/32) (rascunho, pronto para revisão do proprietário) |
+| SHA das correções de código | `093fbee` (último commit de código; os commits de documentação posteriores só tocam este relatório) |
+| CI | `security-postgresql` e `security-sqlite-browser` verdes em `c0e0168` (812 testes, 0 pulados, os 18 testes de layout executados com Bootstrap, Plotly e Inter reais); «CI_FINAL» |
+| Merge | Não realizado: o PR fica em rascunho para o proprietário revisar; há incerteza sobre implantação automática no Render a partir da `main`, por isso nenhum merge foi feito e nenhum deploy manual foi executado. |
+| Histórico | Sem rebase, sem amend após publicação, sem force push. |
+
+Commits (em ordem cronológica):
+
+| SHA | Mensagem |
+|---|---|
+| `cc43c7f` | fix(ui): tabelas sem coluna fixa, cartoes no celular, KPIs, sidebar, NexoBot e componentes |
+| `885920d` | fix(ui): templates do admin e do cliente sem cortes, acessiveis e em pt-BR |
+| `dd9180d` | fix(app): paginas de erro do NEXO, filtro de analises por empresa e e-mail no login |
+| `7c22786` | test(ui): regressao de overflow, responsividade e acessibilidade em navegador |
+| `70edde0` | fix(ui): cartoes sem vazamento de palavras longas, eixo compacto do Pareto e periodo que quebra |
+| `5a777af` | test(ui): tolerancia de reticencias pela largura do grafico e referencia sem espacos |
+| `f69d412` | fix(ui): revisao independente - botoes no celular, dropzone, Pareto, dica, modais e cabecalho do envio |
+| `0771dd2` | test(ui): regressoes da revisao, pre-condicao do Bootstrap e copias integras da CDN na CI |
+| `d209613` | docs(ui): rascunho do relatorio da auditoria e correcoes do frontend |
+| `deccb46` | fix(app): pagina de erro resistente a falha do banco, filtro ABC e nome acessivel do envio |
+| `7da0767` | test(ui): erro 500 com banco em falha, filtro ABC por teclado, nome do campo de arquivo e Plotly integro |
+| `c0e0168` | docs(ui): achados da revisao independente (backend e acessibilidade) no inventario |
+| `4654800` | fix(charts): Pareto no celular com o % acumulado no rotulo e linhas medidas pela fonte efetiva |
+| `532cc23` | test(ui): tolerancia de reticencias pelos caracteres por linha reais do grafico |
+| `35bfc10` | docs(ui): Pareto com fonte de reserva no inventario |
+| `090c722` | fix(app): pagina de erro tambem com o banco fora do ar |
+| `2a5da9e` | test(app): pagina de erro com todo context processor falhando (banco inacessivel) |
+| `e279cac` | fix(charts): marcas redondas e compactas no eixo do faturamento do Pareto |
+| `cae1d43` | docs(ui): banco fora do ar no inventario da revisao independente |
+| `024dd46` | fix(charts): graficos nao colapsam ao redimensionar e o Pareto reavalia o modo |
+| `4386497` | test(ui): redimensionamento do Pareto, sobreposicao vertical dos rotulos e SVG dentro da caixa |
+| `093fbee` | docs(ui): graficos ao redimensionar no inventario da revisao independente |
 
 ## 10. Produção
 
