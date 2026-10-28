@@ -11,7 +11,7 @@ Documento preparado para ser auditado de forma independente (ChatGPT). Tudo o qu
 | Repositório | `Helio965/Nexo---Faturamento-Inteligente---Render` |
 | Branch de trabalho | `claude/awesome-pascal-0ho42m` (branch designada desta sessão, recriada sobre a `main`; o nome sugerido `feature/nexo-gerenciamento-analises-topbar-refinamento` fica registrado, mas a sessão só publica na branch designada) |
 | SHA inicial (`main`) | `264f713b387f25e88e6e645c53788e0f9e0b9a8a` (merge do PR #32), confirmado antes de iniciar |
-| SHA final | `9281abf66957b326a9432a6744e3d4d28a42d343` (último commit de código: `fix(admin): aplicar achados da revisao…`); os commits posteriores da branch são apenas de documentação (`docs(ui)`, ver seção H) e não alteram código, CSS, templates ou testes |
+| SHA final | `deb7b59148eb0a971551cec2f97eb28c756353dc` (último commit de código/teste: `test(ui): visibilidade por estilo computado…`; os commits de código da rodada de revisão são `25fc333`, `7e29355`, `467047a` e `deb7b59`); os commits posteriores da branch são apenas de documentação (`docs(ui)`, ver seção H) e não alteram código, CSS, templates ou testes |
 | Data | 28/10/2026 |
 | Ambiente | Ubuntu 24.04, Python 3.12, Flask 3.1, Chromium 1243 (Chrome for Testing 153) via Playwright; SQLite temporário com as migrações reais; PostgreSQL 16 descartável nos ensaios da suíte; CDN servida de cópias locais íntegras (hash SRI); fontes Inter/JetBrains Mono. Firefox e WebKit não existem no ambiente (limitação registrada). |
 
@@ -87,9 +87,9 @@ Não foram alterados: modelos, migrações, regras contratuais, ETL, PDFs, APIs,
 |---|---|---|
 | Suíte oficial — base | `264f713` (`main`) | 814 testes aprovados (suíte final da etapa anterior, local e na CI) |
 | Suíte oficial — intermediária (local) | `6678eca` | 836 testes, 0 falhas, 0 erros, 0 pulados, 777 s; ensaios PostgreSQL "isolado", "AJ-06.1" e "gestão contratual" com `status: ok` (+22 testes novos) |
-| Suíte oficial — final (local) | `9281abf` | «SUITE_FINAL» |
+| Suíte oficial — final (local) | `deb7b59` | «SUITE_FINAL» |
 | Suíte oficial — final (CI, PR #33) | «CI_SUITE» | «CI_SUITE_RESULTADO» |
-| Módulos desta etapa em execução isolada | `6678eca` → `9281abf` | 42 testes (gerenciamento HTTP 16 + navegador 5 + overflow 21), 42 OK; após as correções da revisão (`9281abf`): gerenciamento HTTP 17 + navegador 5 = 22 testes, 22 OK em 149 s |
+| Módulos desta etapa em execução isolada | `6678eca` → `deb7b59` | 42 testes (gerenciamento HTTP 16 + navegador 5 + overflow 21), 42 OK; após a 1ª rodada de correções da revisão (`9281abf`): gerenciamento HTTP 17 + navegador 5 = 22 OK em 149 s; após a 2ª rodada (`25fc333`…`deb7b59`): HTTP 17 + navegador 5 + overflow 21 = 43 testes em 365 s, 42 OK e 1 falha de teste (o filtro por empresa media a visibilidade por `style.display`, que deixou de ser o mecanismo) corrigida em `deb7b59` e reexecutada (2 OK); NexoBot (saber, api, conhecimento) 89 OK em 76 s |
 
 **Testes de navegador** (Chromium): fluxo completo do gerenciamento (Editar → busca com e sem acento → Limpar → grade como lista real de links, busca por CNPJ sem máscara e com máscara parcial → Tab+Enter no cartão → grupo "Empresa selecionada" → análises só da empresa → modal com empresa/período/tipo/identificador → Cancelar sem efeito → Confirmar exclui só a escolhida → mensagem → Voltar); gerenciamento e listagem em 320, 360, 390, 768, 1024, 1366, 1536 e 1920 px (sem rolagem da listagem a partir de 1366 px, botões de ação legíveis, nada encoberto); topbar em 12 páginas autenticadas × 5 larguras com a página rolada (camadas forte/suave, máscara em degradê, `pointer-events: none`, faixa de ponta a ponta, título visível); sino aberto acima do cabeçalho, inteiro na tela; bordas (`border-collapse: separate`, divisórias com degradê nas pontas, realce arredondado sem a barra reta). **Segurança** (HTTP): 403 para CLIENTE, redirecionamento do anônimo, 405 para GET, 400 sem CSRF ou sem confirmação, 404 para análise de outra empresa/inexistente/empresa na lixeira, cascata e arquivo, falha no commit sem estado inconsistente, ausência de exclusão em massa, rota antiga removida. **Responsividade**: ver acima; zoom 150 % e teclado continuam cobertos pelo módulo de overflow. Mapa dos 25 cenários → testes em `resultados_testes.txt` do pacote.
 
@@ -97,7 +97,15 @@ Não foram alterados: modelos, migrações, regras contratuais, ETL, PDFs, APIs,
 
 **Revisão adversarial independente** (fluxo de trabalho com cinco lentes — segurança/backend, templates/JS, CSS da topbar, CSS das bordas, navegação/testes — e verificadores céticos por achado, em cópia descartável):
 
-«REVISAO»
+| Lente | Achados | Gravidade | Destino |
+|---|---|---|---|
+| Segurança/backend (rotas, CSRF, pertencimento, cascata, transação, storage) | 1 | BAIXA | Teste de navegador esperava a navegação com `wait_for_url` numa URL que já era a atual → `expect_navigation` + flash (`9281abf`). Nenhum defeito CRÍTICO/ALTO/MÉDIO: pertencimento (404), `confirmar=sim` antes de qualquer mutação, POST-only, CSRF, cascata nos quatro filhos, rollback com "Nada foi alterado", arquivos legados só depois do commit — tudo confirmado por leitura e execução. Sugestão adotada: log da exclusão concluída. |
+| Templates/JS (escape, estados vazios, acessibilidade, busca) | 3 | 1 MÉDIA, 2 BAIXA | `role="listitem"` em `<a>` apagava a semântica de link (MÉDIA); CNPJ gravado com máscara não era encontrado só com dígitos; `aria-label` em `<div>` sem papel → lista real `<ul>/<li>`, `data-cnpj` + busca por dígitos, `role="group"` (`9281abf`). XSS nos atributos (`data-busca`, `aria-label`) e estados vazios verificados sem defeito. |
+| CSS da topbar (Backdrop Root, máscara, sino, alinhamento, fallbacks, custo) | 3 | BAIXA | Brilho interno pintado por baixo das camadas e anel de 1 px fora do desfoque → anel e brilho na camada de cima, camadas cobrindo a borda (`25fc333`). Custo de duas superfícies de `backdrop-filter` (mediana 16,7 → 33,3 ms por quadro a 1920 px em rasterização por software) → ensaiada a variante de camada única, descartada por deixar o conteúdo legível pela metade inferior do cabeçalho; decisão registrada (seção C.5 e I). Confirmados sem defeito: camadas desfocam a página (contraste 127 → 0,1), perfil monotônico sem faixas, sino acima e inteiro, fallbacks ativos. |
+| CSS das bordas (collapse → separate, hover/focus, cartões, cabeçalhos, modais, ≤ 1440 px) | 1 | BAIXA | Última linha visível com divisória quando a última do `tbody` é a linha-placeholder oculta (Análises, Empresas, Curva ABC) → `hidden` + `:nth-last-child(1 of :not([hidden]))` (`25fc333`). 112 combinações tabela × largura sem mudança de largura/altura com `separate`; hover/focus, modo cartões, cabeçalhos e modais conferidos sem defeito. |
+| Navegação e testes (menu, referências à Base de Conhecimento, cobertura, contagem de testes) | 4 | BAIXA | NexoBot orientava a abrir "Base de Conhecimento" no menu → texto sem o item (`7e29355`); teste do indicador media "Análises" e não o rótulo mais largo → "Dashboard" (`467047a`); busca sem acento não exercitada → cenário "paraiba" (`25fc333`); `Docs/RELATORIO_TECNICO.md` convertido a LF por acidente → CRLF restaurado (`467047a`). Contagem de testes e isolamento do teste de falha no banco confirmados. |
+
+Verificadores céticos (um por achado, com reprodução independente em Chromium e axe-core): «VERIF_TALLY». Nenhum achado foi descartado sem verificação; os três achados de templates e o do teste de espera foram confirmados "já corrigidos" na árvore final (vereditos `real: false` por estarem resolvidos em `9281abf`), e o do brilho da topbar foi confirmado real e corrigido em `25fc333` com a recomendação do verificador (brilho também preservado nos fallbacks). Identificador do fluxo: `wf_5eefc838-166`.
 
 
 ## F. Evidências
@@ -157,6 +165,12 @@ Commits (ordem cronológica):
 | `3c1b612` | docs(ui): secoes de auditoria, alteracoes, arquivos, seguranca, GitHub e pendencias do relatorio |
 | `9281abf` | fix(admin): aplicar achados da revisao no gerenciamento de analises |
 | `256cf1b` | docs(ui): achados da revisao, correcoes e rastreabilidade no relatorio (parcial) |
+| `7f3c97f` | docs(ui): secao de evidencias e SHA final de codigo no relatorio |
+| `25fc333` | fix(ui): anel e brilho da topbar por cima do desfoque; ultima linha visivel sem divisoria |
+| `7e29355` | fix(nav): respostas do NexoBot sem citar o item de menu removido |
+| `467047a` | test(ui): indicador da sidebar mede o rotulo mais largo; CRLF do relatorio tecnico preservado |
+| `af40c8e` | docs(ui): correcoes da revisao (topbar, bordas, NexoBot, testes) no relatorio (parcial) |
+| `deb7b59` | test(ui): visibilidade por estilo computado no filtro por empresa |
 | (último) | docs(ui): evidencias, testes finais, CI e parecer do relatorio — commit de fechamento, só documentação |
 
 
