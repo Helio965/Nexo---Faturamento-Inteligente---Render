@@ -30,7 +30,7 @@ As correções preservam a identidade visual (vidro, roxo, fundo artístico, car
 - **Componentes sem tema:** selects com seta, caixa de seleção e modais na paleta; ações destrutivas em vermelho; páginas 403/404/500 do NEXO em português.
 - **Navegação e formatação:** botão "Análises" de cada empresa abre a lista já filtrada; e-mail volta preenchido após senha errada; link "Pular para o conteúdo"; percentuais, CNPJ e segmento em pt-BR; mensagens com botão de fechar e pausa ao passar o mouse.
 
-Testes: suíte oficial «TESTES_SUITE» e o novo `tests/test_overflow_navegador.py` («TESTES_NOVOS»), que mede posições reais (coluna encoberta por célula fixa, KPI estourando ou com fonte abaixo de 18 px, botão flutuante sobre controle, rótulo de gráfico cortado ou sobreposto, campo de arquivo fora do Tab) em oito larguras e no zoom de 150%, com dados fictícios extensos.
+Testes: suíte oficial com 814 testes aprovados, 0 falhas, 0 erros e 0 pulados no código final (794 na base), localmente e na CI e o novo `tests/test_overflow_navegador.py` (20 testes novos: 15 em navegador e 5 HTTP), que mede posições reais (coluna encoberta por célula fixa, KPI estourando ou com fonte abaixo de 18 px, botão flutuante sobre controle, rótulo de gráfico cortado ou sobreposto, campo de arquivo fora do Tab) em oito larguras e no zoom de 150%, com dados fictícios extensos.
 
 ## 3. Inventário de problemas
 
@@ -64,6 +64,8 @@ Gravidade: CRÍTICA (bloqueia uma tarefa), ALTA (esconde informação essencial)
 - Texto pequeno nas imagens de página inteira: efeito da redução da captura; na resolução original os tamanhos são os do design (0,9 rem nas tabelas, 0,74 rem nos rótulos).
 - Barra lateral esticada nas capturas de página inteira: artefato da captura; no navegador ela é fixa.
 - "mm/dd/yyyy" e "Choose File": idioma da interface do navegador de teste.
+
+**Revisão independente (adversarial) das próprias correções.** Antes da publicação final, cinco agentes revisores independentes (shell JS, CSS, backend, acessibilidade e gráficos Plotly) leram o diff e a árvore de trabalho e reproduziram hipóteses em harness próprio (Chromium, Node, PostgreSQL 16 descartável); cada achado foi depois entregue a um agente cético com a instrução de refutá-lo. Resultado: 16 achados (FE-17 a FE-20), todos tratados — 15 corrigidos antes de a verificação rodar (os céticos registraram "já corrigido na árvore") e 1 confirmado pelo cético (banco fora do ar durante a página de erro 500), corrigido em seguida e reproduzido de novo. O resumo com os vereditos está no pacote de evidências (`revisao_adversarial_resumo.txt`).
 
 ## 4. Auditoria por interface
 
@@ -111,7 +113,23 @@ Não foram alterados: modelos, migrações, regras contratuais, ETL, PDFs, APIs,
 
 ## 6. Testes
 
-«TESTES»
+**Comando oficial:** `python -B -m unittest discover -s tests -t . -v`, com `NEXO_TEST_BROWSER=1`, `NEXO_TEST_CHROMIUM` (Chrome for Testing 153 / Chromium 1243), `NEXO_TEST_CDN_DIR` (cópias íntegras de Bootstrap 5.3.3 e Plotly 2.35.2, hash SRI conferido) e `NEXO_TEST_POSTGRES_BIN` (PostgreSQL 16 descartável, criado e destruído pelo próprio ensaio). Executado em cópia descartável do código, fora do repositório, com o mesmo ambiente sintético da CI (nenhuma credencial real).
+
+| Execução | Código | Resultado |
+|---|---|---|
+| Suíte oficial — base | `0f4a53e` (`main`) | 794 testes aprovados (resultado da homologação anterior, mesma suíte que entrou na `main`); CI verde no merge |
+| Suíte oficial — final (local) | `093fbee` | **814 testes, 0 falhas, 0 erros, 0 pulados**, 632 s; ensaios PostgreSQL "isolado", "AJ-06.1" e "gestão contratual" com `status: ok` e `production_access: false` |
+| Suíte oficial — final (CI, PR #32) | `093fbee` | `security-sqlite-browser`: 814 testes OK em 705 s; `security-postgresql`: OK (run 40606041025) |
+| `tests/test_overflow_navegador.py` com a fonte Inter | `093fbee` | 20/20 (`OverflowNavegadorTests` 15 + `PaginasDeErroTests` 5) |
+| `tests/test_overflow_navegador.py` com fontes de reserva (fontconfig só com DejaVu/Liberation, sem Inter) | `093fbee` | 20/20 — simula quem não carrega o Google Fonts |
+| Módulos de navegador já existentes (`test_contratos_navegador`, `test_identidade_visual`, `test_nexobot_navegador`) | durante as correções e na suíte final | OK (51 testes na execução isolada; todos incluídos nos 814) |
+| Reprodução em PostgreSQL 16 (página de erro 500) | `093fbee` | 8 cenários (falha SQL com banco em pé; banco derrubado dentro da requisição; cliente/admin/anônimo; 404) devolvem a página do NEXO com o status correto |
+
+**O que o novo módulo mede** (posições reais no navegador, não só `scrollWidth`): célula encoberta por célula fixa; modo cartões com rótulo em cada valor e botões dentro do cartão; última coluna alcançável (rolagem e setas ← →); dica de rolagem fora da faixa esmaecida; KPI estourando ou com fonte abaixo de 18 px; NexoBot sobre controles no fim da página e escondido com a gaveta aberta; indicador da sidebar com folga ≥ 6 px do rótulo; controle além do limite recortado (ex.: botões "Voltar/Confirmar" a 320–390 px); gráficos com `role="img"` e descrição, rótulos sem corte, sem sobreposição horizontal nem vertical, reticências só quando o nome não cabe em 3 linhas (caracteres por linha reais do gráfico), uma barra por produto, SVG dentro da caixa, modo estreito/largo coerente com a largura e redimensionamento 1366 → 360 → 1366 → paisagem → 390; dropzone acessível pelo teclado (Tab, foco visível, nome acessível com os textos visíveis), envio vazio barrado, formato recusado, estado "recebido" restaurado; filtro ABC como botões de alternância por teclado; filtro `?empresa=`; busca de Empresas com "Limpar busca"; 404/403/500 na identidade (HTML) e JSON em `/api/`; e-mail devolvido após senha errada; página de erro com o banco inacessível. Larguras 320, 360, 390, 768, 1024, 1366, 1536 e 1920 px, zoom 150 % e páginas públicas (só regressão).
+
+**Falhas encontradas pelos testes durante o trabalho (todas corrigidas antes da publicação final):** CI vermelha em `7c22786` porque o runner não tinha cópia do Bootstrap (modal da Lixeira não abria; a landing bloqueava o substituto pelo SRI) e `test_contratos_navegador` acusava `scrollWidth` em "detalhes" (referência de 140 caracteres sem espaços vazando do cartão) e `form.relatorio-doc` renomeado; localmente: cabeçalho do slot de envio a 320 px com nome de arquivo longo; rótulo do Pareto cortado a 320 px e marcas do eixo sobrepostas a 1366 px com a fonte de reserva; truncamento de rótulos medido com o orçamento errado. Nenhum teste foi alterado para esconder uma regressão: as mudanças nos testes ampliaram o que é medido (sobreposição vertical, rótulos girados, resize, nome acessível) ou corrigiram localizadores do próprio teste novo.
+
+**Ignorados:** nenhum. **Bloqueados:** Firefox e WebKit (não instalados no ambiente; limitação registrada). Os testes de layout exigem as cópias íntegras do Bootstrap/Plotly: sem elas a classe é pulada com o motivo no log (na CI as cópias são baixadas e conferidas; nas duas execuções finais nada foi pulado).
 
 ## 7. Evidências visuais
 
@@ -137,7 +155,7 @@ Não foram alterados: modelos, migrações, regras contratuais, ETL, PDFs, APIs,
 | Branch | `claude/awesome-pascal-0ho42m` (branch designada desta sessão; nome sugerido `fix/nexo-correcao-overflow-responsividade-20261027` registrado, não usado) |
 | Pull request | [#32 — NEXO: correção de cortes de informações, tabelas, gráficos e responsividade](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/32) (rascunho, pronto para revisão do proprietário) |
 | SHA das correções de código | `093fbee` (último commit de código; os commits de documentação posteriores só tocam este relatório) |
-| CI | `security-postgresql` e `security-sqlite-browser` verdes em `c0e0168` (812 testes, 0 pulados, os 18 testes de layout executados com Bootstrap, Plotly e Inter reais); «CI_FINAL» |
+| CI | `security-postgresql` e `security-sqlite-browser` verdes em `c0e0168` (812 testes, 0 pulados, os 18 testes de layout executados com Bootstrap, Plotly e Inter reais); e verdes de novo em `093fbee` (run 40606041025: 814 testes, 0 pulados, PostgreSQL 16 descartável com os três ensaios `status: ok`). |
 | Merge | Não realizado: o PR fica em rascunho para o proprietário revisar; há incerteza sobre implantação automática no Render a partir da `main`, por isso nenhum merge foi feito e nenhum deploy manual foi executado. |
 | Histórico | Sem rebase, sem amend após publicação, sem force push. |
 
