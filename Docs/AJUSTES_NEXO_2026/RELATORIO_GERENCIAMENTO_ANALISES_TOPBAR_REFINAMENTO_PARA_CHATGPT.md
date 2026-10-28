@@ -34,10 +34,10 @@ Fontes: leitura de `templates/base.html`, `templates/admin/analises.html`, `blue
 A listagem geral ganhou o botão **Editar** (`#btnGerenciar`, `btn-nexo`, ícone de lápis, ao lado de "Nova análise") que leva a `/admin/analises/gerenciar`. A coluna "Ações" da listagem ficou só com "Abrir"; a lixeira, o modal e o script do modal foram **removidos da renderização** (não escondidos por CSS), e a rota antiga `POST /admin/analise/deletar/<id>` deixou de existir (um POST nela devolve 404). A macro `uppill` (selos V/C dos uploads) foi movida para `templates/_macros.html` para ser usada pelas duas telas.
 
 ### 2. Seleção de empresas (`/admin/analises/gerenciar`)
-Título "Gerenciar análises", subtítulo "Selecione uma empresa para consultar e gerenciar suas análises.", trilha "Análises › Gerenciar análises", campo de busca (`#buscaGerenciar`, filtra por nome fantasia, razão social e CNPJ, ignorando acentos, com região `aria-live` e "Limpar busca") e uma grade responsiva (`.empresa-grid`, colunas de ≥ 320 px) de cartões-link (`.empresa-card`): cubo da marca, nome fantasia, razão social, CNPJ formatado, ID, contagem de análises, plano e, quando houver, status Suspensa/Cancelada. Hover e foco elevam o cartão e acendem a borda (`:focus-visible` com anel), Enter abre. Só empresas ativas (fora da lixeira) aparecem; a lixeira tem o próprio fluxo. Nenhuma lixeira de análise nesta tela.
+Título "Gerenciar análises", subtítulo "Selecione uma empresa para consultar e gerenciar suas análises.", trilha "Análises › Gerenciar análises", campo de busca (`#buscaGerenciar`, filtra por nome fantasia, razão social e CNPJ — digitado com ou sem máscara, mesmo quando o cadastro guardou o CNPJ pontuado —, ignorando acentos, com região `aria-live` e "Limpar busca") e uma grade responsiva (`.empresa-grid`, lista real `<ul>/<li>`, colunas de ≥ 320 px) de cartões-link (`.empresa-card`, um `<a>` sem `role` nem `aria-label`, para o leitor de tela anunciá-lo como link e ler o conteúdo visível): cubo da marca, nome fantasia, razão social, CNPJ formatado, ID, contagem de análises, plano e, quando houver, status Suspensa/Cancelada. Hover e foco elevam o cartão e acendem a borda (`:focus-visible` com anel), Enter abre. Só empresas ativas (fora da lixeira) aparecem; a lixeira tem o próprio fluxo. Nenhuma lixeira de análise nesta tela.
 
 ### 3. Exclusão de análises (`/admin/analises/gerenciar/<id_empresa>`)
-Cartão da empresa selecionada (mesmo desenho, com marca de seleção) e tabela só com as análises dela (período, tipo, quinzena, status, uploads, criação, publicado, ações "Abrir" e "Excluir"). "Excluir" abre o modal `#confirmExcluirAnalise` ("Excluir análise?") com empresa, período, tipo e identificador da análise, o aviso de que a exclusão é definitiva e os botões **Cancelar** / **Confirmar exclusão** (vermelho na identidade). O formulário envia `POST /admin/analises/gerenciar/<id_empresa>/excluir/<id_analise>` com CSRF e `confirmar=sim`. No backend (`admin.analise_excluir`): administrador obrigatório, empresa ativa obrigatória, a análise precisa pertencer à empresa da URL (senão 404, com aviso no log), confirmação obrigatória (senão 400), uma análise por requisição (não existe rota sem id nem exclusão em massa). `_excluir_analise()` passou a apagar primeiro no banco (mídias `db:` na mesma transação) e só depois do commit remover arquivos legados do disco; falha no banco faz rollback e devolve a mensagem "Nada foi alterado". Depois da exclusão o administrador volta à mesma empresa, com mensagem de sucesso, as demais análises intactas e o link "Voltar à seleção de empresas".
+Cartão da empresa selecionada (mesmo desenho, com marca de seleção, `role="group"` nomeado "Empresa selecionada") e tabela só com as análises dela (período, tipo, quinzena, status, uploads, criação, publicado, ações "Abrir" e "Excluir"). "Excluir" abre o modal `#confirmExcluirAnalise` ("Excluir análise?") com empresa, período, tipo e identificador da análise, o aviso de que a exclusão é definitiva e os botões **Cancelar** / **Confirmar exclusão** (vermelho na identidade). O formulário envia `POST /admin/analises/gerenciar/<id_empresa>/excluir/<id_analise>` com CSRF e `confirmar=sim`. No backend (`admin.analise_excluir`): administrador obrigatório, empresa ativa obrigatória, a análise precisa pertencer à empresa da URL (senão 404, com aviso no log), confirmação obrigatória (senão 400), uma análise por requisição (não existe rota sem id nem exclusão em massa). `_excluir_analise()` passou a apagar primeiro no banco (mídias `db:` na mesma transação) e só depois do commit remover arquivos legados do disco; falha no banco faz rollback e devolve a mensagem "Nada foi alterado"; a exclusão bem-sucedida fica no log da aplicação (análise, empresa e administrador). Depois da exclusão o administrador volta à mesma empresa, com mensagem de sucesso, as demais análises intactas e o link "Voltar à seleção de empresas".
 
 ### 4. Reorganização do botão Abrir
 Coluna "Ações" com `width: 1%` e `white-space: nowrap` (ocupa só o necessário) e botão `btn-abrir` compacto (5 × 11 px, 0,82 rem, ícone + texto, foco visível). Nas telas ≤ 1440 px as células respiram 10 px nas laterais (16 px nas pontas) e o nome da empresa tem mínimo de 170 px: a listagem de 9 colunas passou a caber inteira a 1366 px, sem rolagem horizontal e sem esconder coluna. No celular continua o modo cartões; a célula de ações volta a ser um bloco normal (um primeiro ensaio mostrou o rótulo "Ações" e os botões quebrando letra por letra nos cartões, corrigido antes da publicação).
@@ -61,14 +61,14 @@ O item saiu da sidebar administrativa (link, ícone e indicador). As rotas `/adm
 |---|---|---|
 | `Docs/AJUSTES_NEXO_2026/RELATORIO_GERENCIAMENTO_ANALISES_TOPBAR_REFINAMENTO_PARA_CHATGPT.md` | novo | Este relatório. |
 | `Docs/RELATORIO_TECNICO.md` | modificado | Registro da saída do CMS do menu e do novo fluxo de gerenciamento. |
-| `blueprints/admin.py` | modificado | Rotas do gerenciamento por empresa (`analises_gerenciar`, `analises_empresa`, `analise_excluir`), helper `_excluir_analise` (ordem segura: banco primeiro, arquivos depois do commit) e `_empresa_gerenciavel`; rota antiga `analise_deletar` removida. |
+| `blueprints/admin.py` | modificado | Rotas do gerenciamento por empresa (`analises_gerenciar`, `analises_empresa`, `analise_excluir`), helper `_excluir_analise` (ordem segura: banco primeiro, arquivos depois do commit) e `_empresa_gerenciavel`; registro em log da exclusão bem-sucedida; rota antiga `analise_deletar` removida. |
 | `static/css/nexo.css` | modificado | Topbar com desfoque gradual em duas camadas, de ponta a ponta, com fallbacks; cartões de empresa, trilha e resumo do modal; coluna de ações compacta; acabamento das bordas (divisórias com recuo, realce arredondado, cabeçalhos/rodapés/sidebar/modais); células mais enxutas até 1440 px. |
 | `templates/_macros.html` | modificado | Macro `uppill` (selos de upload V/C) compartilhada pelas duas listagens. |
 | `templates/admin/analises.html` | modificado | Listagem geral sem lixeira/modal/script de exclusão; botão Editar; botão Abrir compacto (`btn-abrir`, coluna `col-acao`); selos V/C pela macro compartilhada. |
 | `templates/admin/analises_empresa.html` | novo | Nova tela: empresa selecionada, suas análises, lixeira por linha e modal de confirmação com formulário POST (CSRF + confirmar=sim). |
-| `templates/admin/analises_gerenciar.html` | novo | Nova tela: seleção de empresas em cartões com busca e trilha. |
+| `templates/admin/analises_gerenciar.html` | novo | Nova tela: seleção de empresas em cartões (lista real de links) com busca (nome, razão social, CNPJ com/sem máscara) e trilha. |
 | `templates/base.html` | modificado | Sidebar administrativa sem o item Base de Conhecimento; item Análises ativo também nas telas de gerenciamento. |
-| `tests/test_gerenciamento_analises.py` | novo | Novo: 16 cenários HTTP (listagem, seleção, exclusão, segurança, integridade). |
+| `tests/test_gerenciamento_analises.py` | novo | Novo: 17 cenários HTTP (listagem, seleção, exclusão, segurança, integridade, acessibilidade da grade e busca por CNPJ sem máscara). |
 | `tests/test_gerenciamento_navegador.py` | novo | Novo: fluxo completo em Chromium, todas as larguras, topbar em todas as páginas, sino, bordas. |
 | `tests/test_overflow_navegador.py` | modificado | Infraestrutura de navegador extraída em `NavegadorCase`; páginas novas na varredura; teste do indicador da sidebar sem a Base de Conhecimento; novo teste do menu administrativo. |
 
@@ -77,7 +77,24 @@ Não foram alterados: modelos, migrações, regras contratuais, ETL, PDFs, APIs,
 
 ## E. Testes
 
-«TESTES»
+**Comando oficial:** `python -B -m unittest discover -s tests -t . -v`, com `NEXO_TEST_BROWSER=1`, `NEXO_TEST_CDN_DIR` (Bootstrap 5.3.3 e Plotly 2.35.2 íntegros) e `NEXO_TEST_POSTGRES_BIN` (PostgreSQL 16 descartável), em cópia descartável do código, com dados fictícios.
+
+| Execução | Código | Resultado |
+|---|---|---|
+| Suíte oficial — base | `264f713` (`main`) | 814 testes aprovados (suíte final da etapa anterior, local e na CI) |
+| Suíte oficial — intermediária (local) | `6678eca` | 836 testes, 0 falhas, 0 erros, 0 pulados, 777 s; ensaios PostgreSQL "isolado", "AJ-06.1" e "gestão contratual" com `status: ok` (+22 testes novos) |
+| Suíte oficial — final (local) | «SHA_FINAL_CURTO» | «SUITE_FINAL» |
+| Suíte oficial — final (CI, PR #33) | «CI_SUITE» | «CI_SUITE_RESULTADO» |
+| Módulos desta etapa em execução isolada | `6678eca` → «SHA_FINAL_CURTO» | 42 testes (gerenciamento HTTP 16 + navegador 5 + overflow 21), 42 OK; após as correções da revisão: «MODULOS_FINAL» |
+
+**Testes de navegador** (Chromium): fluxo completo do gerenciamento (Editar → busca com e sem acento → Limpar → grade como lista real de links, busca por CNPJ sem máscara e com máscara parcial → Tab+Enter no cartão → grupo "Empresa selecionada" → análises só da empresa → modal com empresa/período/tipo/identificador → Cancelar sem efeito → Confirmar exclui só a escolhida → mensagem → Voltar); gerenciamento e listagem em 320, 360, 390, 768, 1024, 1366, 1536 e 1920 px (sem rolagem da listagem a partir de 1366 px, botões de ação legíveis, nada encoberto); topbar em 12 páginas autenticadas × 5 larguras com a página rolada (camadas forte/suave, máscara em degradê, `pointer-events: none`, faixa de ponta a ponta, título visível); sino aberto acima do cabeçalho, inteiro na tela; bordas (`border-collapse: separate`, divisórias com degradê nas pontas, realce arredondado sem a barra reta). **Segurança** (HTTP): 403 para CLIENTE, redirecionamento do anônimo, 405 para GET, 400 sem CSRF ou sem confirmação, 404 para análise de outra empresa/inexistente/empresa na lixeira, cascata e arquivo, falha no commit sem estado inconsistente, ausência de exclusão em massa, rota antiga removida. **Responsividade**: ver acima; zoom 150 % e teclado continuam cobertos pelo módulo de overflow. Mapa dos 25 cenários → testes em `resultados_testes.txt` do pacote.
+
+**Ignorados:** nenhum. **Bloqueados:** Firefox e WebKit (não instalados). Nenhum teste existente foi removido ou enfraquecido; os ajustes em testes próprios desta etapa foram aceitar `border-spacing` computado como "0px" e, por achado da revisão, esperar a navegação real do POST de exclusão (`expect_navigation` + flash) em vez de um `wait_for_url` que já casava com a URL atual.
+
+**Revisão adversarial independente** (fluxo de trabalho com cinco lentes — segurança/backend, templates/JS, CSS da topbar, CSS das bordas, navegação/testes — e verificadores céticos por achado, em cópia descartável):
+
+«REVISAO»
+
 
 ## F. Evidências
 
@@ -93,6 +110,7 @@ Não foram alterados: modelos, migrações, regras contratuais, ETL, PDFs, APIs,
 - Uma análise por requisição; não existe rota de exclusão sem identificador nem seleção múltipla (testado: `/excluir/` e `/excluir` → 404).
 - Integridade: cascata ORM nos filhos (uploads, indicador, relatório, Curva ABC) numa única transação; arquivos em disco só saem depois do commit; falha simulada no commit mantém análise, filhos e arquivo (testado) e informa "Nada foi alterado".
 - A exclusão é **definitiva** (sem lixeira de análises); o modal e a página dizem isso explicitamente.
+- Rastreabilidade: cada exclusão concluída gera uma linha de log com o identificador da análise, a empresa e o administrador; as recusas (análise de outra empresa) também são logadas.
 - Nenhuma regra comercial ou contratual foi alterada; a lixeira de empresas e a exclusão permanente de empresas não mudaram.
 
 
@@ -116,6 +134,8 @@ Commits (ordem cronológica):
 | `0b6a7aa` | test(ui): gerenciamento de analises (HTTP e navegador), topbar, bordas e menu |
 | `c702de0` | docs(ui): relatorio tecnico da etapa para auditoria independente (rascunho) |
 | `6678eca` | test(ui): aceitar border-spacing computado como valor unico |
+| `3c1b612` | docs(ui): secoes de auditoria, alteracoes, arquivos, seguranca, GitHub e pendencias do relatorio |
+«COMMITS_NOVOS»
 
 
 ## I. Pendências
