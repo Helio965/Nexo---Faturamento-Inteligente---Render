@@ -169,7 +169,8 @@ REGISTROS = (
         titulo="Como a equipe administra o Guia (Base de Conhecimento)?",
         categoria="Equipe NEXO",
         resumo=(
-            "Em Base de Conhecimento, a equipe cria e edita tópicos com categoria, pergunta, resposta e imagem "
+            "No CMS do Guia (página /admin/guia da área administrativa, sem item no menu desde 28/10/2026), "
+            "a equipe cria e edita tópicos com categoria, pergunta, resposta e imagem "
             "opcional, e pode ativar ou desativar cada tópico. Tópicos inativos somem do Guia e das respostas "
             "do NexoBot; a exclusão definitiva também é possível."
         ),

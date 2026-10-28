@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+
+{% block title %}Gerenciar análises — NEXO Admin{% endblock %}
+{% block page_title %}Gerenciar análises{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <nav class="trilha" aria-label="Você está em">
+            <a href="{{ url_for('admin.analises') }}">Análises</a>
+            <span class="trilha-sep" aria-hidden="true">›</span>
+            <span aria-current="page">Gerenciar análises</span>
+        </nav>
+        <h1>Gerenciar análises</h1>
+        <p class="sub">Selecione uma empresa para consultar e gerenciar suas análises.</p>
+    </div>
+    <div class="page-head-actions">
+        {% if empresas %}
+        <div class="search-box">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input type="search" id="buscaGerenciar" class="form-control" placeholder="Buscar empresa por nome ou CNPJ…" autocomplete="off"
+                   aria-label="Buscar empresa por nome fantasia, razão social ou CNPJ" aria-controls="gradeEmpresas">
+        </div>
+        <p class="visually-hidden" id="buscaGerenciarResultado" aria-live="polite"></p>
+        {% endif %}
+        <a href="{{ url_for('admin.analises') }}" class="btn-ghost"><i class="bi bi-arrow-left" aria-hidden="true"></i> Voltar para Análises</a>
+    </div>
+</div>
+
+{% if empresas %}
+{# Cada empresa é um cartão-link (teclado: Tab + Enter). A exclusão de análises só
+   existe na tela seguinte, depois de a empresa ser escolhida. #}
+<ul class="empresa-grid" id="gradeEmpresas" role="list" aria-label="Empresas cadastradas">
+    {% for e in empresas %}
+    {% set total = contagem.get(e.id_empresa, 0) %}
+    <li class="empresa-item">
+    {# O <a> fica sem role e sem aria-label: assim os leitores de tela o anunciam como
+       link e leem o conteúdo visível (nome, razão social, CNPJ, contagem, plano, status). #}
+    <a class="empresa-card" href="{{ url_for('admin.analises_empresa', id_empresa=e.id_empresa) }}"
+       data-busca="{{ ((e.nome_fantasia or '') ~ ' ' ~ e.razao_social ~ ' ' ~ e.cnpj ~ ' ' ~ m.cnpj(e.cnpj)) | lower }}"
+       data-cnpj="{{ e.cnpj | replace('.', '') | replace('/', '') | replace('-', '') | replace(' ', '') }}">
+        <span class="ec-icone" aria-hidden="true">
+            <img src="{{ url_for('static', filename='img/nexo-cubo-transparente.png') }}" alt="" width="253" height="279" decoding="async">
+        </span>
+        <span class="ec-corpo">
+            <span class="ec-nome">{{ e.nome_fantasia or e.razao_social }}</span>
+            {% if e.nome_fantasia and e.nome_fantasia != e.razao_social %}<span class="ec-razao">{{ e.razao_social }}</span>{% endif %}
+            <span class="ec-meta">
+                <span class="t-mono">{{ m.cnpj(e.cnpj) }}</span>
+                <span class="ec-sep" aria-hidden="true">·</span>
+                <span>ID {{ e.id_empresa }}</span>
+            </span>
+            <span class="ec-rodape">
+                <span class="nexo-badge {{ 'b-info' if total else 'b-muted' }}"><i class="bi bi-clipboard-data" aria-hidden="true"></i> {{ total }} análise{{ 's' if total != 1 }}</span>
+                {{ m.badge_plano(e.plano_atual.nome_plano) if e.plano_atual }}
+                {% if e.status_conta == 'SUSPENSA' %}<span class="nexo-badge b-amber"><span class="dot"></span>Suspensa</span>
+                {% elif e.status_conta == 'CANCELADA' %}<span class="nexo-badge b-red"><span class="dot"></span>Cancelada</span>{% endif %}
+            </span>
+        </span>
+        <span class="ec-seta" aria-hidden="true"><i class="bi bi-chevron-right"></i></span>
+    </a>
+    </li>
+    {% endfor %}
+</ul>
+<div class="empty-state empty-state-sm" id="semResultados" style="display:none;">
+    <div class="es-icon"><i class="bi bi-search"></i></div>
+    <h3>Nenhuma empresa encontrada para a busca.</h3>
+    <button type="button" class="btn-ghost btn-sm-x" id="limparBuscaGerenciar"><i class="bi bi-x-lg" aria-hidden="true"></i> Limpar busca</button>
+</div>
+{% else %}
+<div class="table-wrap">
+    <div class="empty-state">
+        <div class="es-icon"><i class="bi bi-buildings"></i></div>
+        <h3>Nenhuma empresa ativa cadastrada.</h3>
+        <p>Cadastre uma empresa cliente para gerenciar suas análises.</p>
+        <a href="{{ url_for('admin.empresa_nova') }}" class="btn-nexo mt-3"><i class="bi bi-plus-lg" aria-hidden="true"></i> Nova empresa</a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* Busca client-side pelos dados do cartão (nome fantasia, razão social, CNPJ —
+     com ou sem máscara, mesmo quando o cadastro guardou o CNPJ pontuado). */
+  (function () {
+    var input = document.getElementById('buscaGerenciar');
+    var grade = document.getElementById('gradeEmpresas');
+    if (!input || !grade) return;
+    var cartoes = Array.prototype.slice.call(grade.querySelectorAll('.empresa-card'));
+    var vazio = document.getElementById('semResultados');
+    var resultado = document.getElementById('buscaGerenciarResultado');
+    var limpar = document.getElementById('limparBuscaGerenciar');
+    function normalizar(t) {
+      return String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    }
+    function digitos(t) { return String(t || '').replace(/\D/g, ''); }
+    function filtrar() {
+      var q = normalizar(input.value.trim());
+      /* Consulta feita só de dígitos e pontuação de CNPJ: compara também sem máscara. */
+      var qCnpj = (q && /^[\d.\/\-\s]+$/.test(q)) ? digitos(q) : '';
+      var visiveis = 0;
+      cartoes.forEach(function (c) {
+        var ok = !q || normalizar(c.getAttribute('data-busca')).indexOf(q) !== -1 ||
+                 (qCnpj !== '' && digitos(c.getAttribute('data-cnpj')).indexOf(qCnpj) !== -1);
+        (c.closest('li') || c).style.display = ok ? '' : 'none';
+        if (ok) visiveis++;
+      });
+      if (vazio) vazio.style.display = visiveis === 0 ? '' : 'none';
+      if (resultado) resultado.textContent = q ? (visiveis + ' empresa(s) encontrada(s) para "' + input.value.trim() + '"') : '';
+    }
+    input.addEventListener('input', filtrar);
+    if (limpar) limpar.addEventListener('click', function () { input.value = ''; filtrar(); input.focus(); });
+  })();
+</script>
+{% endblock %}

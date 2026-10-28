@@ -74,7 +74,7 @@
                     </td>
                 </tr>
                 {% endfor %}
-                <tr id="semResultados" style="display:none;">
+                <tr id="semResultados" hidden>
                     <td colspan="8" class="text-center text-dim" style="padding:28px;">
                         Nenhuma empresa encontrada para a busca.
                         <button type="button" class="btn-ghost btn-sm-x ms-2" id="limparBusca"><i class="bi bi-x-lg" aria-hidden="true"></i> Limpar busca</button>
@@ -162,10 +162,10 @@
       var visiveis = 0;
       linhas.forEach(function (row) {
         var match = row.getAttribute('data-busca').indexOf(q) !== -1;
-        row.style.display = match ? '' : 'none';
+        row.hidden = !match;
         if (match) visiveis++;
       });
-      if (semResultados) semResultados.style.display = visiveis === 0 ? '' : 'none';
+      if (semResultados) semResultados.hidden = visiveis !== 0;
       if (resultado) resultado.textContent = q ? (visiveis + ' empresa(s) encontrada(s) para "' + q + '"') : '';
     }
     input.addEventListener('input', filtrar);

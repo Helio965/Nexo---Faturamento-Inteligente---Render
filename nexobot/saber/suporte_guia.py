@@ -294,7 +294,8 @@ REGISTROS = (
         titulo="Como a equipe NEXO gerencia o conteúdo do Guia?",
         categoria="Guia",
         resumo=(
-            "Na área administrativa, em Base de Conhecimento, a equipe cria, edita, ativa ou desativa tópicos "
+            "Na área administrativa, no CMS do Guia (página /admin/guia, sem item no menu), a equipe cria, "
+            "edita, ativa ou desativa tópicos "
             "(categoria, pergunta, resposta e imagem opcional). Só tópicos ativos aparecem no Guia e nas "
             "respostas do NexoBot; as mudanças valem imediatamente."
         ),

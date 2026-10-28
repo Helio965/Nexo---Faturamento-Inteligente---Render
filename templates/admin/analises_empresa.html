@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+
+{% set nome_empresa = empresa.nome_fantasia or empresa.razao_social %}
+{% block title %}Análises de {{ nome_empresa }} — NEXO Admin{% endblock %}
+{% block page_title %}Gerenciar análises{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <nav class="trilha" aria-label="Você está em">
+            <a href="{{ url_for('admin.analises') }}">Análises</a>
+            <span class="trilha-sep" aria-hidden="true">›</span>
+            <a href="{{ url_for('admin.analises_gerenciar') }}">Gerenciar análises</a>
+            <span class="trilha-sep" aria-hidden="true">›</span>
+            <span aria-current="page">{{ nome_empresa }}</span>
+        </nav>
+        <h1>{{ nome_empresa }}</h1>
+        <p class="sub">Análises da empresa selecionada. A exclusão vale só para a análise escolhida e é definitiva.</p>
+    </div>
+    <div class="page-head-actions">
+        <a href="{{ url_for('admin.analises_gerenciar') }}" class="btn-ghost"><i class="bi bi-arrow-left" aria-hidden="true"></i> Voltar à seleção de empresas</a>
+        <a href="{{ url_for('admin.analise_nova') }}" class="btn-nexo"><i class="bi bi-plus-lg" aria-hidden="true"></i> Nova análise</a>
+    </div>
+</div>
+
+{# Identificação da empresa selecionada (mesmo cartão da seleção, agora marcado). #}
+<div class="empresa-card is-selecionada mb-3" id="empresaSelecionada" role="group" aria-label="Empresa selecionada">
+    <span class="ec-icone" aria-hidden="true">
+        <img src="{{ url_for('static', filename='img/nexo-cubo-transparente.png') }}" alt="" width="253" height="279" decoding="async">
+    </span>
+    <span class="ec-corpo">
+        <span class="ec-nome">{{ nome_empresa }}</span>
+        {% if empresa.nome_fantasia and empresa.nome_fantasia != empresa.razao_social %}<span class="ec-razao">{{ empresa.razao_social }}</span>{% endif %}
+        <span class="ec-meta">
+            <span class="t-mono">{{ m.cnpj(empresa.cnpj) }}</span>
+            <span class="ec-sep" aria-hidden="true">·</span>
+            <span>ID {{ empresa.id_empresa }}</span>
+            {% if empresa.email_contato %}<span class="ec-sep" aria-hidden="true">·</span><span>{{ m.email(empresa.email_contato) }}</span>{% endif %}
+        </span>
+        <span class="ec-rodape">
+            <span class="nexo-badge b-info"><i class="bi bi-clipboard-data" aria-hidden="true"></i> {{ analises|length }} análise{{ 's' if analises|length != 1 }}</span>
+            {{ m.badge_plano(empresa.plano_atual.nome_plano) if empresa.plano_atual }}
+            {% if empresa.status_conta == 'SUSPENSA' %}<span class="nexo-badge b-amber"><span class="dot"></span>Suspensa</span>
+            {% elif empresa.status_conta == 'CANCELADA' %}<span class="nexo-badge b-red"><span class="dot"></span>Cancelada</span>{% endif %}
+        </span>
+    </span>
+    <span class="ec-seta ec-check" aria-hidden="true"><i class="bi bi-check2-circle"></i></span>
+</div>
+
+{% if analises %}
+<div class="table-wrap">
+    <div class="nexo-card-head">
+        <div>
+            <h2>Análises de {{ nome_empresa }}</h2>
+            <p class="sub">Abra para editar relatórios e devolutivas; a lixeira exclui apenas a análise da linha.</p>
+        </div>
+    </div>
+    <div class="table-responsive-x">
+        <table class="nexo-table" id="tabelaAnalisesEmpresa">
+            <thead>
+                <tr>
+                    <th>Período</th>
+                    <th>Tipo</th>
+                    <th>Quinzena</th>
+                    <th>Status</th>
+                    <th>Uploads</th>
+                    <th>Criação</th>
+                    <th>Publicado</th>
+                    <th class="text-end col-acao">Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in analises %}
+                {% set up_v = (a.uploads | selectattr('tipo_relatorio', 'equalto', 'VENDAS') | list | first) %}
+                {% set up_c = (a.uploads | selectattr('tipo_relatorio', 'equalto', 'COMPRAS') | list | first) %}
+                {% set periodo_txt = a.periodo_inicio.strftime('%d/%m/%Y') ~ ' – ' ~ a.periodo_fim.strftime('%d/%m/%Y') %}
+                {% set tipo_txt = 'Quinzenal' if a.tipo_analise == 'QUINZENAL' else 'Mensal' %}
+                <tr data-analise="{{ a.id_analise }}">
+                    <td class="t-strong t-mono t-periodo">{{ m.periodo(a.periodo_inicio, a.periodo_fim) }}</td>
+                    <td>{{ tipo_txt }}</td>
+                    <td class="t-mut">{{ (a.quinzena_referencia ~ 'ª') if a.quinzena_referencia else '—' }}</td>
+                    <td>{{ m.badge_analise(a.status_analise) }}</td>
+                    <td class="t-nowrap">{{ m.uppill('V', 'Vendas', up_v.status_processamento if up_v else None) }} {{ m.uppill('C', 'Compras', up_c.status_processamento if up_c else None) }}</td>
+                    <td class="t-mut t-mono">{{ a.data_criacao.strftime('%d/%m/%Y') }}</td>
+                    <td>{% if a.relatorio and a.relatorio.publicado %}<span class="nexo-badge b-green"><i class="bi bi-check2"></i> Sim</span>{% else %}<span class="nexo-badge b-muted">Não</span>{% endif %}</td>
+                    <td class="text-end col-acao">
+                        <div class="acoes">
+                            <a href="{{ url_for('admin.analise_upload', id_analise=a.id_analise) }}" class="btn-ghost btn-abrir" aria-label="Abrir análise {{ periodo_txt }}"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> Abrir</a>
+                            {# Gatilho do modal único: os dados da linha vão para o corpo do modal e a
+                               action do formulário aponta para ESTA análise desta empresa. #}
+                            <button type="button" class="btn-ghost is-danger btn-abrir btn-excluir-analise"
+                                    data-bs-toggle="modal" data-bs-target="#confirmExcluirAnalise"
+                                    data-url="{{ url_for('admin.analise_excluir', id_empresa=empresa.id_empresa, id_analise=a.id_analise) }}"
+                                    data-periodo="{{ periodo_txt }}" data-tipo="{{ tipo_txt }}" data-id="{{ a.id_analise }}"
+                                    aria-label="Excluir análise {{ periodo_txt }} ({{ tipo_txt }}, nº {{ a.id_analise }})">
+                                <i class="bi bi-trash" aria-hidden="true"></i> Excluir
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="table-wrap">
+    <div class="empty-state">
+        <div class="es-icon"><i class="bi bi-clipboard-data"></i></div>
+        <h3>Esta empresa ainda não tem análises.</h3>
+        <p>Crie a primeira análise para {{ nome_empresa }} e envie os relatórios de VENDAS e COMPRAS.</p>
+        <a href="{{ url_for('admin.analise_nova') }}" class="btn-nexo mt-3"><i class="bi bi-plus-lg" aria-hidden="true"></i> Nova análise</a>
+    </div>
+</div>
+{% endif %}
+
+{# =====================================================================
+   Confirmação de exclusão (uma instância, preenchida pelo botão da linha).
+   O formulário envia POST com CSRF e o campo "confirmar=sim"; o backend confere
+   de novo que a análise pertence à empresa selecionada antes de excluir.
+   ===================================================================== #}
+<div class="modal fade nexo-modal is-perigo" id="confirmExcluirAnalise" tabindex="-1"
+     aria-labelledby="confirmExcluirLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title d-flex align-items-center gap-2" id="confirmExcluirLabel">
+                    <i class="bi bi-exclamation-triangle-fill text-danger" aria-hidden="true"></i>
+                    Excluir análise?
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="mb-3">Você está prestes a excluir a análise selecionada desta empresa. Esta operação poderá remover os relatórios e dados relacionados à análise.</p>
+                <dl class="resumo-exclusao">
+                    <div><dt>Empresa</dt><dd id="excluirEmpresa">{{ nome_empresa }}</dd></div>
+                    <div><dt>Período</dt><dd class="t-mono" id="excluirPeriodo">—</dd></div>
+                    <div><dt>Tipo</dt><dd id="excluirTipo">—</dd></div>
+                    <div><dt>Identificador</dt><dd class="t-mono" id="excluirId">—</dd></div>
+                </dl>
+                <p class="mb-0 small aviso-perigo">
+                    <i class="bi bi-shield-exclamation" aria-hidden="true"></i>
+                    A exclusão é definitiva: uploads, indicadores, Curva ABC e devolutiva desta análise saem do banco e não podem ser recuperados. As outras análises e a empresa permanecem.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-ghost" data-bs-dismiss="modal">Cancelar</button>
+                <form method="POST" action="" id="formExcluirAnalise" class="d-inline m-0">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="confirmar" value="sim">
+                    <button type="submit" class="btn-nexo is-danger" id="btnConfirmarExclusao">
+                        <i class="bi bi-trash" aria-hidden="true"></i> Confirmar exclusão
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  /* Ao abrir o modal, os dados da linha clicada preenchem o resumo e a action do
+     formulário; sem botão de origem (abertura programática), o envio fica bloqueado. */
+  (function () {
+    var modal = document.getElementById('confirmExcluirAnalise');
+    if (!modal) return;
+    var form = document.getElementById('formExcluirAnalise');
+    var botao = document.getElementById('btnConfirmarExclusao');
+    var campos = { periodo: 'excluirPeriodo', tipo: 'excluirTipo', id: 'excluirId' };
+    modal.addEventListener('show.bs.modal', function (event) {
+      var origem = event.relatedTarget;
+      var url = origem ? (origem.getAttribute('data-url') || '') : '';
+      if (form) form.setAttribute('action', url);
+      if (botao) botao.disabled = !url;
+      Object.keys(campos).forEach(function (chave) {
+        var alvo = document.getElementById(campos[chave]);
+        if (alvo) alvo.textContent = origem ? (origem.getAttribute('data-' + chave) || '—') : '—';
+      });
+    });
+    modal.addEventListener('hidden.bs.modal', function () {
+      if (form) form.setAttribute('action', '');
+      if (botao) botao.disabled = true;
+    });
+  })();
+</script>
+{% endblock %}

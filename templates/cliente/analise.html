@@ -112,7 +112,7 @@
                     <td class="text-end t-mono t-mut">{{ ('%.1f'|format(p.percentual_acumulado|float))|replace('.', ',') }}%</td>
                 </tr>
                 {% endfor %}
-                <tr id="abcEmptyRow" style="display:none;"><td colspan="7" class="text-center t-mut" style="padding:22px;">Nenhum produto nesta classe.</td></tr>
+                <tr id="abcEmptyRow" hidden><td colspan="7" class="text-center t-mut" style="padding:22px;">Nenhum produto nesta classe.</td></tr>
             </tbody>
         </table>
     </div>
@@ -212,10 +212,10 @@
       var visiveis = 0;
       linhas.forEach(function (tr) {
         var mostra = (alvo === 'ALL') || (tr.getAttribute('data-classe') === alvo);
-        tr.style.display = mostra ? '' : 'none';
+        tr.hidden = !mostra;
         if (mostra) visiveis++;
       });
-      if (vazio) vazio.style.display = visiveis ? 'none' : '';
+      if (vazio) vazio.hidden = !!visiveis;
     });
   })();
 </script>

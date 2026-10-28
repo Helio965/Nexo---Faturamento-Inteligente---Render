@@ -172,3 +172,11 @@
     <span><strong>Curva ABC (Princípio de Pareto):</strong> Classe A = até 80% do faturamento acumulado (estratégicos), Classe B = 80–95% (táticos), Classe C = ~5% restantes (operacionais).</span>
 </div>
 {%- endmacro -%}
+
+{# ---- Mini-pill de status de upload (VENDAS / COMPRAS): o estado também vai em texto
+   (lido por leitores de tela), não só na cor e no title. ---- #}
+{%- macro uppill(label, nome, status) -%}
+{%- set estados = {'PROCESSADO': ('b-green', 'processado'), 'ERRO': ('b-red', 'erro'), 'PENDENTE': ('b-amber', 'pendente')} -%}
+{%- set cor, texto = estados.get(status, ('b-muted', 'não enviado')) -%}
+<span class="nexo-badge {{ cor }}" title="{{ nome }}: {{ texto }}">{{ label }}<span class="visually-hidden"> {{ nome }}: {{ texto }}</span></span>
+{%- endmacro -%}

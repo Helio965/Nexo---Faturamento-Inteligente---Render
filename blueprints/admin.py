@@ -1088,56 +1088,108 @@ def processar_analise(id_analise):
     return render_template("admin/processar_resultado.html", analise=analise, resultado=resultado)
 
 
-@admin_bp.route("/analise/deletar/<int:id_analise>", methods=["POST"])
-@admin_required
-def analise_deletar(id_analise):
+# =====================================================================
+# Gerenciar análises por empresa (Editar → empresa → análises → exclusão)
+# =====================================================================
+def _empresa_gerenciavel(id_empresa):
+    """Empresa ativa (fora da lixeira) ou 404: a lixeira tem o seu próprio fluxo."""
+    empresa = db.session.get(Empresa, id_empresa)
+    if empresa is None or empresa.deletado_em is not None:
+        abort(404)
+    return empresa
+
+
+def _excluir_analise(analise):
     """
-    Exclui uma análise e TUDO que depende dela.
+    Exclui UMA análise e tudo que depende dela — e nada além disso.
 
-    Como os relationships em models.py não têm cascade configurado (DER V4
-    imutável + controle explícito do que sai do banco), removemos os filhos
-    em ordem antes da Analise:
+    A remoção das linhas-filhas (uploads, indicador, relatório e Curva ABC) é
+    automática via cascade="all, delete-orphan" (models.py). Arquivos dos
+    uploads: os guardados no banco ('db:<chave>') saem na MESMA transação do
+    commit; os legados em disco só são removidos DEPOIS do commit bem-sucedido,
+    para uma falha no banco não deixar registros sem arquivo (falha parcial).
+    A exclusão é definitiva (não há lixeira para análises).
 
-      1) UploadRelatorio  → também apaga os .xlsx/.csv físicos (best-effort);
-      2) IndicadorAnalise (1:1);
-      3) RelatorioAnalise (1:1);
-      4) Analise.
-
-    Usado primariamente para LIMPAR REGISTROS DE TESTE. Aceita qualquer
-    status, inclusive CONCLUIDO publicado — a confirmação no JS é a
-    salvaguarda contra acidente. POST-only para impedir deleção via
-    crawler/preload de link.
+    Devolve (ok, mensagem).
     """
-    analise = db.session.get(Analise, id_analise)
-    if not analise:
-        flash("Análise não encontrada.", "danger")
-        return redirect(url_for("admin.analises"))
-
-    # Snapshot para a mensagem antes de o objeto sair da sessão
-    titulo_emp = analise.empresa.nome_fantasia or analise.empresa.razao_social
     id_str = f"#{analise.id_analise}"
-
-    # Remove os ARQUIVOS FÍSICOS dos uploads antes de apagar os registros — a
-    # remoção das linhas-filhas (uploads, indicador, relatório e Curva ABC) é
-    # automática via cascade="all, delete-orphan" declarado em models.py.
-    for up in analise.uploads:
-        storage.remover(up.caminho_arquivo)  # best-effort (ver storage.py)
-
-    db.session.delete(analise)  # cascata ORM apaga todos os filhos na ordem certa
-
+    periodo = f"{analise.periodo_inicio.strftime('%d/%m/%Y')} – {analise.periodo_fim.strftime('%d/%m/%Y')}"
+    caminhos = [up.caminho_arquivo for up in analise.uploads if up.caminho_arquivo]
+    em_disco = [c for c in caminhos if not c.startswith(storage.PREFIXO_DB)]
     try:
+        for caminho in caminhos:
+            if caminho.startswith(storage.PREFIXO_DB):
+                storage.remover(caminho)  # linha de mídia na mesma transação
+        db.session.delete(analise)  # cascata ORM apaga todos os filhos na ordem certa
         db.session.commit()
-    except IntegrityError as e:
+    except (IntegrityError, SQLAlchemyError) as e:
         db.session.rollback()
-        current_app.logger.warning("Falha ao excluir análise %s: %s", id_analise, type(e.orig or e).__name__)
-        flash(
-            f"Não foi possível excluir a análise {id_str}: ainda há dados vinculados.",
-            "danger",
-        )
-        return redirect(url_for("admin.analises"))
+        current_app.logger.warning("Falha ao excluir análise %s: %s", id_str, type(getattr(e, "orig", None) or e).__name__)
+        return False, f"Não foi possível excluir a análise {id_str} ({periodo}): ainda há dados vinculados. Nada foi alterado."
+    for caminho in em_disco:
+        storage.remover(caminho)  # best-effort (ver storage.py)
+    return True, f"Análise {id_str} ({periodo}) excluída. As demais análises da empresa foram preservadas."
 
-    flash(f"Análise {id_str} ({titulo_emp}) excluída com sucesso.", "success")
-    return redirect(url_for("admin.analises"))
+
+@admin_bp.route("/analises/gerenciar")
+@admin_required
+def analises_gerenciar():
+    """Gerenciar análises, 1ª tela: seleção da empresa em cartões (sem exclusão aqui)."""
+    empresas = db.session.execute(
+        select(Empresa)
+        .where(Empresa.deletado_em.is_(None))
+        .order_by(Empresa.razao_social.asc())
+    ).scalars().all()
+    contagem = dict(
+        db.session.execute(
+            select(Analise.id_empresa, func.count(Analise.id_analise)).group_by(Analise.id_empresa)
+        ).all()
+    )
+    return render_template("admin/analises_gerenciar.html", empresas=empresas, contagem=contagem)
+
+
+@admin_bp.route("/analises/gerenciar/<int:id_empresa>")
+@admin_required
+def analises_empresa(id_empresa):
+    """Gerenciar análises, 2ª tela: só as análises da empresa selecionada, com exclusão por linha."""
+    empresa = _empresa_gerenciavel(id_empresa)
+    analises = db.session.execute(
+        select(Analise)
+        .where(Analise.id_empresa == empresa.id_empresa)
+        .order_by(Analise.periodo_inicio.desc(), Analise.id_analise.desc())
+    ).scalars().all()
+    return render_template("admin/analises_empresa.html", empresa=empresa, analises=analises)
+
+
+@admin_bp.route("/analises/gerenciar/<int:id_empresa>/excluir/<int:id_analise>", methods=["POST"])
+@admin_required
+def analise_excluir(id_empresa, id_analise):
+    """
+    Exclui a análise <id_analise> SOMENTE se ela pertencer à empresa <id_empresa>
+    selecionada no fluxo de gerenciamento. POST-only (CSRF global), admin-only,
+    confirmação explícita no formulário (campo confirmar=sim). Um identificador de
+    outra empresa, de empresa na lixeira ou inexistente é recusado (404) sem tocar
+    em nada. Não existe exclusão em massa: uma análise por requisição.
+    """
+    empresa = _empresa_gerenciavel(id_empresa)
+    analise = db.session.get(Analise, id_analise)
+    if analise is None or analise.id_empresa != empresa.id_empresa:
+        current_app.logger.warning(
+            "Exclusão recusada: análise %s não pertence à empresa %s (admin %s).",
+            id_analise, id_empresa, current_user.id_usuario,
+        )
+        abort(404)
+    if request.form.get("confirmar") != "sim":
+        abort(400)
+    ok, mensagem = _excluir_analise(analise)
+    if ok:
+        # Ação irreversível: fica registrada (quem, qual análise, de qual empresa).
+        current_app.logger.info(
+            "Análise %s da empresa %s excluída pelo admin %s.",
+            id_analise, id_empresa, current_user.id_usuario,
+        )
+    flash(mensagem, "success" if ok else "danger")
+    return redirect(url_for("admin.analises_empresa", id_empresa=id_empresa))
 
 
 # =====================================================================

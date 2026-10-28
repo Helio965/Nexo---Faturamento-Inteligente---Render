@@ -17,7 +17,7 @@ e e-mail longos, produtos com nomes compridos, faturamento de nove dígitos):
   3. KPIs: nunca estouram o cartão e a fonte não desce de 18px;
   4. NexoBot: o botão flutuante não cobre nenhum controle nem título, no topo e
      no fim da página, e some com a gaveta do menu aberta;
-  5. sidebar: o ponto do item ativo não encosta no rótulo ("Base de Conhecimento");
+  5. sidebar: o ponto do item ativo não encosta no rótulo ("Enviar relatórios");
   6. gráficos: rótulos sem reticências, sem corte e sem sobreposição, com
      alternativa textual (role="img" + aria-label);
   7. envio de relatórios: o campo de arquivo é alcançado pelo Tab, o foco fica
@@ -210,7 +210,7 @@ _MEDIR = """() => {
 
 
 @unittest.skipUnless(_BROWSER, "Defina NEXO_TEST_BROWSER=1 e instale o Playwright para os testes de navegador.")
-class OverflowNavegadorTests(ContratosCase):
+class NavegadorCase(ContratosCase):
     def setUp(self):
         super().setUp()
         self.dados_extensos()
@@ -430,7 +430,8 @@ class OverflowNavegadorTests(ContratosCase):
     def paginas_admin(self):
         base = f"/admin/empresas/{self.empresa_longa_id}"
         return ["/admin/dashboard", "/admin/empresas", "/admin/analises", "/admin/lixeira", "/admin/contratos",
-                "/admin/tickets", "/admin/guia", f"{base}/detalhes",
+                "/admin/tickets", "/admin/analises/gerenciar", f"/admin/analises/gerenciar/{self.empresa_longa_id}",
+                f"{base}/detalhes",
                 # Formulários com linha de botões "Voltar / Confirmar": os dois precisam caber.
                 f"{base}/contratos/{self.contrato_longo_id}/prorrogar", f"{base}/contratos/{self.contrato_longo_id}/cobertura",
                 f"{base}/regras-contratuais/ativar"]
@@ -438,6 +439,11 @@ class OverflowNavegadorTests(ContratosCase):
     def paginas_cliente(self):
         return ["/cliente/dashboard", f"/cliente/analise/{self.analise_id}", "/cliente/historico", "/cliente/upload",
                 "/cliente/tickets", "/cliente/guia"]
+
+
+
+class OverflowNavegadorTests(NavegadorCase):
+    """Cenários de overflow, responsividade e acessibilidade (ver docstring do módulo)."""
 
     def test_admin_sem_cortes_em_todas_as_larguras(self):
         for largura, altura in LARGURAS:
@@ -521,7 +527,7 @@ class OverflowNavegadorTests(ContratosCase):
         self.entrar(pagina, "admin-test@example.invalid")
         self.ir(pagina, f"/admin/analises?empresa={self.empresa_id}")
         self.assertEqual(pagina.locator("#filtroEmpresa").input_value(), str(self.empresa_id))
-        visiveis = pagina.evaluate("[...document.querySelectorAll('#tabelaAnalises tbody tr[data-empresa]')].filter(r => r.style.display !== 'none').map(r => r.dataset.empresa)")
+        visiveis = pagina.evaluate("[...document.querySelectorAll('#tabelaAnalises tbody tr[data-empresa]')].filter(r => getComputedStyle(r).display !== 'none').map(r => r.dataset.empresa)")
         self.assertTrue(visiveis and all(v == str(self.empresa_id) for v in visiveis), visiveis)
         self.ir(pagina, "/admin/empresas")
         href = pagina.locator("#tabelaEmpresas tbody tr").first.locator("a", has_text="Análises").get_attribute("href")
@@ -534,13 +540,27 @@ class OverflowNavegadorTests(ContratosCase):
         self.assertEqual(pagina.locator("#buscaEmpresa").input_value(), "")
 
     def test_sidebar_item_longo_nao_encosta_no_indicador(self):
-        pagina = self.abrir(1440, 900)
+        """O rótulo mais largo de cada menu (admin: "Dashboard", 75,9 px na Inter; cliente:
+        "Enviar relatórios") nunca encosta no ponto do item ativo."""
+        for email, caminho, rotulo in (("admin-test@example.invalid", "/admin/dashboard", "Dashboard"),
+                                       ("cliente-test@example.invalid", "/cliente/upload", "Enviar relatórios")):
+            pagina = self.abrir(1440, 900)
+            self.entrar(pagina, email)
+            self.ir(pagina, caminho)
+            m = self.medir(pagina)
+            self.assertEqual(m["sidebar"]["rotulo"], rotulo, m["sidebar"])
+            self.assertTrue(m["sidebar"]["fluxo"], "o indicador deve ser um item do flex, não absoluto")
+            self.assertLessEqual(m["sidebar"]["texto_direita"] + 6 + 12, m["sidebar"]["item_direita"] + 1, m["sidebar"])
+            pagina.context.close()
+
+    def test_menu_administrativo_sem_base_de_conhecimento(self):
+        pagina = self.abrir(1366, 768)
         self.entrar(pagina, "admin-test@example.invalid")
-        self.ir(pagina, "/admin/guia")
-        m = self.medir(pagina)
-        self.assertEqual(m["sidebar"]["rotulo"], "Base de Conhecimento", m["sidebar"])
-        self.assertTrue(m["sidebar"]["fluxo"], "o indicador deve ser um item do flex, não absoluto")
-        self.assertLessEqual(m["sidebar"]["texto_direita"] + 6 + 12, m["sidebar"]["item_direita"] + 1, m["sidebar"])
+        self.ir(pagina, "/admin/dashboard")
+        rotulos = pagina.locator(".sidebar-nav .nav-item").all_text_contents()
+        rotulos = [r.strip() for r in rotulos]
+        self.assertNotIn("Base de Conhecimento", rotulos, rotulos)
+        self.assertEqual(rotulos, ["Dashboard", "Empresas", "Contratos", "Lixeira", "Análises", "Suporte"])
 
     def test_upload_acessivel_pelo_teclado_e_sem_envio_vazio(self):
         pagina = self.abrir(1366, 768)
