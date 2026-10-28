@@ -72,6 +72,8 @@
   --glass-shine:    inset 0 1px 0 rgba(255, 255, 255, 0.07);
   --glass-blur:     blur(18px) saturate(150%);
   --glass-blur-sm:  blur(12px) saturate(140%);
+  --topbar-blur-forte: blur(26px) saturate(160%);
+  --topbar-blur-suave: blur(8px) saturate(130%);
   --shadow-glass:   0 18px 44px -22px rgba(3, 0, 12, 0.9), 0 2px 10px -4px rgba(3, 0, 12, 0.5);
   --radius-lg:      22px;
   --radius-xl:      26px;
@@ -421,21 +423,53 @@ a { text-decoration: none; }
   flex-direction: column;
 }
 
-/* Topbar flutuante em vidro */
+/* Topbar: faixa contínua de vidro, de ponta a ponta da área principal (começa no
+   limite da sidebar e vai até a borda direita), com DESFOQUE GRADUAL: no topo o
+   conteúdo que passa atrás fica bem desfocado e um pouco mais escuro (protege o
+   título, o sino e o usuário); na base o desfoque é suave e a superfície mais
+   translúcida, sem degraus visíveis. O desfoque fica em duas camadas decorativas
+   (::before forte, com máscara em degradê; ::after suave, inteira) e não no
+   próprio .topbar: um backdrop-filter no pai limitaria o que as camadas "veem"
+   e cortaria o menu do sino. As camadas não interceptam cliques. */
 .topbar {
   position: sticky; top: var(--shell-gap);
   height: var(--topbar-h);
   display: flex; align-items: center; gap: 16px;
   margin: var(--shell-gap) var(--shell-gap) 0 0;
   padding: 0 14px 0 24px;
-  background: var(--glass-chrome);
-  -webkit-backdrop-filter: var(--glass-blur);
-  backdrop-filter: var(--glass-blur);
+  background: transparent;
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-glass), var(--glass-shine);
   z-index: 1020;
-  max-width: 1440px;
+}
+.topbar::before, .topbar::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit;
+  pointer-events: none; z-index: -1;
+}
+/* Camada forte: desfoque intenso + véu escuro, 100 % no topo → 0 % na base. */
+.topbar::before {
+  background: linear-gradient(180deg, rgba(12, 8, 26, 0.66) 0%, rgba(14, 10, 30, 0.46) 60%, rgba(16, 12, 32, 0.30) 100%);
+  -webkit-backdrop-filter: var(--topbar-blur-forte);
+  backdrop-filter: var(--topbar-blur-forte);
+  -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.9) 30%, rgba(0, 0, 0, 0.45) 68%, rgba(0, 0, 0, 0.06) 100%);
+  mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.9) 30%, rgba(0, 0, 0, 0.45) 68%, rgba(0, 0, 0, 0.06) 100%);
+}
+/* Camada suave: desfoque leve em toda a altura, para a base nunca ficar "crua". */
+.topbar::after {
+  background: rgba(16, 12, 30, 0.22);
+  -webkit-backdrop-filter: var(--topbar-blur-suave);
+  backdrop-filter: var(--topbar-blur-suave);
+}
+/* Sem backdrop-filter (ou com transparência reduzida): superfície quase opaca,
+   num único degradê, sem camadas. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .topbar { background: linear-gradient(180deg, rgba(14, 10, 28, 0.97) 0%, rgba(17, 13, 32, 0.93) 100%); }
+  .topbar::before, .topbar::after { display: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .topbar { background: linear-gradient(180deg, rgba(14, 10, 28, 0.98) 0%, rgba(17, 13, 32, 0.96) 100%); }
+  .topbar::before, .topbar::after { display: none; }
 }
 .topbar-title { font-size: 1.12rem; font-weight: 700; flex: 1; min-width: 0; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .topbar-title small { display: block; font-size: 0.68rem; font-weight: 600; color: #a49cc4; letter-spacing: 0.12em; text-transform: uppercase; }
@@ -732,6 +766,71 @@ a { text-decoration: none; }
 [data-bs-theme="dark"] .btn-secondary { background: var(--surface-3); border-color: var(--border); }
 
 .btn-sm-x { padding: 6px 13px; font-size: 0.84rem; }
+
+/* ===================== GERENCIAR ANÁLISES ======================== */
+/* Trilha "Análises › Gerenciar análises › Empresa" acima do título. */
+.trilha { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 0.78rem; color: #a49cc4; margin-bottom: 6px; }
+.trilha a { color: #c4a0fb; text-decoration: none; }
+.trilha a:hover { text-decoration: underline; }
+.trilha a:focus-visible { outline: 2px solid var(--primary-2); outline-offset: 2px; border-radius: 4px; }
+.trilha [aria-current="page"] { color: var(--text); font-weight: 600; }
+.trilha-sep { color: #6f6894; }
+/* Grade de cartões de empresa (seleção): vidro roxo translúcido, cantos de 20 px,
+   cubo da marca, nome fantasia, razão social, CNPJ e contagem de análises. */
+.empresa-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 14px; }
+.empresa-card {
+  display: flex; align-items: center; gap: 14px; min-width: 0;
+  padding: 16px 16px 16px 18px;
+  background: linear-gradient(135deg, rgba(60, 32, 120, 0.42) 0%, rgba(20, 15, 38, 0.62) 100%);
+  -webkit-backdrop-filter: var(--glass-blur-sm);
+  backdrop-filter: var(--glass-blur-sm);
+  border: 1px solid var(--glass-border); border-radius: 20px;
+  box-shadow: var(--shadow-glass), var(--glass-shine);
+  color: var(--text); text-decoration: none;
+  transition: transform 0.18s var(--ease-out), border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+a.empresa-card:hover, a.empresa-card:focus-visible {
+  transform: translateY(-2px);
+  border-color: var(--glass-border-2);
+  background: linear-gradient(135deg, rgba(90, 48, 170, 0.5) 0%, rgba(30, 22, 56, 0.7) 100%);
+  box-shadow: 0 18px 40px -18px rgba(168, 85, 247, 0.55), var(--glass-shine);
+  color: #fff;
+}
+a.empresa-card:focus-visible { outline: 2px solid var(--primary-2); outline-offset: 3px; }
+a.empresa-card:hover .ec-seta, a.empresa-card:focus-visible .ec-seta { color: #e4d2ff; transform: translateX(3px); }
+/* Empresa selecionada (2ª tela): contorno roxo, marca de confirmação, sem elevação. */
+.empresa-card.is-selecionada {
+  border-color: rgba(196, 160, 251, 0.5);
+  box-shadow: 0 0 0 1px rgba(168, 85, 247, 0.35), 0 18px 40px -22px rgba(168, 85, 247, 0.6), var(--glass-shine);
+  background: linear-gradient(135deg, rgba(90, 48, 170, 0.46) 0%, rgba(26, 18, 50, 0.72) 100%);
+}
+.ec-icone {
+  flex: 0 0 auto; width: 54px; height: 54px; display: grid; place-items: center;
+  border-radius: 16px; background: rgba(168, 85, 247, 0.12); border: 1px solid rgba(196, 160, 251, 0.2);
+}
+.ec-icone img { width: 36px; height: auto; filter: drop-shadow(0 4px 10px rgba(168, 85, 247, 0.45)); }
+.ec-corpo { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.ec-nome { font-weight: 700; font-size: 1.02rem; letter-spacing: -0.005em; overflow-wrap: anywhere; }
+.ec-razao { font-size: 0.82rem; color: #b7b2d3; overflow-wrap: anywhere; }
+.ec-meta { display: flex; flex-wrap: wrap; gap: 6px; font-size: 0.76rem; color: #a49cc4; overflow-wrap: anywhere; }
+.ec-meta .t-mono { font-family: var(--font-mono); }
+.ec-sep { color: #6f6894; }
+.ec-rodape { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ec-seta { flex: 0 0 auto; color: #8f86b8; font-size: 1.1rem; transition: transform 0.18s var(--ease-out), color 0.18s ease; }
+.ec-check { color: #c4a0fb; font-size: 1.35rem; }
+.empty-state-sm { padding: 28px 16px; }
+.empty-state-sm h3 { font-size: 1rem; margin-bottom: 10px; }
+/* Resumo da análise no modal de confirmação (empresa, período, tipo, identificador). */
+.resumo-exclusao { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; margin: 0 0 14px; }
+.resumo-exclusao div { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--glass-border); border-radius: 12px; padding: 8px 12px; min-width: 0; }
+.resumo-exclusao dt { font-size: 0.66rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a49cc4; margin-bottom: 2px; }
+.resumo-exclusao dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
+.aviso-perigo { color: #fca5a5; display: flex; gap: 8px; align-items: flex-start; }
+.aviso-perigo i { flex: 0 0 auto; margin-top: 2px; }
+@media (max-width: 575.98px) {
+  .resumo-exclusao { grid-template-columns: 1fr; }
+  .empresa-card { padding: 14px; gap: 12px; }
+}
 
 /* ===================== FORMULÁRIOS ============================== */
 .form-section-title { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--primary); margin: 6px 0 4px; }
@@ -1035,6 +1134,15 @@ a { text-decoration: none; }
 /* Ações da linha: botões lado a lado, quebrando em duas fileiras quando a coluna
    fica estreita (a tabela encolhe a coluna em vez de empurrar as outras). */
 .nexo-table .acoes { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px; }
+/* Coluna "Ações" com a largura do seu conteúdo (botões compactos), para não
+   roubar espaço das colunas de dados nem encobrir nada. */
+.nexo-table th.col-acao, .nexo-table td.col-acao { width: 1%; white-space: nowrap; }
+.nexo-table .col-acao .acoes { flex-wrap: nowrap; }
+/* No modo cartões a célula de ações é um bloco comum (sem a largura mínima). */
+.table-responsive-x.em-cartoes .nexo-table td.col-acao { width: auto; white-space: normal; }
+.table-responsive-x.em-cartoes .nexo-table .col-acao .acoes { flex-wrap: wrap; justify-content: flex-start; }
+.btn-abrir { padding: 5px 11px; font-size: 0.82rem; border-radius: 10px; gap: 6px; }
+.btn-abrir i { font-size: 0.9em; }
 .nexo-table .acoes .btn-ghost, .nexo-table .acoes .btn { white-space: nowrap; }
 .table-responsive-x { position: relative; scrollbar-width: thin; scrollbar-color: rgba(196, 160, 251, 0.45) transparent; }
 .table-responsive-x::-webkit-scrollbar { height: 8px; }
@@ -1098,6 +1206,62 @@ a { text-decoration: none; }
 .table-responsive-x.em-cartoes .nexo-table tbody td[data-label=""]::before { display: none; }
 .table-responsive-x.em-cartoes .nexo-table tbody td:first-child { font-size: 1rem; padding-top: 12px; }
 .table-responsive-x.em-cartoes .nexo-table tbody td.t-mono { white-space: normal; }
+
+/* ===================== ACABAMENTO DAS BORDAS ======================= */
+/* Divisórias internas com as pontas suavizadas (somem antes de tocar as bordas
+   arredondadas do contêiner) e realces de linha com cantos arredondados, para
+   nenhuma linha reta "cortar" um cartão arredondado em dois blocos. As bordas
+   externas continuam como estão; nada usa overflow: hidden a mais. */
+:root {
+  --divisoria: rgba(255, 255, 255, 0.055);
+  --divisoria-forte: var(--glass-border);
+  --recuo-divisoria: 18px;
+}
+/* Tabela em modo "separate" (border-spacing 0): permite cantos arredondados nas
+   células das pontas; cada célula continua desenhando a sua própria divisória. */
+.nexo-table { border-collapse: separate; border-spacing: 0; }
+.nexo-table thead th:first-child {
+  border-image: linear-gradient(90deg, transparent 0, var(--divisoria-forte) var(--recuo-divisoria)) 1;
+}
+.nexo-table thead th:last-child {
+  border-image: linear-gradient(90deg, var(--divisoria-forte) calc(100% - var(--recuo-divisoria)), transparent 100%) 1;
+}
+.nexo-table thead th:first-child:last-child {
+  border-image: linear-gradient(90deg, transparent 0, var(--divisoria-forte) var(--recuo-divisoria), var(--divisoria-forte) calc(100% - var(--recuo-divisoria)), transparent 100%) 1;
+}
+.nexo-table tbody td:first-child {
+  border-image: linear-gradient(90deg, transparent 0, var(--divisoria) var(--recuo-divisoria)) 1;
+}
+.nexo-table tbody td:last-child {
+  border-image: linear-gradient(90deg, var(--divisoria) calc(100% - var(--recuo-divisoria)), transparent 100%) 1;
+}
+.nexo-table tbody td:first-child:last-child {
+  border-image: linear-gradient(90deg, transparent 0, var(--divisoria) var(--recuo-divisoria), var(--divisoria) calc(100% - var(--recuo-divisoria)), transparent 100%) 1;
+}
+.nexo-table tbody tr:last-child td { border-image: none; }
+/* Realce ao passar o mouse: fundo nas células (não na linha) com as pontas
+   arredondadas e o traço roxo acompanhando o canto, em vez da barra reta. */
+.nexo-table tbody tr:hover { background: transparent; box-shadow: none; }
+.nexo-table tbody tr > td { transition: background 0.14s ease, box-shadow 0.14s ease; }
+.nexo-table tbody tr:hover > td { background: rgba(168, 85, 247, 0.10); }
+.nexo-table tbody tr:hover > td:first-child { border-radius: 12px 0 0 12px; box-shadow: inset 3px 0 0 var(--primary); }
+.nexo-table tbody tr:hover > td:last-child { border-radius: 0 12px 12px 0; }
+.nexo-table tbody tr:hover > td:first-child:last-child { border-radius: 12px; }
+/* Linha selecionada/ativa (ex.: filtro ou foco dentro da linha) com o mesmo acabamento. */
+.nexo-table tbody tr.is-selecionada > td, .nexo-table tbody tr:focus-within > td { background: rgba(168, 85, 247, 0.12); }
+.nexo-table tbody tr.is-selecionada > td:first-child, .nexo-table tbody tr:focus-within > td:first-child { border-radius: 12px 0 0 12px; box-shadow: inset 3px 0 0 var(--primary); }
+.nexo-table tbody tr.is-selecionada > td:last-child, .nexo-table tbody tr:focus-within > td:last-child { border-radius: 0 12px 12px 0; }
+/* No modo cartões cada linha já é um cartão arredondado: nada disso se aplica. */
+.table-responsive-x.em-cartoes .nexo-table tbody td, .table-responsive-x.em-cartoes .nexo-table thead th { border-image: none; }
+.table-responsive-x.em-cartoes .nexo-table tbody tr:hover > td, .table-responsive-x.em-cartoes .nexo-table tbody tr:focus-within > td { background: transparent; box-shadow: none; border-radius: 0; }
+.table-responsive-x.em-cartoes .nexo-table tbody tr:hover { background: rgba(168, 85, 247, 0.08); box-shadow: inset 0 0 0 1px var(--glass-border-2); }
+/* Divisórias de cabeçalhos e rodapés de cartões, da dica de rolagem, da marca e do
+   rodapé da sidebar: recuo nas pontas, com um degradê discreto. */
+.nexo-card-head, .table-wrap .nexo-card-head, .dica-rolagem, .sidebar-brand, .sidebar-foot,
+[data-bs-theme="dark"] .card-header, .nexo-modal .modal-header, .nexo-modal .modal-footer {
+  border-image: linear-gradient(90deg, transparent 0, var(--divisoria-forte) 24px, var(--divisoria-forte) calc(100% - 24px), transparent 100%) 1 !important;
+}
+
 .table-responsive-x.em-cartoes .nexo-table tbody td.celula-acoes { padding-top: 12px; padding-bottom: 10px; }
 .table-responsive-x.em-cartoes .nexo-table tbody td.celula-acoes .acoes { justify-content: flex-start; }
 .table-responsive-x.em-cartoes .nexo-table tbody td[colspan] { text-align: center !important; }
@@ -1922,3 +2086,15 @@ input, textarea, select, option,
 /* Páginas de erro (403/404/429/500): código discreto acima do título. */
 .erro-codigo { margin: 0 0 2px; font-family: var(--font-mono); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.12em; color: #c4a0fb; }
 .erro-card .conta-encerrada-texto { text-wrap: balance; }
+
+/* ===================== TABELAS EM NOTEBOOKS (≤ 1440 px) =============== */
+/* Com a coluna de ações reduzida a um botão, a listagem de análises (9 colunas)
+   cabe inteira a 1366 px quando as células respiram um pouco menos nas laterais;
+   nada é escondido e o texto mantém o tamanho. */
+@media (max-width: 1439.98px) {
+  .nexo-table thead th { padding: 12px 10px; }
+  .nexo-table tbody td { padding: 13px 10px; }
+  .nexo-table thead th:first-child, .nexo-table tbody td:first-child { padding-left: 16px; }
+  .nexo-table thead th:last-child, .nexo-table tbody td:last-child { padding-right: 16px; }
+  .nexo-table .col-nome { min-width: 170px; }
+}
