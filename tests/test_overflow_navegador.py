@@ -527,7 +527,7 @@ class OverflowNavegadorTests(NavegadorCase):
         self.entrar(pagina, "admin-test@example.invalid")
         self.ir(pagina, f"/admin/analises?empresa={self.empresa_id}")
         self.assertEqual(pagina.locator("#filtroEmpresa").input_value(), str(self.empresa_id))
-        visiveis = pagina.evaluate("[...document.querySelectorAll('#tabelaAnalises tbody tr[data-empresa]')].filter(r => r.style.display !== 'none').map(r => r.dataset.empresa)")
+        visiveis = pagina.evaluate("[...document.querySelectorAll('#tabelaAnalises tbody tr[data-empresa]')].filter(r => getComputedStyle(r).display !== 'none').map(r => r.dataset.empresa)")
         self.assertTrue(visiveis and all(v == str(self.empresa_id) for v in visiveis), visiveis)
         self.ir(pagina, "/admin/empresas")
         href = pagina.locator("#tabelaEmpresas tbody tr").first.locator("a", has_text="Análises").get_attribute("href")
