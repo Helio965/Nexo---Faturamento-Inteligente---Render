@@ -11,7 +11,7 @@ Documento preparado para ser auditado de forma independente (ChatGPT). Tudo o qu
 | Repositório | `Helio965/Nexo---Faturamento-Inteligente---Render` |
 | Branch de trabalho | `claude/awesome-pascal-0ho42m` (branch designada desta sessão, recriada sobre a `main`; o nome sugerido `feature/nexo-gerenciamento-analises-topbar-refinamento` fica registrado, mas a sessão só publica na branch designada) |
 | SHA inicial (`main`) | `264f713b387f25e88e6e645c53788e0f9e0b9a8a` (merge do PR #32), confirmado antes de iniciar |
-| SHA final | «SHA_FINAL» |
+| SHA final | `9281abf66957b326a9432a6744e3d4d28a42d343` (último commit de código: `fix(admin): aplicar achados da revisao…`); os commits posteriores da branch são apenas de documentação (`docs(ui)`, ver seção H) e não alteram código, CSS, templates ou testes |
 | Data | 28/10/2026 |
 | Ambiente | Ubuntu 24.04, Python 3.12, Flask 3.1, Chromium 1243 (Chrome for Testing 153) via Playwright; SQLite temporário com as migrações reais; PostgreSQL 16 descartável nos ensaios da suíte; CDN servida de cópias locais íntegras (hash SRI); fontes Inter/JetBrains Mono. Firefox e WebKit não existem no ambiente (limitação registrada). |
 
@@ -83,9 +83,9 @@ Não foram alterados: modelos, migrações, regras contratuais, ETL, PDFs, APIs,
 |---|---|---|
 | Suíte oficial — base | `264f713` (`main`) | 814 testes aprovados (suíte final da etapa anterior, local e na CI) |
 | Suíte oficial — intermediária (local) | `6678eca` | 836 testes, 0 falhas, 0 erros, 0 pulados, 777 s; ensaios PostgreSQL "isolado", "AJ-06.1" e "gestão contratual" com `status: ok` (+22 testes novos) |
-| Suíte oficial — final (local) | «SHA_FINAL_CURTO» | «SUITE_FINAL» |
+| Suíte oficial — final (local) | `9281abf` | «SUITE_FINAL» |
 | Suíte oficial — final (CI, PR #33) | «CI_SUITE» | «CI_SUITE_RESULTADO» |
-| Módulos desta etapa em execução isolada | `6678eca` → «SHA_FINAL_CURTO» | 42 testes (gerenciamento HTTP 16 + navegador 5 + overflow 21), 42 OK; após as correções da revisão: «MODULOS_FINAL» |
+| Módulos desta etapa em execução isolada | `6678eca` → `9281abf` | 42 testes (gerenciamento HTTP 16 + navegador 5 + overflow 21), 42 OK; após as correções da revisão (`9281abf`): gerenciamento HTTP 17 + navegador 5 = 22 testes, 22 OK em 149 s |
 
 **Testes de navegador** (Chromium): fluxo completo do gerenciamento (Editar → busca com e sem acento → Limpar → grade como lista real de links, busca por CNPJ sem máscara e com máscara parcial → Tab+Enter no cartão → grupo "Empresa selecionada" → análises só da empresa → modal com empresa/período/tipo/identificador → Cancelar sem efeito → Confirmar exclui só a escolhida → mensagem → Voltar); gerenciamento e listagem em 320, 360, 390, 768, 1024, 1366, 1536 e 1920 px (sem rolagem da listagem a partir de 1366 px, botões de ação legíveis, nada encoberto); topbar em 12 páginas autenticadas × 5 larguras com a página rolada (camadas forte/suave, máscara em degradê, `pointer-events: none`, faixa de ponta a ponta, título visível); sino aberto acima do cabeçalho, inteiro na tela; bordas (`border-collapse: separate`, divisórias com degradê nas pontas, realce arredondado sem a barra reta). **Segurança** (HTTP): 403 para CLIENTE, redirecionamento do anônimo, 405 para GET, 400 sem CSRF ou sem confirmação, 404 para análise de outra empresa/inexistente/empresa na lixeira, cascata e arquivo, falha no commit sem estado inconsistente, ausência de exclusão em massa, rota antiga removida. **Responsividade**: ver acima; zoom 150 % e teclado continuam cobertos pelo módulo de overflow. Mapa dos 25 cenários → testes em `resultados_testes.txt` do pacote.
 
@@ -98,7 +98,23 @@ Não foram alterados: modelos, migrações, regras contratuais, ETL, PDFs, APIs,
 
 ## F. Evidências
 
-«EVIDENCIAS»
+Pacote `NEXO_AJUSTES_ANALISES_TOPBAR_BORDAS.zip` → pasta `evidencias/` (39 capturas PNG reais, índice `INDICE.md` e `manifest.json` com origem, SHA do código, viewport, dimensões e SHA-256 de cada arquivo). Todas as capturas foram feitas em Chromium headless (Playwright) contra o sistema real rodando em cópia descartável, com o seed de homologação (empresas "Demo", e-mails `example.invalid`): nenhuma imagem foi gerada ou retocada artificialmente. ANTES = código `264f713`; DEPOIS = código final da branch.
+
+| Evidência | Arquivos (pasta `evidencias/`) | O que mostra |
+|---|---|---|
+| E1 — Análises ANTES | `E01_analises_ANTES_1366.png`, `E01b_analises_ANTES_dobra_1366.png`, `E01c_analises_ANTES_390.png` | Listagem geral com lixeira em cada linha, coluna Ações comprimida e cortada pela rolagem na primeira dobra de 1366×768; lixeira também nos cartões do celular. |
+| E2 — Análises DEPOIS | `E02_analises_DEPOIS_1366.png`, `E02b_analises_DEPOIS_dobra_1366.png` | Botão Editar ao lado de Nova análise, Ações compacta só com Abrir, sem lixeira, tabela inteira visível a 1366 px sem rolagem horizontal, linha em foco com realce arredondado. |
+| E3 — Seleção de empresas | `E03_gerenciar_selecao_empresas_1366.png`, `E03b_gerenciar_busca_1366.png`, `E03c_gerenciar_cartao_hover_1366.png` | Cartões de vidro com cubo, nome fantasia, razão social, CNPJ, ID, contagem e plano; busca filtrando ("aurora" → 1 cartão); hover com elevação; nenhuma lixeira. |
+| E4 — Gerenciamento de uma empresa | `E04_gerenciar_empresa_selecionada_1366.png` | Cartão selecionado com marca de confirmação, trilha Análises › Gerenciar análises › empresa, análises só da empresa com Abrir e Excluir por linha, "Voltar à seleção de empresas". |
+| E5 — Modal de confirmação | `E05_modal_confirmacao_exclusao_1366.png` | "Excluir análise?" com empresa, período, tipo, identificador, aviso de exclusão definitiva, Cancelar / Confirmar exclusão em vermelho. |
+| E6 — Topbar ANTES | `E06_topbar_ANTES_dashboard_y420_1366.png`, `E06b_…faixa_y420…`, `E06c_…y980…`, `E06d_…faixa_y980…` | Dashboard rolado 420 e 980 px: superfície uniforme, conteúdo e gráficos passando atrás com um único desfoque. |
+| E7 — Topbar DEPOIS | `E07_topbar_DEPOIS_dashboard_y420_1366.png`, `E07b_…faixa_y420…`, `E07c_…y980…`, `E07d_…faixa_y980…` | Mesmas posições: topo mais desfocado e escuro, base mais translúcida com as formas atrás ainda perceptíveis; título, sino e usuário legíveis. |
+| E8 — Topbar em outra página | `E08_topbar_outra_pagina_empresas_1366.png` (+ `E08b_…faixa…`), `E08c_topbar_area_cliente_1366.png` (+ `E08d_…faixa…`), `E08e_topbar_sino_aberto_1366.png` | Componente global: Empresas (admin) e dashboard do cliente com o mesmo efeito, faixa de ponta a ponta; menu do sino aberto acima da topbar sem corte. |
+| E9 — Bordas ANTES/DEPOIS | `E09_bordas_ANTES_analises_1366.png` / `E09b_bordas_DEPOIS_analises_1366.png`, `E09c`/`E09d` (empresas), `E09e`/`E09f` (histórico do cliente) | Divisórias retas de ponta a ponta e realce reto (antes) versus divisórias com recuo nas pontas, linha em foco com cantos de 12 px e traço roxo acompanhando o canto (depois). |
+| E10 — Sidebar sem Base de Conhecimento | `E10_sidebar_ANTES_com_base_de_conhecimento_1366.png`, `E10b_sidebar_DEPOIS_sem_base_de_conhecimento_1366.png` | Menu com sete itens (antes) e com seis — Dashboard, Empresas, Contratos, Lixeira, Análises, Suporte — (depois); indicador do item ativo preservado. |
+| E11 — Celular (390 px) | `E11_mobile_analises_390.png`, `E11b_mobile_gerenciar_selecao_390.png`, `E11c_mobile_gerenciar_empresa_390.png`, `E11d_mobile_modal_confirmacao_390.png`, `E11e_mobile_topbar_dashboard_390.png`, `E11f_mobile_sino_aberto_390.png`, `E11g_mobile_menu_lateral_390.png`, `E11h_mobile_bordas_analises_390.png` | Listagem em modo cartões só com Abrir; seleção de empresas em uma coluna; análises da empresa com Abrir/Excluir sem sobreposição; modal; topbar de margem a margem com botão do menu, sino e usuário; sino aberto inteiro na tela; menu lateral sem Base de Conhecimento; bordas no modo cartões. |
+
+Observação de leitura: o desfoque gradual é sutil por desenho (sem "névoa" artificial); nas faixas recortadas (`*_faixa_*`, 118 px de altura) a diferença entre o topo e a base da topbar é mais fácil de ver, principalmente sobre os gráficos (E7d). Todas as capturas de "antes" e "depois" foram feitas com o mesmo roteiro, o mesmo seed e as mesmas posições de rolagem.
 
 ## G. Segurança
 
@@ -135,7 +151,9 @@ Commits (ordem cronológica):
 | `c702de0` | docs(ui): relatorio tecnico da etapa para auditoria independente (rascunho) |
 | `6678eca` | test(ui): aceitar border-spacing computado como valor unico |
 | `3c1b612` | docs(ui): secoes de auditoria, alteracoes, arquivos, seguranca, GitHub e pendencias do relatorio |
-«COMMITS_NOVOS»
+| `9281abf` | fix(admin): aplicar achados da revisao no gerenciamento de analises |
+| `256cf1b` | docs(ui): achados da revisao, correcoes e rastreabilidade no relatorio (parcial) |
+| (último) | docs(ui): evidencias, testes finais, CI e parecer do relatorio — commit de fechamento, só documentação |
 
 
 ## I. Pendências
