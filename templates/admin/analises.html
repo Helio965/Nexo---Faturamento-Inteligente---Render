@@ -4,14 +4,6 @@
 {% block title %}Análises — NEXO Admin{% endblock %}
 {% block page_title %}Análises{% endblock %}
 
-{# Mini-pill de status de upload (VENDAS / COMPRAS): o estado também vai em texto
-   (lido por leitores de tela), não só na cor e no title. #}
-{% macro uppill(label, nome, status) -%}
-{%- set estados = {'PROCESSADO': ('b-green', 'processado'), 'ERRO': ('b-red', 'erro'), 'PENDENTE': ('b-amber', 'pendente')} -%}
-{%- set cor, texto = estados.get(status, ('b-muted', 'não enviado')) -%}
-<span class="nexo-badge {{ cor }}" title="{{ nome }}: {{ texto }}">{{ label }}<span class="visually-hidden"> {{ nome }}: {{ texto }}</span></span>
-{%- endmacro %}
-
 {% block content %}
 <div class="page-head">
     <div>
@@ -19,7 +11,10 @@
         <p class="sub">Entregas de inteligência de faturamento por empresa e período.</p>
     </div>
     <div class="page-head-actions">
-        <a href="{{ url_for('admin.analise_nova') }}" class="btn-nexo"><i class="bi bi-plus-lg"></i> Nova análise</a>
+        {# Gerenciar (editar/excluir) é feito por empresa, em fluxo próprio: a listagem
+           geral só abre análises — nenhuma exclusão direta aqui. #}
+        <a href="{{ url_for('admin.analises_gerenciar') }}" class="btn-nexo" id="btnGerenciar"><i class="bi bi-pencil-square" aria-hidden="true"></i> Editar</a>
+        <a href="{{ url_for('admin.analise_nova') }}" class="btn-nexo"><i class="bi bi-plus-lg" aria-hidden="true"></i> Nova análise</a>
     </div>
 </div>
 
@@ -67,7 +62,7 @@
                     <th>Uploads</th>
                     <th>Criação</th>
                     <th>Publicado</th>
-                    <th class="text-end">Ações</th>
+                    <th class="text-end col-acao">Ações</th>
                 </tr>
             </thead>
             <tbody>
@@ -81,23 +76,12 @@
                     <td>{{ 'Quinzenal' if a.tipo_analise == 'QUINZENAL' else 'Mensal' }}</td>
                     <td class="t-mut">{{ (a.quinzena_referencia ~ 'ª') if a.quinzena_referencia else '—' }}</td>
                     <td>{{ m.badge_analise(a.status_analise) }}</td>
-                    <td style="white-space:nowrap;">{{ uppill('V', 'Vendas', up_v.status_processamento if up_v else None) }} {{ uppill('C', 'Compras', up_c.status_processamento if up_c else None) }}</td>
+                    <td class="t-nowrap">{{ m.uppill('V', 'Vendas', up_v.status_processamento if up_v else None) }} {{ m.uppill('C', 'Compras', up_c.status_processamento if up_c else None) }}</td>
                     <td class="t-mut t-mono">{{ a.data_criacao.strftime('%d/%m/%Y') }}</td>
                     <td>{% if a.relatorio and a.relatorio.publicado %}<span class="nexo-badge b-green"><i class="bi bi-check2"></i> Sim</span>{% else %}<span class="nexo-badge b-muted">Não</span>{% endif %}</td>
-                    <td class="text-end">
+                    <td class="text-end col-acao">
                         <div class="acoes">
-                            <a href="{{ url_for('admin.analise_upload', id_analise=a.id_analise) }}" class="btn-ghost btn-sm-x" aria-label="Abrir análise de {{ nome_empresa }}, {{ a.periodo_inicio.strftime('%d/%m/%Y') }} a {{ a.periodo_fim.strftime('%d/%m/%Y') }}"><i class="bi bi-box-arrow-up-right"></i> Abrir</a>
-                            {# Trigger do modal central — o <form method=POST> real vive UMA única vez
-                               no final do bloco e tem sua action setada dinamicamente pelo handler de
-                               show.bs.modal. data-bs-empresa/periodo viram contexto no corpo do modal. #}
-                            <button type="button" class="btn-ghost is-danger btn-sm-x"
-                                    data-bs-toggle="modal" data-bs-target="#confirmDeleteModal"
-                                    data-bs-url="{{ url_for('admin.analise_deletar', id_analise=a.id_analise) }}"
-                                    data-bs-empresa="{{ nome_empresa }}"
-                                    data-bs-periodo="{{ a.periodo_inicio.strftime('%d/%m/%Y') }} – {{ a.periodo_fim.strftime('%d/%m/%Y') }}"
-                                    title="Excluir análise" aria-label="Excluir análise de {{ nome_empresa }}, {{ a.periodo_inicio.strftime('%d/%m/%Y') }} a {{ a.periodo_fim.strftime('%d/%m/%Y') }}">
-                                <i class="bi bi-trash" aria-hidden="true"></i>
-                            </button>
+                            <a href="{{ url_for('admin.analise_upload', id_analise=a.id_analise) }}" class="btn-ghost btn-abrir" aria-label="Abrir análise de {{ nome_empresa }}, {{ a.periodo_inicio.strftime('%d/%m/%Y') }} a {{ a.periodo_fim.strftime('%d/%m/%Y') }}"><i class="bi bi-box-arrow-up-right" aria-hidden="true"></i> Abrir</a>
                         </div>
                     </td>
                 </tr>
@@ -120,50 +104,6 @@
 </div>
 {% endif %}
 
-{# =====================================================================
-   Modal único de confirmação de exclusão.
-   - 1 instância no DOM, reaproveitada por TODAS as linhas (1 trigger por linha).
-   - O <form id="confirmDeleteForm"> tem action vazia: é preenchida em runtime
-     pelo handler de show.bs.modal a partir do data-bs-url do botão clicado.
-   - Visual na identidade do painel: classes .nexo-modal.is-perigo (nexo.css) +
-     btn-close-white.
-   ===================================================================== #}
-<div class="modal fade nexo-modal is-perigo" id="confirmDeleteModal" tabindex="-1"
-     aria-labelledby="confirmDeleteLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title d-flex align-items-center gap-2" id="confirmDeleteLabel">
-                    <i class="bi bi-exclamation-triangle-fill text-danger"></i>
-                    Confirmar exclusão
-                </h5>
-                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Fechar"></button>
-            </div>
-            <div class="modal-body">
-                <p class="mb-2">Você está prestes a excluir permanentemente:</p>
-                <ul class="mb-3" style="list-style:none; padding-left:0;">
-                    <li><strong class="text-light" id="confirmDeleteEmpresa">—</strong></li>
-                    <li class="text-muted t-mono" style="font-size:0.88rem;" id="confirmDeletePeriodo">—</li>
-                </ul>
-                <p class="mb-0 small text-muted">
-                    Todos os indicadores, uploads e a devolutiva estratégica vinculados serão
-                    removidos do banco. <strong class="text-light">Esta ação não pode ser desfeita.</strong>
-                </p>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">
-                    Cancelar
-                </button>
-                <form method="POST" action="" id="confirmDeleteForm" class="d-inline m-0">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn btn-danger btn-sm">
-                        <i class="bi bi-trash"></i> Excluir definitivamente
-                    </button>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -199,26 +139,5 @@
     if ((fe && fe.value) || (fs && fs.value)) aplicar();
   })();
 
-  /* ---- Modal de confirmação de exclusão ----
-     Listener único em show.bs.modal: lê data-bs-url / -empresa / -periodo
-     do botão que abriu o modal (event.relatedTarget) e popula a action do
-     form + os spans de contexto. Roda uma vez por abertura. */
-  (function () {
-    var modal = document.getElementById('confirmDeleteModal');
-    if (!modal) return;
-    var form = document.getElementById('confirmDeleteForm');
-    var labelEmp = document.getElementById('confirmDeleteEmpresa');
-    var labelPer = document.getElementById('confirmDeletePeriodo');
-    modal.addEventListener('show.bs.modal', function (event) {
-      var trigger = event.relatedTarget;
-      if (!trigger) return;
-      var url = trigger.getAttribute('data-bs-url') || '';
-      var empresa = trigger.getAttribute('data-bs-empresa') || 'Análise';
-      var periodo = trigger.getAttribute('data-bs-periodo') || '';
-      if (form) form.setAttribute('action', url);
-      if (labelEmp) labelEmp.textContent = empresa;
-      if (labelPer) labelPer.textContent = periodo;
-    });
-  })();
 </script>
 {% endblock %}
