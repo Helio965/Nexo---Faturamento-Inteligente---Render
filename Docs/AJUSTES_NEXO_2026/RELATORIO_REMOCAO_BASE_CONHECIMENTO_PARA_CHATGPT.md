@@ -72,15 +72,33 @@ Nenhuma alteração de interface foi necessária (Situação 1 da tarefa). Alter
 | `tests/test_navegacao_admin.py` | novo | Teste de regressão **HTTP** (sem navegador, roda nos dois jobs da CI): em `/admin/dashboard`, `/admin/empresas`, `/admin/contratos`, `/admin/lixeira`, `/admin/analises`, `/admin/analises/gerenciar`, `/admin/tickets` e `/admin/guia` a sidebar tem exatamente os seis rótulos, sem "Base de Conhecimento" e sem link para `/admin/guia`, com "Sair" uma única vez no rodapé; o item ativo corresponde à página (e nenhum fica ativo no CMS); a sidebar do cliente não ganha o item. Complementa o teste de navegador já existente (gaveta do celular, teclado, indicador). |
 | `Docs/AJUSTES_NEXO_2026/RELATORIO_REMOCAO_BASE_CONHECIMENTO_PARA_CHATGPT.md` | novo | Este relatório. |
 
-Commits: «COMMITS». Nenhum commit repete a remoção (`templates/base.html` não foi tocado).
+Commits: `21e1101 test(nav): regressao HTTP da sidebar administrativa sem Base de Conhecimento`, `80bb032 docs(nav): relatorio … (rascunho)` e o commit de fechamento deste relatório (só documentação), todos na branch `claude/awesome-pascal-0ho42m` recriada sobre a `main`; PR #34 em rascunho. Nenhum commit repete a remoção (`templates/base.html` não foi tocado).
 
 ## E. Testes
 
-«E_TESTES»
+Ambiente: cópia descartável do código da `main` (`1018999` + os commits desta branch, que não tocam templates), SQLite temporário com as migrações reais, Chromium 1243 (Chrome for Testing 153) via Playwright com CDN servida de cópias locais íntegras, PostgreSQL 16 descartável quando a suíte o exige, administrador e cliente fictícios (`example.invalid`). Nenhum banco real foi tocado.
+
+| Execução | Resultado |
+|---|---|
+| `tests.test_navegacao_admin` (novo, HTTP, sem navegador) | **3 testes, 3 OK** em 4 s: seis rótulos exatos e nenhum link para `/admin/guia` em 8 páginas administrativas (inclusive `/admin/guia`), "Sair" único no rodapé; item ativo correto em 6 páginas e nenhum ativo no CMS; sidebar do cliente com os cinco itens de sempre. |
+| `tests.test_overflow_navegador` + `tests.test_identidade_visual` + `tests.test_gerenciamento_navegador` (oficiais, Chromium) | **37 testes, 37 OK** em 525 s, incluindo `test_menu_administrativo_sem_base_de_conhecimento` (rótulos exatos do menu administrativo), `test_sidebar_item_longo_nao_encosta_no_indicador` (indicador do item ativo, admin e cliente), a varredura de páginas administrativas em todas as larguras, a topbar em 12 páginas × 5 larguras e os testes de identidade visual (marca, cubo, landing, login). |
+| Sonda de homologação (Chromium, `scratchpad/bc/probe_bc.py`, registro em `bc_capturas/registro.json`) | Login administrativo; Dashboard, Empresas, Contratos, Lixeira, Análises, Suporte e Gerenciar análises em 1366×768 (sidebar visível, seis itens, item ativo = página, "Sair" presente, sidebar permanece ao rolar até o fim do dashboard), 1024×768 (tablet) e 390×844 (gaveta começa recolhida; abre pelo botão do menu; seis itens; fecha pelo X e pelo Esc, em todas as sete páginas). Teclado: a partir do topo, Tab percorre Dashboard → Empresas → Contratos → Lixeira → Análises → Suporte → Sair, nessa ordem. Em nenhum ponto o texto "Base de Conhecimento" aparece na sidebar. |
+| Suíte oficial completa na `main` (`1018999` = código de `deb7b59`) | 837 testes, 0 falhas, 0 pulados — local (823 s) e na CI do PR #33 (run 40624619001) e da cabeça `3a9a65d` (run 40627238726), registradas no relatório anterior. «CI34» |
+
+Problemas encontrados nos testes: nenhum. Nenhum teste existente foi alterado ou removido.
 
 ### Capturas (código `1018999` executado em cópia descartável, Chromium headless, administrador fictício)
 
-«E_CAPTURAS»
+Capturas reais feitas pelo roteiro de homologação (Chromium headless, Playwright, seed de homologação com empresas "Demo" e administrador "Admin Demonstração", fontes e ícones servidos localmente), entregues ao proprietário no chat e no pacote `NEXO_AUDITORIA_BASE_CONHECIMENTO.zip` (pasta `capturas/`, com `manifest.json` contendo SHA-256 e dimensões):
+
+| Captura | Arquivo | O que mostra |
+|---|---|---|
+| 1 — Sidebar desktop | `C1_sidebar_desktop_1366.png` | Dashboard administrativo a 1366×768: sidebar com Dashboard (ativo), Empresas, Contratos, Lixeira, Análises e Suporte; "Sair" no rodapé; sem Base de Conhecimento; logomarca, cubo, vidro, ícones, bordas arredondadas e estado ativo preservados. |
+| 2 — Sidebar mobile | `C2_sidebar_mobile_390_gaveta_aberta.png` | Gaveta aberta a 390×844 (@2x): os mesmos seis itens e o "Sair"; sem Base de Conhecimento. A sonda confirma que a gaveta fecha pelo botão X, pelo Esc e tocando fora, e que o conteúdo atrás fica inerte. |
+| 3 — Dashboard administrativo | `C3_dashboard_admin_rolado_1366.png` | Sistema em funcionamento após a verificação (dashboard rolado, KPIs e gráficos, topbar), com a sidebar inalterada. |
+| Complementos | `C4_dashboard_mobile_390_gaveta_recolhida.png`, `C5_analises_desktop_1366.png` | Dashboard no celular com a gaveta recolhida (botão do menu no topo); página Análises com a mesma sidebar. |
+
+Nenhuma captura antiga foi reaproveitada: todas foram geradas nesta tarefa a partir do código `1018999` (os commits desta branch não alteram templates nem CSS).
 
 ### Revisão independente
 
@@ -88,8 +106,14 @@ Commits: «COMMITS». Nenhum commit repete a remoção (`templates/base.html` n�
 
 ## F. Resultado final
 
-«F»
+**A remoção já estava corretamente implementada no GitHub** (PR #33, commit `635fb01`, integrado à `main` em `1018999`): nenhuma correção de interface foi necessária e nenhuma foi feita. Em cópia descartável desse código, a sidebar administrativa apresenta exatamente Dashboard, Empresas, Contratos, Lixeira, Análises e Suporte, com "Sair" no rodapé, em desktop, tablet e celular, com teclado e com rolagem; os testes oficiais de navegação e identidade visual passam (37/37) e o novo teste HTTP (3/3) fixa esse estado nos dois jobs da CI.
+
+**A remoção está no GitHub, mas não foi possível confirmar que está implantada em produção.** O que o proprietário vê é compatível com uma versão publicada anterior a `635fb01` (cenário A), que é o mais provável dado `autoDeployTrigger: 'off'` e o merge das 11:02 UTC; a confirmação exige olhar o commit Live no painel do Render (ou o `curl` da folha de estilo no hostname real), conforme a seção C. **A produção não foi declarada corrigida**, porque o código efetivamente publicado não pôde ser verificado nesta sessão.
 
 ## G. Pendências
 
-«G»
+1. **Proprietário — confirmar a versão publicada** (2 min, somente leitura): no painel do Render, serviço `nexo-faturamento-inteligente` → commit Live, data do último deploy, branch e estado do Auto-Deploy; ou `curl -s https://<host>/static/css/nexo.css | grep -c -- '--topbar-blur-forte'` (`0` = versão anterior ao PR #33).
+2. **Proprietário — publicar a `main`** se o Live for anterior a `635fb01`: *Manual Deploy* do commit `101899968c380c7bab9503f50965013e01896d08`, seguindo `Docs/PREPARACAO_RENDER.md` §5 (revisão do banco conferida antes; validar `/healthz`, `/healthz/db`, login e menu; conferir em janela anônima). Nenhum deploy foi feito nesta sessão.
+3. **Se, após o deploy, a aba continuar aparecendo** (cenário B): informar o hostname real e o commit Live para nova investigação (proxy intermediário ou segunda instância são as únicas causas que o código não exclui).
+4. **Opcional, fora deste escopo:** expor o commit publicado em `/healthz` (por exemplo via `RENDER_GIT_COMMIT`) para que futuras auditorias identifiquem a versão sem acesso ao painel; e decidir se as rotas do CMS (`/admin/guia*`) continuam acessíveis por endereço.
+5. **PR #34** (rascunho): aguarda CI e a decisão de merge do proprietário; contém apenas o teste de regressão HTTP e este relatório.
