@@ -782,9 +782,33 @@
          em âmbar (par legível também para daltonismo vermelho-verde). */
       NEXO.plotLinhaTemporal = function (id, data) {
         if (!data || !data.labels || data.labels.length < 2) return;
+        var el = document.getElementById(id);
+        if (!el) return;
         NEXO.descrever(id, 'Histórico comparativo de vendas e compras por período: ' + data.labels.map(function (rotulo, i) {
           return rotulo + ': vendas R$ ' + NEXO.fmtBRL(data.vendas[i]) + ', compras R$ ' + NEXO.fmtBRL(data.compras[i]);
         }).join('; ') + '.');
+        /* Eixo de categorias mostra todos os rótulos por padrão: com muitos períodos
+           num gráfico estreito (celular) eles se sobrepõem. Mostra um a cada `passo`
+           (~64 px por rótulo) e reavalia o passo quando a caixa muda de largura;
+           todos os pontos continuam na linha, na tooltip e na descrição. */
+        var distintos = new Set(data.labels).size;
+        var passoPara = function () {
+          var largura = el.clientWidth || (el.parentElement && el.parentElement.clientWidth) || 600;
+          var util = Math.max(120, largura - 82);
+          return Math.max(1, Math.ceil(distintos / Math.max(2, Math.floor(util / 64))));
+        };
+        var passo = passoPara();
+        if (!el._nexoObservador && window.ResizeObserver) {
+          var temporizador = null;
+          el._nexoObservador = new ResizeObserver(function () {
+            clearTimeout(temporizador);
+            temporizador = setTimeout(function () {
+              var novo = passoPara();
+              if (novo !== passo && window.Plotly && el.data) { passo = novo; Plotly.relayout(el, { 'xaxis.dtick': novo }); }
+            }, 150);
+          });
+          el._nexoObservador.observe(el);
+        }
         /* Linhas suaves; só Vendas tem área, em degradê que some na base (duas
            áreas sobrepostas virariam um cinza turvo). */
         NEXO.plot(id, [
@@ -813,7 +837,7 @@
           /* Folga nas pontas para os marcadores não colarem nas bordas. A conta usa
              categorias distintas: duas quinzenas do mesmo mês repetem o rótulo. */
           xaxis: Object.assign({
-            type: 'category', range: [-0.25, new Set(data.labels).size - 0.75],
+            type: 'category', range: [-0.25, distintos - 0.75], tick0: 0, dtick: passo,
             fixedrange: true, tickfont: { size: 12, color: NEXO.colors.text }, automargin: true
           }, NEXO.spike),
           height: 320, margin: { l: 64, r: 18, t: 36, b: 42 }
