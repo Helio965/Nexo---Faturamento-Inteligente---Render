@@ -120,7 +120,7 @@ Não foram alterados: modelos, migrações, regras contratuais, ETL, PDFs, APIs,
 |---|---|---|
 | Suíte oficial — base | `0f4a53e` (`main`) | 794 testes aprovados (resultado da homologação anterior, mesma suíte que entrou na `main`); CI verde no merge |
 | Suíte oficial — final (local) | `093fbee` | **814 testes, 0 falhas, 0 erros, 0 pulados**, 632 s; ensaios PostgreSQL "isolado", "AJ-06.1" e "gestão contratual" com `status: ok` e `production_access: false` |
-| Suíte oficial — final (CI, PR #32) | `093fbee` | `security-sqlite-browser`: 814 testes OK em 705 s; `security-postgresql`: OK (run 40606041025) |
+| Suíte oficial — final (CI, PR #32) | `093fbee` e `0eab887` | `security-sqlite-browser`: 814 testes OK (705 s e 690 s); `security-postgresql`: OK (runs 40606041025 e 40609304901) |
 | `tests/test_overflow_navegador.py` com a fonte Inter | `093fbee` | 20/20 (`OverflowNavegadorTests` 15 + `PaginasDeErroTests` 5) |
 | `tests/test_overflow_navegador.py` com fontes de reserva (fontconfig só com DejaVu/Liberation, sem Inter) | `093fbee` | 20/20 — simula quem não carrega o Google Fonts |
 | Módulos de navegador já existentes (`test_contratos_navegador`, `test_identidade_visual`, `test_nexobot_navegador`) | durante as correções e na suíte final | OK (51 testes na execução isolada; todos incluídos nos 814) |
@@ -185,7 +185,7 @@ Medições-resumo (mesma sonda nas duas rodadas, 151 capturas cada): células en
 | Branch | `claude/awesome-pascal-0ho42m` (branch designada desta sessão; nome sugerido `fix/nexo-correcao-overflow-responsividade-20261027` registrado, não usado) |
 | Pull request | [#32 — NEXO: correção de cortes de informações, tabelas, gráficos e responsividade](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/32) (rascunho, pronto para revisão do proprietário) |
 | SHA das correções de código | `093fbee` (último commit de código; os commits de documentação posteriores só tocam este relatório) |
-| CI | `security-postgresql` e `security-sqlite-browser` verdes em `c0e0168` (812 testes, 0 pulados, os 18 testes de layout executados com Bootstrap, Plotly e Inter reais); e verdes de novo em `093fbee` (run 40606041025: 814 testes, 0 pulados, PostgreSQL 16 descartável com os três ensaios `status: ok`). |
+| CI | `security-postgresql` e `security-sqlite-browser` verdes em `c0e0168` (812 testes, 0 pulados, os 18 testes de layout executados com Bootstrap, Plotly e Inter reais); verdes de novo em `093fbee` (run 40606041025: 814 testes, 0 pulados) e no código final `0eab887` (run 40609304901: `security-sqlite-browser` 814 testes OK em 690 s, `security-postgresql` OK, três ensaios PostgreSQL `status: ok`). |
 | Merge | Não realizado: o PR fica em rascunho para o proprietário revisar; há incerteza sobre implantação automática no Render a partir da `main`, por isso nenhum merge foi feito e nenhum deploy manual foi executado. |
 | Histórico | Sem rebase, sem amend após publicação, sem force push. |
 
