@@ -547,6 +547,10 @@ class OverflowNavegadorTests(NavegadorCase):
             pagina = self.abrir(1440, 900)
             self.entrar(pagina, email)
             self.ir(pagina, caminho)
+            if email.startswith("admin"):
+                # Pré-condição: a premissa "Dashboard é o rótulo mais largo" só vale com estes seis itens.
+                self.assertEqual([r.strip() for r in pagina.locator(".sidebar-nav .nav-item").all_text_contents()],
+                                 ["Dashboard", "Empresas", "Contratos", "Lixeira", "Análises", "Suporte"])
             m = self.medir(pagina)
             self.assertEqual(m["sidebar"]["rotulo"], rotulo, m["sidebar"])
             self.assertTrue(m["sidebar"]["fluxo"], "o indicador deve ser um item do flex, não absoluto")
