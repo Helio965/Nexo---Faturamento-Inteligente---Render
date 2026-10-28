@@ -57,7 +57,23 @@ O item saiu da sidebar administrativa (link, ícone e indicador). As rotas `/adm
 
 ## D. Arquivos modificados
 
-«ARQUIVOS»
+| Arquivo | Situação | Motivo |
+|---|---|---|
+| `Docs/AJUSTES_NEXO_2026/RELATORIO_GERENCIAMENTO_ANALISES_TOPBAR_REFINAMENTO_PARA_CHATGPT.md` | novo | Este relatório. |
+| `Docs/RELATORIO_TECNICO.md` | modificado | Registro da saída do CMS do menu e do novo fluxo de gerenciamento. |
+| `blueprints/admin.py` | modificado | Rotas do gerenciamento por empresa (`analises_gerenciar`, `analises_empresa`, `analise_excluir`), helper `_excluir_analise` (ordem segura: banco primeiro, arquivos depois do commit) e `_empresa_gerenciavel`; rota antiga `analise_deletar` removida. |
+| `static/css/nexo.css` | modificado | Topbar com desfoque gradual em duas camadas, de ponta a ponta, com fallbacks; cartões de empresa, trilha e resumo do modal; coluna de ações compacta; acabamento das bordas (divisórias com recuo, realce arredondado, cabeçalhos/rodapés/sidebar/modais); células mais enxutas até 1440 px. |
+| `templates/_macros.html` | modificado | Macro `uppill` (selos de upload V/C) compartilhada pelas duas listagens. |
+| `templates/admin/analises.html` | modificado | Listagem geral sem lixeira/modal/script de exclusão; botão Editar; botão Abrir compacto (`btn-abrir`, coluna `col-acao`); selos V/C pela macro compartilhada. |
+| `templates/admin/analises_empresa.html` | novo | Nova tela: empresa selecionada, suas análises, lixeira por linha e modal de confirmação com formulário POST (CSRF + confirmar=sim). |
+| `templates/admin/analises_gerenciar.html` | novo | Nova tela: seleção de empresas em cartões com busca e trilha. |
+| `templates/base.html` | modificado | Sidebar administrativa sem o item Base de Conhecimento; item Análises ativo também nas telas de gerenciamento. |
+| `tests/test_gerenciamento_analises.py` | novo | Novo: 16 cenários HTTP (listagem, seleção, exclusão, segurança, integridade). |
+| `tests/test_gerenciamento_navegador.py` | novo | Novo: fluxo completo em Chromium, todas as larguras, topbar em todas as páginas, sino, bordas. |
+| `tests/test_overflow_navegador.py` | modificado | Infraestrutura de navegador extraída em `NavegadorCase`; páginas novas na varredura; teste do indicador da sidebar sem a Base de Conhecimento; novo teste do menu administrativo. |
+
+Não foram alterados: modelos, migrações, regras contratuais, ETL, PDFs, APIs, NexoBot, landing, Supabase/Render.
+
 
 ## E. Testes
 
@@ -82,11 +98,34 @@ O item saiu da sidebar administrativa (link, ícone e indicador). As rotas `/adm
 
 ## H. GitHub
 
-«GITHUB»
+| Item | Valor |
+|---|---|
+| Branch | `claude/awesome-pascal-0ho42m` (recriada sobre a `main` `264f713`; publicação só nesta branch, por regra da sessão) |
+| Pull request | [#33 — NEXO: gerenciamento de análises por empresa e refinamento global da interface](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/33) (rascunho até a validação final) |
+| CI | «CI» |
+| Merge | Não realizado: fica para o proprietário, após a CI e a conferência das condições de implantação (Render implanta a `main` automaticamente; nenhum deploy manual foi feito). |
+| Histórico | Sem force push; commits lineares sobre a `main`. |
+
+Commits (ordem cronológica):
+
+| SHA | Mensagem |
+|---|---|
+| `c585e49` | feat(admin): criar gerenciamento de analises por empresa |
+| `98041d3` | feat(ui): topbar com blur gradual, bordas refinadas, cartoes de empresas e acoes compactas |
+| `635fb01` | refactor(nav): remover Base de Conhecimento do menu administrativo |
+| `0b6a7aa` | test(ui): gerenciamento de analises (HTTP e navegador), topbar, bordas e menu |
+| `c702de0` | docs(ui): relatorio tecnico da etapa para auditoria independente (rascunho) |
+| `6678eca` | test(ui): aceitar border-spacing computado como valor unico |
+
 
 ## I. Pendências
 
-«PENDENCIAS»
+- **Firefox e WebKit** não estão disponíveis no ambiente: toda a validação de navegador foi no Chromium. As regras novas têm fallback (`@supports not (backdrop-filter)` e `prefers-reduced-transparency`), mas o desfoque gradual em Safari/Firefox não foi observado de fato.
+- **Rotas do CMS do Guia** (`/admin/guia*`) continuam existindo sem link no menu, por decisão de preservação (Guia do cliente e NexoBot leem os mesmos tópicos; testes do NexoBot usam essas páginas). Se o proprietário quiser desativar o CMS por completo, é uma mudança à parte (rotas, templates, testes e seed).
+- **"Nova análise" dentro da empresa selecionada** abre o formulário geral (com o seletor de empresa), sem pré-selecionar a empresa; não fazia parte do pedido e fica como melhoria futura.
+- **Telas acima de 1454 px**: a topbar vai até a borda direita da área principal, enquanto o conteúdo das páginas mantém o limite de 1440 px à esquerda (regra pré-existente de `.page`); a faixa fica mais larga que o conteúdo nessas telas, como pedido ("até a extremidade direita da área principal").
+- **Pendências anteriores fora deste escopo** (não alteradas): PDF com cabeçalho cortado e carimbo em UTC; "Períodos pagos: nenhum" ao lado de cobertura vigente em empresa cancelada; ordem dos detalhes do histórico; canal de contato em "Conta encerrada"; setas no sino.
+
 
 ## J. Parecer final
 
