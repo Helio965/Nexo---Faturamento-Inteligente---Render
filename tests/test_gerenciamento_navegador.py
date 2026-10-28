@@ -220,7 +220,7 @@ class GerenciamentoNavegadorTests(NavegadorCase):
                     cabecalho: getComputedStyle(document.querySelector('.nexo-card-head') || document.body).borderImageSource};
         }""")
         self.assertEqual(m["collapse"], "separate", m)
-        self.assertEqual(m["spacing"], "0px 0px", m)
+        self.assertIn(m["spacing"], ("0px", "0px 0px"), m)
         self.assertIn("linear-gradient", m["td0"], "divisória da primeira célula sem recuo")
         self.assertIn("linear-gradient", m["tdN"], "divisória da última célula sem recuo")
         self.assertIn("linear-gradient", m["th0"], "divisória do cabeçalho sem recuo")
