@@ -39,7 +39,7 @@ import hashlib
 import os
 import threading
 import unittest
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
@@ -289,6 +289,11 @@ class OverflowNavegadorTests(ContratosCase):
                                   quantidade=Decimal(1000 * (11 - pos)), faturamento=fat,
                                   percentual_individual=perc, percentual_acumulado=min(acumulado, Decimal("100")),
                                   classe_abc="A" if acumulado <= 80 else ("B" if acumulado <= 95 else "C")))
+        # Seis meses publicados antes dos dois já existentes: o histórico comparativo
+        # fica com oito períodos (no celular os rótulos do eixo precisam ser espaçados).
+        for mes in range(6, 12):
+            fim = date(2025, mes + 1, 1) - timedelta(days=1)
+            self.publicar(self.nova_analise(date(2025, mes, 1), fim).id_analise, inicio=date(2025, mes, 1), fim=fim)
         # Período em aberto: a página "Enviar relatórios" mostra as dropzones; o
         # relatório de vendas já foi recebido (dropzone no estado "Arquivo recebido").
         aberta = self.nova_analise(date(2026, 2, 1), date(2026, 2, 28))
