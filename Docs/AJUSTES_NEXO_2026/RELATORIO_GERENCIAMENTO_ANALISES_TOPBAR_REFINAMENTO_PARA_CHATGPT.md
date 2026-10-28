@@ -149,7 +149,7 @@ Observação de leitura: o desfoque gradual é sutil por desenho (sem "névoa" a
 | Branch | `claude/awesome-pascal-0ho42m` (recriada sobre a `main` `264f713`; publicação só nesta branch, por regra da sessão) |
 | Pull request | [#33 — NEXO: gerenciamento de análises por empresa e refinamento global da interface](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/33) (rascunho até a validação final) |
 | CI | Verde na árvore `bea7e5b` (código final `deb7b59`): workflow "NEXO Security CI" run [40624619001](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/40624619001), jobs `security-postgresql` (success, 03:05–03:06 UTC) e `security-sqlite-browser` (success, 03:05–03:20 UTC, 837 testes OK). Também verde nas cabeças intermediárias `3c1b612` (run 40618831808), `256cf1b` (40621578097) e `7f3c97f` (40621918630). O commit de fechamento deste relatório (só documentação) dispara a mesma CI; o resultado na cabeça final é conferido no PR. |
-| Merge | Não realizado: fica para o proprietário, após a CI e a conferência das condições de implantação (Render implanta a `main` automaticamente; nenhum deploy manual foi feito). |
+| Merge | Não realizado: fica para o proprietário, após a CI e a conferência das condições de implantação (o `render.yaml` declara `autoDeployTrigger: 'off'` e o estado real do Auto-Deploy só é conhecido no painel do Render; nenhum deploy manual foi feito nesta sessão — correção de 28/10/2026: a versão anterior desta frase dizia, sem base, que o Render implanta a `main` automaticamente; ver `RELATORIO_REMOCAO_BASE_CONHECIMENTO_PARA_CHATGPT.md`). |
 | Histórico | Sem force push; commits lineares sobre a `main`. |
 
 Commits (ordem cronológica):

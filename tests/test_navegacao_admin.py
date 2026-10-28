@@ -1,0 +1,127 @@
+"""
+Regressão HTTP (sem navegador) da navegação lateral depois que a "Base de
+Conhecimento" saiu do menu administrativo (PR #33, 28/10/2026).
+
+Em toda página administrativa — inclusive as do CMS do Guia, que continuam
+alcançáveis por URL — a sidebar renderiza exatamente Dashboard, Empresas,
+Contratos, Lixeira, Análises e Suporte; nenhum link da sidebar (menu ou rodapé)
+aponta para /admin/guia; fora das páginas do próprio CMS, "/admin/guia" não
+aparece em lugar nenhum da página; o item ativo é o da página corrente e, no
+CMS, nenhum; "Sair" segue único no rodapé. A sidebar do cliente não ganha o
+item e não aponta para /admin.
+
+Roda com o cliente de teste do Flask (sem Playwright, sem cópias da CDN): é
+executado pelo `unittest discover` do job security-sqlite-browser em todo PR e
+push na main (o job security-postgresql executa só os módulos tests.postgresql_*).
+O equivalente em Chromium (gaveta do celular, teclado, indicador do item ativo)
+está em tests/test_overflow_navegador.py.
+"""
+
+import re
+import unittest
+
+from tests.deploy_support import DeployTestCase
+
+ROTULOS_ADMIN = ["Dashboard", "Empresas", "Contratos", "Lixeira", "Análises", "Suporte"]
+ROTULOS_CLIENTE = ["Visão Geral", "Enviar relatórios", "Histórico", "Guia", "Suporte"]
+
+_ASIDE = re.compile(r'<aside\b[^>]*\bclass="[^"]*\bsidebar\b[^"]*"[^>]*>(.*?)</aside>', re.S)
+_NAV = re.compile(r'<nav\b[^>]*\bclass="[^"]*\bsidebar-nav\b[^"]*"[^>]*>(.*?)</nav>', re.S)
+_LINK = re.compile(r"<a\b([^>]*)>(.*?)</a>", re.S)
+_ATRIBUTO = re.compile(r'([\w:-]+)\s*=\s*"([^"]*)"')
+
+
+def _texto(trecho):
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", trecho)).strip()
+
+
+def _links(trecho):
+    """Todos os <a> do trecho: (href, classes, texto visível), sem depender da ordem dos atributos."""
+    links = []
+    for atributos, conteudo in _LINK.findall(trecho):
+        attrs = dict(_ATRIBUTO.findall(atributos))
+        links.append((attrs.get("href", ""), set((attrs.get("class") or "").split()), _texto(conteudo)))
+    return links
+
+
+class _Sidebar:
+    def __init__(self, html, caminho):
+        aside = _ASIDE.search(html)
+        nav = _NAV.search(html)
+        assert aside and nav, f"{caminho}: sidebar ou menu não encontrados"
+        self.aside = aside.group(1)
+        self.links_aside = _links(self.aside)
+        itens = [l for l in _links(nav.group(1)) if "nav-item" in l[1]]
+        self.rotulos = [texto for _, _, texto in itens]
+        self.ativos = [texto for _, classes, texto in itens if "active" in classes]
+        self.sair = [l for l in self.links_aside if "nav-logout" in l[1]]
+
+
+class NavegacaoAdminSemBaseDeConhecimentoTests(DeployTestCase):
+    def setUp(self):
+        super().setUp()
+        from models import Analise, GuiaTopico, IndicadorAnalise, RelatorioAnalise
+        self.fixtures()
+        analise = self.db.session.get(Analise, self.analise_id)
+        self.empresa_id = analise.id_empresa
+        # Análise publicada (a tela de análise do cliente abre) e um tópico do Guia
+        # (a página de edição do CMS existe).
+        analise.status_analise = "CONCLUIDO"
+        analise.indicador = IndicadorAnalise(faturamento_total=25, total_comprado=40, saldo_estimado_compras_vendas=15)
+        analise.relatorio = RelatorioAnalise(titulo="Análise sintética", conclusao_estrategica="Conclusão sintética.",
+                                             publicado=True)
+        topico = GuiaTopico(categoria="Categoria fictícia", pergunta="Pergunta fictícia?", resposta="Resposta fictícia.")
+        self.db.session.add(topico)
+        self.db.session.commit()
+        self.topico_id = topico.id
+
+    def _pagina(self, caminho):
+        resposta = self.client.get(caminho)
+        self.assertEqual(resposta.status_code, 200, caminho)
+        return resposta.get_data(as_text=True)
+
+    def paginas_admin(self):
+        """Página administrativa -> rótulo do item ativo esperado (None no CMS, que não tem item)."""
+        e, a, t = self.empresa_id, self.analise_id, self.topico_id
+        return {
+            "/admin/dashboard": "Dashboard",
+            "/admin/empresas": "Empresas", "/admin/empresas/nova": "Empresas",
+            f"/admin/empresas/{e}/editar": "Empresas", f"/admin/empresas/{e}/detalhes": "Empresas",
+            "/admin/contratos": "Contratos",
+            "/admin/lixeira": "Lixeira",
+            "/admin/analises": "Análises", "/admin/analises/nova": "Análises",
+            "/admin/analises/gerenciar": "Análises", f"/admin/analises/gerenciar/{e}": "Análises",
+            f"/admin/analise/{a}/upload": "Análises", f"/admin/analise/{a}/relatorio": "Análises",
+            "/admin/tickets": "Suporte",
+            "/admin/guia": None, "/admin/guia/novo": None, f"/admin/guia/editar/{t}": None,
+        }
+
+    def test_sidebar_administrativa_sem_base_de_conhecimento_em_todas_as_paginas(self):
+        self.login("admin-test@example.invalid")
+        for caminho, ativo in self.paginas_admin().items():
+            with self.subTest(caminho=caminho):
+                html = self._pagina(caminho)
+                sidebar = _Sidebar(html, caminho)
+                self.assertEqual(sidebar.rotulos, ROTULOS_ADMIN)
+                self.assertEqual(sidebar.ativos, [ativo] if ativo else [])
+                self.assertNotIn("Base de Conhecimento", sidebar.aside)
+                # Nenhum link da sidebar (menu ou rodapé) leva ao CMS do Guia; "Sair" é único.
+                self.assertEqual([h for h, _, _ in sidebar.links_aside if h.startswith("/admin/guia")], [])
+                self.assertEqual([texto for _, _, texto in sidebar.sair], ["Sair"])
+                if not caminho.startswith("/admin/guia"):
+                    # Fora do próprio CMS, nada na página (topbar, atalhos, scripts) aponta para ele.
+                    self.assertNotIn("/admin/guia", html)
+
+    def test_sidebar_do_cliente_nao_ganha_o_item_nem_aponta_para_a_administracao(self):
+        self.login("cliente-test@example.invalid")
+        for caminho in ("/cliente/dashboard", "/cliente/upload", "/cliente/historico",
+                        f"/cliente/analise/{self.analise_id}", "/cliente/guia", "/cliente/tickets"):
+            with self.subTest(caminho=caminho):
+                sidebar = _Sidebar(self._pagina(caminho), caminho)
+                self.assertEqual(sidebar.rotulos, ROTULOS_CLIENTE)
+                self.assertNotIn("Base de Conhecimento", sidebar.aside)
+                self.assertEqual([h for h, _, _ in sidebar.links_aside if h.startswith("/admin")], [])
+
+
+if __name__ == "__main__":
+    unittest.main()
