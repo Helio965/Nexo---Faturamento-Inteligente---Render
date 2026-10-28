@@ -540,9 +540,9 @@ class OverflowNavegadorTests(NavegadorCase):
         self.assertEqual(pagina.locator("#buscaEmpresa").input_value(), "")
 
     def test_sidebar_item_longo_nao_encosta_no_indicador(self):
-        """O rótulo mais longo de cada menu (admin: "Contratos"/"Análises"; cliente:
+        """O rótulo mais largo de cada menu (admin: "Dashboard", 75,9 px na Inter; cliente:
         "Enviar relatórios") nunca encosta no ponto do item ativo."""
-        for email, caminho, rotulo in (("admin-test@example.invalid", "/admin/analises", "Análises"),
+        for email, caminho, rotulo in (("admin-test@example.invalid", "/admin/dashboard", "Dashboard"),
                                        ("cliente-test@example.invalid", "/cliente/upload", "Enviar relatórios")):
             pagina = self.abrir(1440, 900)
             self.entrar(pagina, email)
