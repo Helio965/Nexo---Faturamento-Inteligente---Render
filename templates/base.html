@@ -69,15 +69,15 @@
             <a class="nav-item {{ 'active' if request.endpoint == 'admin.lixeira' }}" href="{{ url_for('admin.lixeira') }}">
                 <i class="bi bi-trash"></i> Lixeira
             </a>
-            <a class="nav-item {{ 'active' if request.endpoint in ['admin.analises', 'admin.analise_nova', 'admin.analise_upload', 'admin.analise_relatorio', 'admin.processar_analise'] }}" href="{{ url_for('admin.analises') }}">
+            <a class="nav-item {{ 'active' if request.endpoint in ['admin.analises', 'admin.analise_nova', 'admin.analise_upload', 'admin.analise_relatorio', 'admin.processar_analise', 'admin.analises_gerenciar', 'admin.analises_empresa'] }}" href="{{ url_for('admin.analises') }}">
                 <i class="bi bi-clipboard-data"></i> Análises
             </a>
             <a class="nav-item {{ 'active' if request.endpoint in ['admin.tickets', 'admin.ticket_detalhe'] }}" href="{{ url_for('admin.tickets') }}">
                 <i class="bi bi-life-preserver"></i> Suporte
             </a>
-            <a class="nav-item {{ 'active' if request.endpoint in ['admin.guia', 'admin.guia_novo', 'admin.guia_editar'] }}" href="{{ url_for('admin.guia') }}">
-                <i class="bi bi-journal-text"></i> Base de Conhecimento
-            </a>
+            {# A Base de Conhecimento (CMS do Guia) saiu do menu administrativo em 28/10/2026
+               por decisão do proprietário; o conteúdo do Guia do cliente e do NexoBot
+               continua existindo e sendo servido normalmente. #}
             {% else %}
             <span class="nav-section">Minha Empresa</span>
             <a class="nav-item {{ 'active' if request.endpoint == 'cliente.dashboard' }}" href="{{ url_for('cliente.dashboard') }}">

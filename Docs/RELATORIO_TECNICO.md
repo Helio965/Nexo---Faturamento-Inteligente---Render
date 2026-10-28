@@ -127,7 +127,8 @@ A segurança não é pontual, e sim transversal, aplicada em `@before_request` e
 - **Gestão de Empresas (CRUD)** — cadastro de empresa cliente + usuário CLIENTE vinculado. No cadastro, **não se gera senha provisória**: o sistema cria a conta inativa e dispara um e-mail com **link seguro de definição de senha** (token de 15 min).
 - **Gestão de Análises** — abertura de análises (mensal/quinzenal, com regras de negócio por plano), upload dos relatórios, disparo do ETL e o **editor de devolutiva**.
 - **Suporte (tickets)** — painel central de chamados de todas as empresas, agrupados por status, com resposta e mudança de estado.
-- **Base de Conhecimento (CMS)** — CRUD dos tópicos do "Guia", incluindo upload de imagens. É a **fonte única** que alimenta tanto a aba Guia do cliente quanto o NexoBot (princípio DRY).
+- **Base de Conhecimento (CMS)** — CRUD dos tópicos do "Guia", incluindo upload de imagens. É a **fonte única** que alimenta tanto a aba Guia do cliente quanto o NexoBot (princípio DRY). Desde 28/10/2026 o CMS **não aparece mais no menu administrativo** (decisão do proprietário); as rotas `/admin/guia*` continuam existindo para manutenção do conteúdo, e o Guia do cliente e o NexoBot seguem servidos normalmente.
+- **Gerenciar análises (28/10/2026)** — a listagem geral `/admin/analises` não exclui mais nada; o botão **Editar** abre `/admin/analises/gerenciar` (cartões de empresas com busca) e, por empresa, `/admin/analises/gerenciar/<id_empresa>`, onde a lixeira exclui apenas a análise da linha (POST com CSRF, confirmação explícita e verificação de pertencimento no backend; exclusão definitiva com cascata ORM).
 
 ### 3.2. Fluxo do Cliente (lojista)
 
