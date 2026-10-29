@@ -335,21 +335,26 @@ REGISTROS = (
         categoria="Histórico e PDF",
         resumo=(
             "O PDF traz o cabeçalho NEXO com a referência, o título da devolutiva, empresa, CNPJ e período, os "
-            "indicadores do período, a Curva ABC com os 5 primeiros produtos, a síntese executiva em semáforos "
+            "indicadores do período, a Curva ABC com os 5 primeiros produtos, o gráfico de pizza com a "
+            "participação de cada um no faturamento (e de “Outros produtos”), a síntese executiva em semáforos "
             "e a devolutiva (resumo executivo e conclusão estratégica)."
         ),
         explicacao=(
             "O layout é claro, para impressão, com as mesmas cores das classes ABC e dos semáforos do portal. "
-            "O rodapé repete a nota de que os valores são sinalizações gerenciais estimadas, sem lucro, margem "
-            "ou CMV. Só análises publicadas podem ser exportadas."
+            "O rodapé de cada página traz a numeração (Página X de Y), a data e a hora em que o arquivo foi "
+            "gerado, no horário de Brasília, e a nota de que os valores são sinalizações gerenciais estimadas, "
+            "sem lucro, margem ou CMV. Cada exportação gera um arquivo novo, com o horário daquela "
+            "exportação. Só análises publicadas podem ser exportadas."
         ),
         perguntas=("O que vem no PDF?",
                    "O PDF tem a curva ABC?",
+                   "O PDF tem gráfico de pizza?",
+                   "Qual horário aparece no PDF?",
                    "O PDF inclui os semáforos?",
                    "Quais informações o arquivo contém?",
                    "O que tem no PDF?",
                    "O que está no PDF?"),
-        termos="pdf conteudo contem inclui secoes layout impressao",
+        termos="pdf conteudo contem inclui secoes layout impressao grafico pizza participacao horario brasilia rodape",
         relacionados=("nexo.historico.pdf_exportar", "nexo.devolutivas.o_que_e"),
         destino="historico",
         fontes=("pdf_export.py", "blueprints/cliente.py"),

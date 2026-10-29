@@ -239,13 +239,15 @@ class PDFExportSecurityTests(_PDFChecks, unittest.TestCase):
             "NEXO", "Faturamento Inteligente", "Análise Executiva", "Referência 10/2026",
             "Indicadores do período", "FATURAMENTO TOTAL", "TOTAL COMPRADO", "PRESSÃO DE ESTOQUE",
             "R$ 1.250,90", "R$ 1.500,00", "R$ 249,10", "Curva ABC", "Tinta Construção",
-            "Síntese executiva (5W2H)", "O QUE FAZER", "POR QUE FAZER", "ATENÇÃO",
-            "Devolutiva do consultor", "Resumo executivo.", "Conclusão estratégica.",
-            "Documento gerado pelo portal NEXO", "Página 1", "Não representa lucro, margem ou CMV.",
-            "Tintas & Cores", "Análise de reposição",
+            "Síntese executiva", "O QUE FAZER", "POR QUE FAZER", "ATENÇÃO",
+            "Devolutiva do consultor", "Resumo executivo", "Conclusão estratégica",
+            "Documento gerado pelo portal NEXO", "Página 1 de ", "Não representa lucro, margem ou CMV.",
+            "Tintas & Cores", "Análise de reposição", "Distribuição do faturamento por produto",
         ):
             with self.subTest(esperado=esperado):
                 self.assertIn(esperado, texto)
+        # O título da síntese deixou de trazer "(5W2H)"; o conteúdo dos cartões permanece.
+        self.assertNotIn("5W2H", texto)
 
     def test_opcionais_ausentes_e_listas_vazias(self):
         dados = _dados()
