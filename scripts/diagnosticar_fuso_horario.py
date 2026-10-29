@@ -7,11 +7,13 @@ without time zone`: o código anterior gravava nelas o relógio do TimeZone da
 sessão do banco, tanto pelo CURRENT_TIMESTAMP quanto pelos datetime com fuso.
 
 Usa só a URL da aplicação (DATABASE_URL, resolvida como em config.py). As
-variáveis PG* do terminal são ignoradas: PGTZ ou PGOPTIONS mudariam o fuso da
-sessão do script, e PGHOST ou PGSERVICE o banco consultado, sem mudar o que a
-aplicação recebe. Só lê: a transação é READ ONLY e é desfeita no fim. Não
-altera dados, esquema nem configuração, e não exibe a senha nem a mensagem de
-erro do driver.
+variáveis do terminal que mudariam o banco, o usuário ou a sessão (PGHOST,
+PGSERVICE, PGTZ, PGOPTIONS...) são ignoradas; as de TLS e de autenticação
+(PGSSLMODE, PGSSLROOTCERT, PGREQUIREAUTH...) valem. Sem sslmode na URL nem em
+PGSSLMODE, um host remoto exige TLS (sslmode=require); para conferir o
+certificado, use sslmode=verify-full com PGSSLROOTCERT. Só lê: a transação é
+READ ONLY e é desfeita no fim. Não altera dados, esquema nem configuração, e não
+exibe a senha nem a mensagem de erro do driver.
 
     python scripts/diagnosticar_fuso_horario.py
 
@@ -33,6 +35,10 @@ COLUNAS = (
     ("notificacao", "data_criacao"),
 )
 TIPO_ESPERADO = "timestamp without time zone"
+# Mudariam o banco, o usuário ou a sessão do script sem mudar o que a aplicação
+# recebe. TLS e autenticação (PGSSL*, PGREQUIREAUTH, PGCHANNELBINDING...) ficam.
+VARIAVEIS_IGNORADAS = ("PGHOST", "PGHOSTADDR", "PGPORT", "PGDATABASE", "PGUSER", "PGPASSWORD",
+                       "PGSERVICE", "PGSERVICEFILE", "PGOPTIONS", "PGTZ", "PGDATESTYLE")
 # Nomes IANA que são o próprio UTC (o PostgreSQL aceita todos).
 FUSOS_UTC = {
     "utc", "etc/utc", "uct", "etc/uct", "universal", "etc/universal", "zulu", "etc/zulu",
@@ -90,14 +96,26 @@ def diagnosticar(conexao) -> dict:
     }
 
 
+def parametros_tls(url) -> dict:
+    """sslmode=require para host remoto quando nem a URL nem PGSSLMODE o definem."""
+    host = url.query.get("host") or url.host or ""
+    if isinstance(host, tuple):
+        host = host[0] if host else ""
+    local = not host or host.startswith("/") or host in {"localhost", "127.0.0.1", "::1"}
+    if local or "sslmode" in url.query or os.environ.get("PGSSLMODE") or os.environ.get("PGREQUIRESSL"):
+        return {}
+    return {"sslmode": "require"}
+
+
 def main() -> int:
     # Só a URL da aplicação define o alvo e a sessão (ver docstring).
-    for chave in [k for k in os.environ if k.upper().startswith("PG")]:
-        del os.environ[chave]
+    for chave in VARIAVEIS_IGNORADAS:
+        os.environ.pop(chave, None)
     engine = None
     try:
         sys.path.insert(0, str(RAIZ))
         from sqlalchemy import create_engine
+        from sqlalchemy.engine import make_url
         from sqlalchemy.pool import NullPool
         from config import _resolve_database_uri  # a mesma resolução de URL da aplicação
 
@@ -106,7 +124,7 @@ def main() -> int:
             print(json.dumps({"erro": "DATABASE_URL não aponta para PostgreSQL; nada foi consultado."},
                              ensure_ascii=False))
             return 2
-        engine = create_engine(uri, poolclass=NullPool)
+        engine = create_engine(uri, poolclass=NullPool, connect_args=parametros_tls(make_url(uri)))
         conexao = engine.raw_connection()
         try:
             resultado = diagnosticar(conexao.dbapi_connection)
