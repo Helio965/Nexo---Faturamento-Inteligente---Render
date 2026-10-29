@@ -240,8 +240,8 @@ class PDFExportSecurityTests(_PDFChecks, unittest.TestCase):
             "Indicadores do período", "FATURAMENTO TOTAL", "TOTAL COMPRADO", "PRESSÃO DE ESTOQUE",
             "R$ 1.250,90", "R$ 1.500,00", "R$ 249,10", "Curva ABC", "Tinta Construção",
             "Síntese executiva (5W2H)", "O QUE FAZER", "POR QUE FAZER", "ATENÇÃO",
-            "Devolutiva do consultor", "Resumo executivo.", "Conclusão estratégica.",
-            "Documento gerado pelo portal NEXO", "Página 1", "Não representa lucro, margem ou CMV.",
+            "Devolutiva do consultor", "Resumo executivo", "Conclusão estratégica",
+            "Documento gerado pelo portal NEXO", "Página 1 de ", "Não representa lucro, margem ou CMV.",
             "Tintas & Cores", "Análise de reposição",
         ):
             with self.subTest(esperado=esperado):
