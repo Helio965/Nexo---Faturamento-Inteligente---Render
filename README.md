@@ -304,10 +304,10 @@ python tools/auditar_guia.py          # tabela legível
 python tools/auditar_guia.py --json   # para anexar a um chamado
 ```
 
-*(Opcional)* para criar um cliente de demonstração com o fluxo de primeiro acesso já armado:
+*(Opcional)* para criar um cliente de demonstração com o fluxo de primeiro acesso já armado — somente em ambiente local (o utilitário recusa `FLASK_ENV=production` e qualquer banco que não seja SQLite ou PostgreSQL em `localhost`); a senha temporária vem do ambiente e nunca é impressa:
 
 ```bash
-python criar_cliente_demo.py
+NEXO_AMBIENTE_DEMO=1 NEXO_DEMO_SENHA='uma-senha-temporaria-longa' python criar_cliente_demo.py
 ```
 
 ### 8. (Opcional) Homologar o motor de ETL isoladamente

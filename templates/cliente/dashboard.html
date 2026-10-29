@@ -240,7 +240,7 @@
 
 {% block extra_js %}
 {% if analise and analise.indicador and dashboard_data %}
-<script>
+<script nonce="{{ csp_nonce }}">
   const dashboardData = {{ dashboard_data|tojson }};
 
   /* ---- Helpers locais de formatação BR (separador de milhar correto) ---- */

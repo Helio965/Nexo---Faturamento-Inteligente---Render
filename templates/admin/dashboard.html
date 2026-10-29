@@ -213,7 +213,7 @@
 {# A fila de análises pode existir mesmo sem empresas ativas na carteira: cada
    gráfico só é desenhado se a sua caixa estiver na página (NEXO.plot ignora id ausente). #}
 {% if stats.total > 0 or analises %}
-<script>
+<script nonce="{{ csp_nonce }}">
   const dashboardData = {{ dashboard_data|tojson }};
 
   /* Gráficos estáticos (sem zoom nem captura de toque no celular): os valores

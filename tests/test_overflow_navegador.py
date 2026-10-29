@@ -45,7 +45,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tests.contratos_support import ContratosCase
-from tests.test_contratos_navegador import _BOOTSTRAP_MINIMO, _CDN, _copias_locais_da_cdn
+from tests.test_contratos_navegador import _BOOTSTRAP_MINIMO, _CDN, _CDN_INTEGRO, _copias_locais_da_cdn
 from tests.test_nexobot_navegador import _CONECTAR_LOCAL
 
 try:
@@ -228,7 +228,7 @@ class NavegadorCase(ContratosCase):
         self.cdn_local = _copias_locais_da_cdn()
         self.plotly_local = _plotly_local()
         self.erros_js = []
-        if len(self.cdn_local) < 2 or not self.plotly_local:
+        if len(self.cdn_local) < len(_CDN_INTEGRO) or not self.plotly_local:
             # Medir layout sem o bootstrap.min.css real (grade, utilitários, modais) ou
             # sem os gráficos desenhados não diz nada sobre o produto; a CI baixa as
             # cópias e confere o hash SRI. A omissão fica registrada como "skipped".

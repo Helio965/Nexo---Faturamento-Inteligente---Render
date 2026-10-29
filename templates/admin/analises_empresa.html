@@ -160,7 +160,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce }}">
   /* Ao abrir o modal, os dados da linha clicada preenchem o resumo e a action do
      formulário; sem botão de origem (abertura programática), o envio fica bloqueado. */
   (function () {

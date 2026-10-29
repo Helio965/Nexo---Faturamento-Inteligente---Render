@@ -123,7 +123,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce }}">
   /* ---- Modal crítico de exclusão permanente ----
      Lê data-bs-url / -empresa / -email do botão que abriu o modal e popula a
      action do form + os spans de contexto. */

@@ -81,6 +81,17 @@ _CDN_INTEGRO = {
     _CDN + "bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js": (
         "bootstrap.bundle.min.js", "application/javascript",
         "YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"),
+    # SEC-009: os templates fixam SRI em todo recurso de CDN; uma cópia que não
+    # seja byte a byte idêntica é bloqueada pelo navegador (erro no console).
+    _CDN + "bootstrap-icons@1.11.3/font/bootstrap-icons.min.css": (
+        "bootstrap-icons.min.css", "text/css",
+        "XGjxtQfXaH2tnPFa9x+ruJTuLE3Aa6LhHSWRr1XeTyhezb4abCG4ccI5AkVDxqC+"),
+    _CDN + "plotly.js-dist-min@2.35.2/plotly.min.js": (
+        "plotly.min.js", "application/javascript",
+        "cCVCZkAjYNxaYKbM8lsArLznDF/SvMFr1jcZrvOpSTCa0W40ZAdLzHCEulnUa5i7"),
+    "https://cdn.socket.io/4.7.5/socket.io.min.js": (
+        "socket.io.min.js", "application/javascript",
+        "2huaZvOR9iDzHqslqwpR87isEmrfxqyWOF7hr7BY6KG0+hVKLoEXMPUJw3ynWuhO"),
 }
 
 
@@ -168,6 +179,10 @@ class ContratosNavegadorTests(ContratosCase):
         self.addCleanup(self.navegador.close)
         self.cdn_local = _copias_locais_da_cdn()
         self.erros_js = []
+        if len(self.cdn_local) < len(_CDN_INTEGRO):
+            # SEC-009: um recurso fixado por SRI sem cópia íntegra local seria
+            # bloqueado pelo navegador (erro no console), não substituído.
+            self.skipTest("Cópias íntegras da CDN incompletas (NEXO_TEST_CDN_DIR)")
 
     def _parar_servidor(self):
         self.servidor.shutdown()

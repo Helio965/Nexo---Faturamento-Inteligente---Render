@@ -107,7 +107,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce }}">
   (function () {
     var fe = document.getElementById('filtroEmpresa');
     var fs = document.getElementById('filtroStatus');

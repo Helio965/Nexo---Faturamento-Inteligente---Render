@@ -79,7 +79,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce }}">
   /* Mostrar/ocultar senha — JS vanilla. (Toggle de perfil removido junto com o
      access-switch — login é unificado e o role vem do banco.) */
   (function () {

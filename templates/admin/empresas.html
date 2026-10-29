@@ -140,7 +140,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce }}">
   /* Busca client-side (vanilla, sem AJAX): filtra linhas pelo texto das células
      de dados (os rótulos dos botões ficam de fora: "análises" não casava com todas). */
   (function () {

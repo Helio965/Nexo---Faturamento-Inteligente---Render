@@ -105,6 +105,10 @@ def create_app(config_name: str = None) -> Flask:
     # validadas antes das extensões (o Socket.IO lê a lista de origens aqui).
     from origem_publica import configurar_origem_publica
     configurar_origem_publica(app, producao=config_name == "production")
+    # SEC-010: cabeçalhos de segurança, CSP com nonce e cache (seguranca_http.py).
+    app.config["PRODUCAO_HTTP"] = config_name == "production"
+    from seguranca_http import instalar as instalar_cabecalhos_seguranca
+    instalar_cabecalhos_seguranca(app)
 
     # Garante que a pasta instance/ exista (onde o SQLite vai morar).
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)

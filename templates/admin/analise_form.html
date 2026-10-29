@@ -107,7 +107,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce }}">
   (function () {
     var sel = document.getElementById('id_empresa');
     var tipo = document.getElementById('tipo_analise');

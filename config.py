@@ -133,6 +133,11 @@ class Config:
         h.strip() for h in os.environ.get("NEXO_TRUSTED_HOSTS", "").split(",") if h.strip()
     ]
 
+    # === Cabeçalhos de segurança (SEC-010, seguranca_http.py) ===
+    # 1 = emite a CSP em modo somente-relatório (Content-Security-Policy-
+    # Report-Only) para observar violações sem bloquear; padrão: aplicada.
+    CSP_REPORT_ONLY = os.environ.get("NEXO_CSP_REPORT_ONLY", "0") == "1"
+
     # === Proxy reverso ===
     # Nº de proxies confiáveis à frente da app (Render = 1). 0 = sem proxy (dev).
     # Ver ProxyFix em app.py.
