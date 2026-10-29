@@ -294,6 +294,10 @@ class NavegadorCase(ContratosCase):
         for mes in range(6, 12):
             fim = date(2025, mes + 1, 1) - timedelta(days=1)
             self.publicar(self.nova_analise(date(2025, mes, 1), fim).id_analise, inicio=date(2025, mes, 1), fim=fim)
+        # A análise com a Curva ABC de nomes longos é a mais recente. As demais foram
+        # publicadas com a mesma data_conclusao, e o desempate por data_criacao
+        # (CURRENT_TIMESTAMP, 1 s no SQLite) dependia de o setUp cruzar a virada de um segundo.
+        analise.data_conclusao = datetime(2026, 2, 5, 13)
         # Período em aberto: a página "Enviar relatórios" mostra as dropzones; o
         # relatório de vendas já foi recebido (dropzone no estado "Arquivo recebido").
         aberta = self.nova_analise(date(2026, 2, 1), date(2026, 2, 28))
