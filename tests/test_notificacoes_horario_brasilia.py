@@ -628,15 +628,52 @@ class HorarioBrasiliaPostgreSQLTests(unittest.TestCase):
                 self.assertEqual(diagnostico["origem_da_configuracao"], "database")
                 self.assertEqual(set(diagnostico["tipos_das_colunas"].values()), {"timestamp without time zone"})
                 self.assertEqual(diagnostico["linhas_antes_e_depois"][0], diagnostico["linhas_antes_e_depois"][1])
+                pela_url = diagnostico["pela_url"]  # com PGTZ=UTC e PGOPTIONS no ambiente, ignorados
+                self.assertEqual((pela_url["timezone_da_sessao"], pela_url["origem_da_configuracao"]),
+                                 (zona, "database"))
+                self.assertEqual(pela_url["banco"], diagnostico["banco"])
                 if zona == "UTC":
                     # K: o legado da convenção de produção aparece sem deslocamento.
                     self.assertEqual(legado["exibido"], tempo("28/10 10:05", "2026-10-28T13:05:00+00:00",
                                                               "28/10/2026 às 10:05"))
                     self.assertTrue(diagnostico["compativel"])
+                    self.assertEqual((pela_url["codigo"], pela_url["situacao"]), (0, "compativel"))
                 else:
                     # Em outra sessão o legado não está em UTC: o diagnóstico avisa antes.
                     self.assertFalse(diagnostico["compativel"])
                     self.assertIn("ATENÇÃO", diagnostico["veredito"])
+                    self.assertEqual((pela_url["codigo"], pela_url["situacao"]), (1, "verificar"))
+        sem_esquema = relatorio["banco_sem_esquema"]
+        self.assertEqual((sem_esquema["codigo"], sem_esquema["situacao"], sem_esquema["compativel"]),
+                         (2, "inconclusivo", False))
+        self.assertEqual(sem_esquema["tipos_das_colunas"], {})
+
+
+class DiagnosticoFusoHorarioTests(unittest.TestCase):
+    """Sem URL PostgreSQL válida, o diagnóstico não consulta nada e não exibe a senha."""
+
+    def executar(self, url):
+        from scripts import diagnosticar_fuso_horario as diagnostico
+        saida, erros = io.StringIO(), io.StringIO()
+        with patch.dict(os.environ, {"DATABASE_URL": url}), patch("dotenv.load_dotenv", return_value=False), \
+                contextlib.redirect_stdout(saida), contextlib.redirect_stderr(erros):
+            codigo = diagnostico.main()
+        return codigo, saida.getvalue(), erros.getvalue()
+
+    def test_url_malformada_sai_com_codigo_2_sem_a_senha(self):
+        # Senha colada sem percent-encoding: o "?" vira início da query e a porta fica inválida.
+        for url in ("postgresql://postgres.ficticio:MinhaSenha?Forte123@pooler.example.invalid:6543/postgres",
+                    "postgresql://postgres.ficticio:OutraSenha@pooler.example.invalid:porta/postgres"):
+            with self.subTest(url=url.split("@")[-1]):
+                codigo, saida, erros = self.executar(url)
+                self.assertEqual(codigo, 2)
+                self.assertIn("Diagnóstico não executado", json.loads(saida)["erro"])
+                self.assertNotIn("Senha", saida + erros)
+
+    def test_url_que_nao_e_postgresql_nao_consulta_nada(self):
+        codigo, saida, _erros = self.executar("sqlite:///:memory:")
+        self.assertEqual(codigo, 2)
+        self.assertIn("não aponta para PostgreSQL", json.loads(saida)["erro"])
 
 
 def _app_postgresql(pg, banco, pasta):
@@ -712,6 +749,9 @@ def _ensaio_em_zona(pg, zona, pasta):
             db.engine.dispose()
         with contextlib.closing(pg.connect(banco)) as conexao:
             diagnostico = diagnosticar(conexao)
+        # Pela URL, como o proprietário roda: PGTZ/PGOPTIONS do terminal não valem.
+        diagnostico["pela_url"] = _diagnostico_pela_url(
+            pg, banco, {"PGTZ": "UTC", "PGOPTIONS": "-c TimeZone=UTC"})
         with app.app_context():
             diagnostico["linhas_antes_e_depois"] = [linhas_antes, db.session.scalar(contar)]
             db.session.remove()
@@ -721,6 +761,16 @@ def _ensaio_em_zona(pg, zona, pasta):
     return {"show_time_zone": show, "roteiro": roteiro, "notificacoes_gravadas": notificacoes,
             "chamado_gravado": chamado, "diagnostico": diagnostico,
             "legado": {"gravado": gravado, "exibido": exibido, "gravado_depois_da_leitura": gravado_depois}}
+
+
+def _diagnostico_pela_url(pg, banco, ambiente):
+    """scripts/diagnosticar_fuso_horario.main() com DATABASE_URL para o banco privado."""
+    from scripts import diagnosticar_fuso_horario as diagnostico
+    url = f"postgresql://{pg.username}@/{banco}?host={pg.socket}&port={pg.port}"
+    saida = io.StringIO()
+    with patch.dict(os.environ, dict(ambiente, DATABASE_URL=url)), contextlib.redirect_stdout(saida):
+        codigo = diagnostico.main()
+    return {"codigo": codigo, **json.loads(saida.getvalue())}
 
 
 def _ensaio_postgresql():
@@ -736,6 +786,12 @@ def _ensaio_postgresql():
         with tempfile.TemporaryDirectory(prefix="nexo-horario-pg-") as pasta:
             for zona in ZONAS_SESSAO_PG:
                 relatorio["zonas"][zona] = _ensaio_em_zona(pg, zona, Path(pasta))
+            # Banco em UTC sem as tabelas do NEXO: o diagnóstico não pode dizer "compatível".
+            vazio = pg.create_database()
+            try:
+                relatorio["banco_sem_esquema"] = _diagnostico_pela_url(pg, vazio, {})
+            finally:
+                pg.drop_database(vazio)
     finally:
         pg.close()
     return relatorio
