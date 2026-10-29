@@ -9,7 +9,7 @@
 <div class="page-head">
     <div>
         <h1>{{ chamado.assunto }}</h1>
-        <p class="sub">{{ chamado.empresa.nome_fantasia or chamado.empresa.razao_social }} · {{ m.badge_categoria(chamado.categoria, categorias) }} · aberto em {{ chamado.data_abertura.strftime('%d/%m/%Y') }}</p>
+        <p class="sub">{{ chamado.empresa.nome_fantasia or chamado.empresa.razao_social }} · {{ m.badge_categoria(chamado.categoria, categorias) }} · aberto em {{ m.horario(chamado.data_abertura) }}</p>
     </div>
     <div class="page-head-actions">
         {{ m.badge_chamado(chamado.status_chamado) }}
@@ -57,6 +57,18 @@
                 <div class="kpi-label">Cliente</div>
                 <div class="fw-bold">{{ chamado.usuario_cliente.nome if chamado.usuario_cliente else '—' }}</div>
                 <div class="t-mut" style="font-size:0.85rem;">{{ chamado.empresa.razao_social }}</div>
+                <hr class="my-3" style="border-color:var(--border);">
+                {# Cada evento com o próprio instante, no horário de Brasília. #}
+                <div class="kpi-label">Aberto em</div>
+                <div class="t-mono" style="font-size:0.85rem;">{{ m.horario(chamado.data_abertura) }}</div>
+                <div class="kpi-label mt-2">Última mensagem</div>
+                <div class="t-mono" style="font-size:0.85rem;">{{ m.horario(chamado.mensagens[-1].data_envio if chamado.mensagens else none) }}</div>
+                <div class="kpi-label mt-2">Última atualização</div>
+                <div class="t-mono" style="font-size:0.85rem;">{{ m.horario(chamado.data_atualizacao) }}</div>
+                {% if chamado.status_chamado == 'RESOLVIDO' and chamado.data_fechamento %}
+                <div class="kpi-label mt-2">Resolvido em</div>
+                <div class="t-mono" style="font-size:0.85rem;">{{ m.horario(chamado.data_fechamento) }}</div>
+                {% endif %}
             </div>
         </div>
     </div>
