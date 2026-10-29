@@ -139,6 +139,10 @@ class PDFLayoutGeometriaTests(unittest.TestCase):
                          "Mouse Bola Serial C 220,00 5,10%", "Pilha AA C 40,00 0,93%", "Diskette Maxell C 36,00 0,84%",
                          "Outros produtos — 55,00 1,28%", "Faturamento total 4.311,00 100,00%"):
             _posicao(linhas, esperado)
+        conteudo = apoio.texto(apoio.gerar())
+        self.assertIn("“Outros produtos” reúne o faturamento dos itens fora do Top 5.", conteudo)
+        self.assertIn("Percentuais arredondados para duas casas decimais: a soma exibida pode diferir de 100% "
+                      "por arredondamento.", conteudo)
 
     def test_10_sintese_executiva_sem_5w2h_e_com_todos_os_cartoes(self):
         conteudo = apoio.texto(apoio.gerar())
@@ -668,6 +672,28 @@ class PDFLayoutEstruturaTests(unittest.TestCase):
             apoio.gerar()
         self.assertIn("Síntese executiva", textos)
         self.assertFalse(any("5W2H" in t for t in textos), [t for t in textos if "5W2H" in t])
+
+    def test_notas_do_grafico_so_quando_se_aplicam(self):
+        # A nota explica "Outros produtos" só quando a fatia existe, e o arredondamento só
+        # quando os percentuais exibidos não somam 100,00% (sem ajustar os dados).
+        est = pdf_export._estilos()
+
+        def nota(distribuicao):
+            secao = pdf_export._secao_distribuicao(distribuicao, LARGURA_UTIL, est)
+            return next(c.getPlainText() for c in secao._content
+                        if isinstance(c, Paragraph) and c.getPlainText().startswith("Participação individual ="))
+
+        outros = "“Outros produtos” reúne o faturamento dos itens fora do Top 5."
+        arredondamento = "Percentuais arredondados para duas casas decimais"
+        referencia = nota(_distribuicao_referencia())                  # 74,23 + … + 1,28 = 100,01%
+        self.assertIn(outros, referencia)
+        self.assertIn(arredondamento, referencia)
+        sem_outros = nota(pdf_export.calcular_distribuicao(Decimal("4256.00"), apoio.analise_referencia().curva_abc[:5]))
+        self.assertNotIn("Outros produtos", sem_outros)
+        self.assertIn(arredondamento, sem_outros)                      # 75,19 + … + 0,85 = 100,01%
+        metades = apoio.curva_referencia((("Produto A", "50.00"), ("Produto B", "50.00")))
+        exata = nota(pdf_export.calcular_distribuicao(Decimal("100.00"), metades))
+        self.assertEqual(exata, "Participação individual = faturamento do produto ÷ faturamento total do período × 100.")
 
     def test_secao_do_grafico_nao_se_parte_e_titulo_viaja_com_o_grafico(self):
         secao = pdf_export._secao_distribuicao(_distribuicao_referencia(), LARGURA_UTIL, pdf_export._estilos())
