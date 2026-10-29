@@ -155,6 +155,14 @@
 {%- endif -%}
 {%- endmacro -%}
 
+{# ---- Horário de Brasília de um instante do suporte ou do sininho (horario.py).
+   formato: 'completo' (29/10/2026 às 14:34), 'curto' (29/10 14:34) ou 'data'.
+   O atributo datetime leva o instante em ISO 8601 com fuso. ---- #}
+{%- macro horario(instante, formato='completo') -%}
+{%- if instante -%}<time datetime="{{ instante|iso_utc }}" title="{{ instante|horario_brasilia(rotulo=True) }}">{{ instante|horario_brasilia(formato) }}</time>
+{%- else -%}—{%- endif -%}
+{%- endmacro -%}
+
 {# ---- Badge: categoria do chamado (recebe o dict de rótulos) ---- #}
 {%- macro badge_categoria(categoria, rotulos) -%}
 {%- set rotulo = rotulos.get(categoria, categoria) if rotulos else categoria -%}

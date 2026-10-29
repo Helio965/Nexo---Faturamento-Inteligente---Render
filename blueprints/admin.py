@@ -13,6 +13,7 @@ from werkzeug.utils import secure_filename
 from sqlalchemy import select, func
 
 from extensions import db
+from horario import agora_utc
 from models import (
     Analise, UploadRelatorio, Empresa, Plano, Segmento, Usuario, RelatorioAnalise,
     ChamadoSuporte, MensagemSuporte, GuiaTopico, ProdutoCurvaABC, Notificacao,
@@ -1239,14 +1240,17 @@ def ticket_detalhe(id_chamado):
             if not texto:
                 flash("Digite uma resposta.", "warning")
                 return redirect(url_for("admin.ticket_detalhe", id_chamado=id_chamado))
+            # Uma leitura do relógio: a resposta é a mensagem e a atualização do chamado.
+            instante = agora_utc()
             db.session.add(MensagemSuporte(
                 id_chamado=id_chamado,
                 id_usuario_remetente=current_user.id_usuario,
                 mensagem=texto,
+                data_envio=instante,
             ))
             if chamado.status_chamado == "ABERTO":
                 chamado.status_chamado = "EM_ATENDIMENTO"
-            chamado.data_atualizacao = datetime.now(timezone.utc)
+            chamado.data_atualizacao = instante
             notificar_clientes_empresa(
                 chamado.id_empresa,
                 f"A equipe NEXO respondeu seu chamado “{chamado.assunto}”.",
@@ -1261,9 +1265,11 @@ def ticket_detalhe(id_chamado):
                 flash("Status inválido.", "danger")
                 return redirect(url_for("admin.ticket_detalhe", id_chamado=id_chamado))
             chamado.status_chamado = novo
-            chamado.data_atualizacao = datetime.now(timezone.utc)
+            # Uma leitura do relógio: atualização e fechamento no mesmo instante.
+            instante = agora_utc()
+            chamado.data_atualizacao = instante
             if novo == "RESOLVIDO":
-                chamado.data_fechamento = datetime.now(timezone.utc)
+                chamado.data_fechamento = instante
                 notificar_clientes_empresa(
                     chamado.id_empresa,
                     f"Seu chamado “{chamado.assunto}” foi marcado como resolvido.",

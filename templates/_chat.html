@@ -4,7 +4,9 @@
    Uso:  {{ chat.conversa(chamado.mensagens, current_user.id_usuario) }}
    Alinha à direita as mensagens do usuário logado; à esquerda as da
    contraparte. Identifica o autor pelo papel (Consultor NEXO vs Cliente).
+   Horário de cada mensagem no horário de Brasília, igual para os dois papéis.
    =================================================================== #}
+{%- import "_macros.html" as m -%}
 {%- macro conversa(mensagens, meu_id) -%}
 <div class="chat-thread">
     {% for msg in mensagens %}
@@ -16,7 +18,7 @@
                 <span class="chat-author">
                     {% if is_admin %}<i class="bi bi-headset"></i> Consultor NEXO{% else %}<i class="bi bi-person"></i> {{ msg.remetente.nome if msg.remetente else 'Cliente' }}{% endif %}
                 </span>
-                <span class="chat-time">{{ msg.data_envio.strftime('%d/%m/%Y %H:%M') }}</span>
+                <span class="chat-time">{{ m.horario(msg.data_envio) }}</span>
             </div>
             <div class="chat-text">{{ msg.mensagem }}</div>
         </div>

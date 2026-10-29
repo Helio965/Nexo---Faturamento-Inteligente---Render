@@ -39,7 +39,7 @@ import hashlib
 import os
 import threading
 import unittest
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
@@ -294,6 +294,10 @@ class NavegadorCase(ContratosCase):
         for mes in range(6, 12):
             fim = date(2025, mes + 1, 1) - timedelta(days=1)
             self.publicar(self.nova_analise(date(2025, mes, 1), fim).id_analise, inicio=date(2025, mes, 1), fim=fim)
+        # A análise com a Curva ABC de nomes longos é a mais recente. As demais foram
+        # publicadas com a mesma data_conclusao, e o desempate por data_criacao
+        # (CURRENT_TIMESTAMP, 1 s no SQLite) dependia de o setUp cruzar a virada de um segundo.
+        analise.data_conclusao = datetime(2026, 2, 5, 13)
         # Período em aberto: a página "Enviar relatórios" mostra as dropzones; o
         # relatório de vendas já foi recebido (dropzone no estado "Arquivo recebido").
         aberta = self.nova_analise(date(2026, 2, 1), date(2026, 2, 28))
@@ -306,12 +310,14 @@ class NavegadorCase(ContratosCase):
                 ("Dúvida sobre o indicador de pressão de estoque do último período", "RESOLVIDO")]):
             chamado = ChamadoSuporte(id_empresa=self.empresa_id, id_usuario_cliente=self.cliente_id, assunto=assunto,
                                      categoria="ERRO_INTEGRACAO" if i == 0 else "DUVIDA_TECNICA", status_chamado=status,
-                                     prioridade="MEDIA", data_abertura=datetime(2026, 2, 10 + i, 14, 20),
-                                     data_atualizacao=datetime(2026, 2, 11 + i, 9, 5))
+                                     prioridade="MEDIA",
+                                     data_abertura=datetime(2026, 2, 10 + i, 14, 20, tzinfo=timezone.utc),
+                                     data_atualizacao=datetime(2026, 2, 11 + i, 9, 5, tzinfo=timezone.utc))
             s.add(chamado)
             s.flush()
             s.add(MensagemSuporte(id_chamado=chamado.id_chamado, id_usuario_remetente=self.cliente_id,
-                                  mensagem="Mensagem fictícia.", data_envio=datetime(2026, 2, 10 + i, 14, 20)))
+                                  mensagem="Mensagem fictícia.",
+                                  data_envio=datetime(2026, 2, 10 + i, 14, 20, tzinfo=timezone.utc)))
         s.commit()
         self.empresa_longa_id = longa.id_empresa
 

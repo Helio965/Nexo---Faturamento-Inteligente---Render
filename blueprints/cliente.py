@@ -25,7 +25,6 @@ Regras:
 
 import os
 import hashlib
-from datetime import datetime, timezone
 from functools import wraps
 
 from flask import (
@@ -41,6 +40,7 @@ from etl_inputs import ETLInputError
 from etl_uploads import ler_upload_validado, limitar_upload
 
 from extensions import db
+from horario import agora_utc
 from models import (
     Analise, IndicadorAnalise, RelatorioAnalise, UploadRelatorio,
     ChamadoSuporte, MensagemSuporte, GuiaTopico,
@@ -547,15 +547,18 @@ def ticket_detalhe(id_chamado):
             flash("Digite uma mensagem.", "warning")
             return redirect(url_for("cliente.ticket_detalhe", id_chamado=id_chamado))
 
+        # Uma leitura do relógio: a resposta é a mensagem e a atualização do chamado.
+        instante = agora_utc()
         db.session.add(MensagemSuporte(
             id_chamado=id_chamado,
             id_usuario_remetente=current_user.id_usuario,
             mensagem=texto,
+            data_envio=instante,
         ))
         # Cliente respondeu → reabre se estava RESOLVIDO; notifica os admins.
         if chamado.status_chamado == "RESOLVIDO":
             chamado.status_chamado = "EM_ATENDIMENTO"
-        chamado.data_atualizacao = datetime.now(timezone.utc)
+        chamado.data_atualizacao = instante
         nome_emp = current_user.empresa.nome_fantasia or current_user.empresa.razao_social
         notificar_admins(
             f"Nova resposta de {nome_emp} no chamado “{chamado.assunto}”.",

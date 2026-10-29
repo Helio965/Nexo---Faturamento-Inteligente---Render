@@ -30,6 +30,7 @@ from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from extensions import db
+from horario import agora_utc
 
 
 class InstanteUTC(TypeDecorator):
@@ -49,6 +50,33 @@ class InstanteUTC(TypeDecorator):
             raise ValueError("Instante contratual exige fuso horário explícito.")
         valor = value.astimezone(timezone.utc)
         return valor.replace(tzinfo=None) if dialect.name == "sqlite" else valor
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value.astimezone(timezone.utc)
+
+
+class InstanteUTCSemFuso(TypeDecorator):
+    """Instante absoluto numa coluna legada `timestamp without time zone`.
+
+    Convenção do suporte e do sininho (horario.py): a coluna guarda o relógio
+    UTC, sem fuso. A escrita exige fuso explícito e converte para UTC aqui,
+    então o TimeZone da sessão do banco não muda o valor gravado. A leitura
+    devolve o instante com fuso UTC. O tipo da coluna continua o mesmo, sem
+    migração de esquema nem de dados.
+    """
+    impl = DateTime()
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Horário do suporte exige fuso horário explícito.")
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
 
     def process_result_value(self, value, dialect):
         if value is None:
@@ -452,18 +480,20 @@ class ChamadoSuporte(db.Model):
     categoria: Mapped[str] = mapped_column(String, nullable=False)
     status_chamado: Mapped[str] = mapped_column(String, nullable=False, default="ABERTO")
     prioridade: Mapped[str] = mapped_column(String, nullable=False, default="MEDIA")
+    # Horários em UTC (InstanteUTCSemFuso); o relógio é o do Python, não o
+    # CURRENT_TIMESTAMP da sessão. O server_default só espelha o esquema.
     data_abertura: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, server_default=func.current_timestamp()
+        InstanteUTCSemFuso(), nullable=False, default=agora_utc, server_default=func.current_timestamp()
     )
-    data_atualizacao: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    data_fechamento: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    data_atualizacao: Mapped[Optional[datetime]] = mapped_column(InstanteUTCSemFuso())
+    data_fechamento: Mapped[Optional[datetime]] = mapped_column(InstanteUTCSemFuso())
 
     empresa = relationship("Empresa")
     usuario_cliente = relationship("Usuario")
     mensagens = relationship(
         "MensagemSuporte",
         back_populates="chamado",
-        order_by="MensagemSuporte.data_envio",
+        order_by="[MensagemSuporte.data_envio, MensagemSuporte.id_mensagem]",
     )
 
     __table_args__ = (
@@ -490,7 +520,7 @@ class MensagemSuporte(db.Model):
     id_usuario_remetente: Mapped[int] = mapped_column(ForeignKey("usuario.id_usuario"), nullable=False)
     mensagem: Mapped[str] = mapped_column(Text, nullable=False)
     data_envio: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, server_default=func.current_timestamp()
+        InstanteUTCSemFuso(), nullable=False, default=agora_utc, server_default=func.current_timestamp()
     )
     lida: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
@@ -518,8 +548,9 @@ class Notificacao(db.Model):
     texto: Mapped[str] = mapped_column(String, nullable=False)
     link_destino: Mapped[Optional[str]] = mapped_column(String)
     lida: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Preenchido no flush (UTC): o payload do Socket.IO usa este mesmo instante.
     data_criacao: Mapped[datetime] = mapped_column(
-        DateTime, nullable=False, server_default=func.current_timestamp()
+        InstanteUTCSemFuso(), nullable=False, default=agora_utc, server_default=func.current_timestamp()
     )
 
     usuario = relationship("Usuario")

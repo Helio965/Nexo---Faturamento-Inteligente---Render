@@ -61,7 +61,7 @@
                     <td class="t-strong">{{ c.assunto }}</td>
                     <td>{{ m.badge_categoria(c.categoria, categorias) }}</td>
                     <td>{{ m.badge_chamado(c.status_chamado) }}</td>
-                    <td class="t-mut t-mono">{{ c.data_abertura.strftime('%d/%m/%Y') }}</td>
+                    <td class="t-mut t-mono">{{ m.horario(c.data_abertura, 'data') }}</td>
                     <td class="text-end"><a href="{{ url_for('cliente.ticket_detalhe', id_chamado=c.id_chamado) }}" class="btn-ghost btn-sm-x"><i class="bi bi-chat-dots"></i> Abrir</a></td>
                 </tr>
                 {% endfor %}
