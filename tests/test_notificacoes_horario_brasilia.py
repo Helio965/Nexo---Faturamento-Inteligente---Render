@@ -211,8 +211,11 @@ ROTEIRO = (
     ("resposta do cliente", datetime(2026, 10, 29, 18, 3, tzinfo=UTC), "ADMIN", "15:03"),
     ("mudança de status", datetime(2026, 10, 29, 18, 15, tzinfo=UTC), None, "15:15"),
     ("resolução", datetime(2026, 10, 29, 18, 27, tzinfo=UTC), "CLIENTE", "15:27"),
+    # O status continua RESOLVIDO: "Resolvido em" (15:27) fica antes da "Última atualização".
+    ("resposta após resolver", datetime(2026, 10, 29, 18, 40, tzinfo=UTC), "CLIENTE", "15:40"),
     ("reabertura", B, "ADMIN", "22:30"),
 )
+RESOLVIDO_EM = ("29/10/2026 às 15:27", "2026-10-29T18:27:00+00:00")
 
 
 def executar_roteiro(portal):
@@ -222,7 +225,7 @@ def executar_roteiro(portal):
         portal.relogio(instante)
         if etapa == "abertura":
             id_chamado = portal.abrir_chamado()
-        elif etapa == "resposta do admin":
+        elif etapa in ("resposta do admin", "resposta após resolver"):
             portal.responder_admin(id_chamado)
         elif etapa in ("resposta do cliente", "reabertura"):
             portal.responder_cliente(id_chamado)
@@ -274,11 +277,13 @@ def conferir_roteiro(caso, visto):
             caso.assertEqual(painel["Última mensagem"], mensagens[-1])
             caso.assertEqual(painel["Última atualização"],
                              "—" if etapa == "abertura" else tempo(completo, iso, completo))
-            if etapa == "resolução":
-                caso.assertEqual(painel["Resolvido em"], tempo(completo, iso, completo))
-                caso.assertEqual(passo["conversa"]["CLIENTE"]["resolvido_em"], tempo(completo, iso, completo))
+            if etapa in ("resolução", "resposta após resolver"):
+                resolvido = tempo(*RESOLVIDO_EM, RESOLVIDO_EM[0])
+                caso.assertEqual(painel["Resolvido em"], resolvido)
+                caso.assertEqual(passo["conversa"]["CLIENTE"]["resolvido_em"], resolvido)
             else:
                 caso.assertNotIn("Resolvido em", painel)
+                caso.assertIsNone(passo["conversa"]["CLIENTE"]["resolvido_em"])
 
 
 class HorarioBrasiliaTests(DeployTestCase):
@@ -364,13 +369,15 @@ class HorarioBrasiliaTests(DeployTestCase):
                                  f"29/10/2026 às {hora}")
 
     @unittest.skipUnless(hasattr(time, "tzset"), "Troca do fuso do processo exige POSIX (time.tzset).")
-    def test_d_diferenca_observada_e_o_relogio_de_outro_fuso_exibido_como_brasilia(self):
-        """Antes da correção, o item em tempo real usava datetime.now(): o relógio de
-        parede do processo, exibido como se fosse Brasília (e o banco, o relógio do
-        TimeZone da sessão). A diferença é o deslocamento entre esse fuso e Brasília:
-        3 h com o servidor em UTC (o padrão do Render) e 2 h com um relógio em UTC−1,
-        como Atlantic/Azores nesta data. Não é uma constante, por isso subtrair 2 h
-        ou 3 h acertaria um caso e erraria os outros; a correção converte o instante."""
+    def test_d_relogio_de_outro_fuso_exibido_como_brasilia_adianta_o_deslocamento(self):
+        """Ilustra o mecanismo do código anterior, que exibia sem conversão o relógio de
+        parede de outro fuso (datetime.now() do processo e o relógio da sessão do
+        banco): o adiantamento é o deslocamento entre esse fuso e Brasília. É 3 h em
+        UTC (o padrão do Render e do Supabase) e 2 h num relógio em UTC−1, uma das
+        hipóteses para as "cerca de 2 h" relatadas, não confirmada em produção. Por
+        isso nenhuma subtração fixa serve. O código anterior foi executado nessas
+        configurações pelo ensaio repro.py (pacote de evidências); aqui se confere que
+        o código novo dá 14:34 em todas."""
         antigo = {"UTC": ("29/10 17:34", 3), "Atlantic/Azores": ("29/10 16:34", 2),
                   "America/Noronha": ("29/10 15:34", 1), "America/Sao_Paulo": ("29/10 14:34", 0)}
         for zona, (esperado, diferenca) in antigo.items():
@@ -427,10 +434,10 @@ class HorarioBrasiliaTests(DeployTestCase):
         self.assertLess(chamado.data_abertura, chamado.mensagens[0].data_envio)
         self.assertLess(chamado.mensagens[0].data_envio, gravado)
 
-    def test_f_resposta_grava_mensagem_e_atualizacao_no_mesmo_instante(self):
-        """Na resposta, a mensagem e a atualização do chamado são o mesmo evento: uma
-        leitura do relógio. Com um relógio que avança um minuto a cada leitura, duas
-        leituras deixariam a "Última atualização" um minuto antes da "Última mensagem"."""
+    def test_f_resposta_e_resolucao_leem_o_relogio_uma_vez(self):
+        """Na resposta, a mensagem e a atualização do chamado são o mesmo evento; na
+        resolução, a atualização e o fechamento. Com um relógio que avança um minuto a
+        cada leitura, duas leituras deixariam um minuto de diferença entre eles."""
         id_chamado = self.portal.abrir_chamado()
         leituras = (A + timedelta(minutes=i) for i in range(1, 10_000))
         self.app.config["NEXO_RELOGIO"] = lambda: next(leituras)
@@ -442,6 +449,11 @@ class HorarioBrasiliaTests(DeployTestCase):
                 self.assertEqual(painel["Última mensagem"], ultima)
                 self.assertEqual(painel["Última atualização"], ultima)
                 self.assertEqual(self.portal.lista("ADMIN")[id_chamado], ultima)
+        with self.subTest(acao="resolução"):
+            self.portal.alterar_status(id_chamado, "RESOLVIDO")
+            painel = self.portal.painel_admin(id_chamado)
+            self.assertEqual(painel["Resolvido em"], painel["Última atualização"])
+            self.assertEqual(self.portal.conversa("CLIENTE", id_chamado)["resolvido_em"], painel["Resolvido em"])
 
     def test_g_sininho_recarregado_mostra_o_texto_do_tempo_real(self):
         id_chamado = self.portal.abrir_chamado()
@@ -530,6 +542,32 @@ class HorarioBrasiliaTests(DeployTestCase):
         # Ler não regrava: os valores antigos continuam como estavam.
         self.assertEqual(self.gravados("SELECT data_criacao FROM notificacao ORDER BY id_notificacao")[:2], antes)
 
+    def test_k_escrita_converte_qualquer_fuso_para_o_relogio_utc(self):
+        """Instantes com fuso de Brasília ou de Tóquio, gravados pelo ORM nas cinco
+        colunas, ficam como o relógio UTC (17:34) e aparecem 14:34."""
+        from models import ChamadoSuporte, MensagemSuporte, Notificacao
+        for zona in ("America/Sao_Paulo", "Asia/Tokyo"):
+            with self.subTest(zona=zona):
+                local = A.astimezone(ZoneInfo(zona))
+                chamado = ChamadoSuporte(id_empresa=self.empresa_cliente(), id_usuario_cliente=self.cliente_id,
+                                         assunto=f"Chamado fictício {zona}", categoria="FINANCEIRO",
+                                         data_abertura=local, data_atualizacao=local, data_fechamento=local)
+                self.db.session.add(chamado)
+                self.db.session.flush()
+                mensagem = MensagemSuporte(id_chamado=chamado.id_chamado, id_usuario_remetente=self.cliente_id,
+                                           mensagem="Mensagem fictícia.", data_envio=local)
+                aviso = Notificacao(id_usuario=self.admin_id, texto=f"Aviso fictício {zona}", data_criacao=local)
+                self.db.session.add_all([mensagem, aviso])
+                self.db.session.commit()
+                brutos = self.db.session.execute(text(
+                    "SELECT c.data_abertura, c.data_atualizacao, c.data_fechamento, m.data_envio, n.data_criacao "
+                    "FROM chamado_suporte c JOIN mensagem_suporte m ON m.id_chamado = c.id_chamado, notificacao n "
+                    "WHERE c.id_chamado = :c AND n.id_notificacao = :n"),
+                    {"c": chamado.id_chamado, "n": aviso.id_notificacao}).one()
+                self.assertTrue(all(str(b).startswith("2026-10-29 17:34:00") for b in brutos), brutos)
+                self.assertEqual(self.portal.lista("ADMIN")[chamado.id_chamado][0], "29/10/2026 às 14:34")
+                self.assertEqual(self.portal.sininho("ADMIN")[aviso.id_notificacao][0], "29/10 14:34")
+
     def empresa_cliente(self):
         from models import Usuario
         return self.db.session.get(Usuario, self.cliente_id).id_empresa
@@ -550,7 +588,7 @@ class HorarioBrasiliaTests(DeployTestCase):
         assunto = '<img src=x onerror="alert(1)"> 23:59 30/12/1999'
         self.portal.abrir_chamado(assunto=assunto)
         (payload,) = self.portal.recebidos("ADMIN")
-        self.assertIn(assunto, payload["texto"])  # o JavaScript insere o texto escapado
+        self.assertIn(assunto, payload["texto"])  # escapado pelo JavaScript (teste de navegador)
         self.assertRegex(payload["hora"], r"^\d{2}/\d{2} \d{2}:\d{2}$")
         self.assertRegex(payload["instante"], r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\+00:00$")
         self.assertRegex(payload["hora_completa"], r"^\d{2}/\d{2}/\d{4} às \d{2}:\d{2} \(Horário de Brasília\)$")
@@ -603,7 +641,7 @@ class HorarioBrasiliaPostgreSQLTests(unittest.TestCase):
         self.assertEqual(relatorio["fuso_do_processo"], "JST")  # servidor fora de UTC e de Brasília
         self.assertEqual(sorted(relatorio["zonas"]), sorted(ZONAS_SESSAO_PG))
         utc_esperado = {"2026-10-29 17:34:00", "2026-10-29 17:52:00", "2026-10-29 18:03:00",
-                        "2026-10-29 18:27:00", "2026-10-30 01:30:00"}
+                        "2026-10-29 18:27:00", "2026-10-29 18:40:00", "2026-10-30 01:30:00"}
         antes = {"UTC": ("28/10 13:05", 3), "America/Sao_Paulo": ("28/10 10:05", 0),
                  "Atlantic/Azores": ("28/10 12:05", 2), "Asia/Tokyo": ("28/10 22:05", 12)}
         for zona, dados in relatorio["zonas"].items():
@@ -612,6 +650,7 @@ class HorarioBrasiliaPostgreSQLTests(unittest.TestCase):
                 conferir_roteiro(self, dados["roteiro"])  # o mesmo que em SQLite (teste I)
                 # Gravado como relógio UTC qualquer que seja o TimeZone da sessão.
                 self.assertEqual(set(dados["notificacoes_gravadas"]), utc_esperado)
+                self.assertEqual(dados["gravado_com_fuso_de_toquio"], "2026-10-29 17:34:00")
                 self.assertEqual(dados["chamado_gravado"],
                                  ["2026-10-29 17:34:00", "2026-10-30 01:30:00", "2026-10-29 18:27:00"])
                 # Como o código anterior gravava (pela sessão) e exibia (sem conversão):
@@ -669,6 +708,30 @@ class DiagnosticoFusoHorarioTests(unittest.TestCase):
                 self.assertEqual(codigo, 2)
                 self.assertIn("Diagnóstico não executado", json.loads(saida)["erro"])
                 self.assertNotIn("Senha", saida + erros)
+
+    def test_host_remoto_sem_sslmode_exige_tls(self):
+        from sqlalchemy.engine import make_url
+        from scripts.diagnosticar_fuso_horario import parametros_tls
+        remoto = "postgresql://usuario:ficticia@pooler.example.invalid:6543/postgres"
+        sem_tls = {k: v for k, v in os.environ.items() if k not in ("PGSSLMODE", "PGREQUIRESSL")}
+        with patch.dict(os.environ, sem_tls, clear=True):
+            self.assertEqual(parametros_tls(make_url(remoto)), {"sslmode": "require"})
+            for url in (remoto + "?sslmode=verify-full", "postgresql://usuario@/nexo?host=/tmp/socket",
+                        "postgresql://usuario@localhost/nexo", "postgresql://usuario@127.0.0.1/nexo"):
+                self.assertEqual(parametros_tls(make_url(url)), {}, url)
+        with patch.dict(os.environ, {"PGSSLMODE": "verify-full"}):
+            self.assertEqual(parametros_tls(make_url(remoto)), {})  # vale o do terminal
+
+    def test_variaveis_de_alvo_e_sessao_sao_ignoradas_e_as_de_tls_preservadas(self):
+        from scripts import diagnosticar_fuso_horario as diagnostico
+        ambiente = {"PGTZ": "UTC", "PGOPTIONS": "-c TimeZone=UTC", "PGHOST": "outro.example.invalid",
+                    "PGSERVICE": "outro", "PGSSLMODE": "verify-full", "PGSSLROOTCERT": "/caminho/raiz.crt",
+                    "PGREQUIREAUTH": "scram-sha-256"}
+        with patch.dict(os.environ, dict(ambiente, DATABASE_URL="sqlite:///:memory:")), \
+                patch("dotenv.load_dotenv", return_value=False), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(diagnostico.main(), 2)
+            restantes = {chave for chave in ambiente if chave in os.environ}
+        self.assertEqual(restantes, {"PGSSLMODE", "PGSSLROOTCERT", "PGREQUIREAUTH"})
 
     def test_url_que_nao_e_postgresql_nao_consulta_nada(self):
         codigo, saida, _erros = self.executar("sqlite:///:memory:")
@@ -734,6 +797,13 @@ def _ensaio_em_zona(pg, zona, pasta):
                 id_legado = db.session.scalar(text("SELECT max(id_notificacao) FROM notificacao"))
                 ler = text("SELECT data_criacao::text FROM notificacao WHERE id_notificacao = :i")
                 gravado = db.session.scalar(ler, {"i": id_legado})
+                # Instante com fuso de Tóquio pelo ORM: o tipo da coluna converte para UTC.
+                from models import Notificacao
+                toquio = Notificacao(id_usuario=base.admin_id, texto="Aviso fictício com fuso de Tóquio",
+                                     data_criacao=A.astimezone(ZoneInfo("Asia/Tokyo")))
+                db.session.add(toquio)
+                db.session.commit()
+                gravado_toquio = db.session.scalar(ler, {"i": toquio.id_notificacao})
             exibido = portal.sininho("ADMIN")[id_legado]
         finally:
             portal.fechar()
@@ -759,7 +829,7 @@ def _ensaio_em_zona(pg, zona, pasta):
     finally:
         pg.drop_database(banco)
     return {"show_time_zone": show, "roteiro": roteiro, "notificacoes_gravadas": notificacoes,
-            "chamado_gravado": chamado, "diagnostico": diagnostico,
+            "chamado_gravado": chamado, "diagnostico": diagnostico, "gravado_com_fuso_de_toquio": gravado_toquio,
             "legado": {"gravado": gravado, "exibido": exibido, "gravado_depois_da_leitura": gravado_depois}}
 
 
@@ -823,6 +893,10 @@ _CAPTURAR_SOCKET = """
   });
 })();
 """
+
+
+# Assunto do chamado com HTML: precisa aparecer como texto no sininho em tempo real.
+ASSUNTO_COM_HTML = 'Dúvida <img src=x onerror="window.__xss=1"> fictícia'
 
 
 def _socketio_local():
@@ -910,6 +984,15 @@ class HorarioBrasiliaNavegadorTests(DeployTestCase):
         self.assertEqual(resposta.status, 200, caminho)
         pagina.wait_for_function("() => window.__nexoSocket && window.__nexoSocket.connected", timeout=15000)
 
+    def assert_sem_html_injetado(self, pagina):
+        """O assunto com HTML chega como texto: sem <img>, sem script executado."""
+        item = pagina.eval_on_selector("#bellList .bell-item", "a => [a.querySelectorAll('img, script').length, "
+                                       "a.querySelector('.bell-msg').textContent]")
+        self.assertEqual(item[0], 0)
+        self.assertIn(ASSUNTO_COM_HTML, item[1])
+        self.assertEqual(pagina.eval_on_selector_all("#nexoToasts img, #nexoToasts script", "els => els.length"), 0)
+        self.assertIsNone(pagina.evaluate("() => window.__xss === undefined ? null : window.__xss"))
+
     @staticmethod
     def tempo_no_dom(pagina, seletor):
         return pagina.eval_on_selector(seletor, "t => [t.textContent, t.getAttribute('datetime'), t.title]")
@@ -919,7 +1002,7 @@ class HorarioBrasiliaNavegadorTests(DeployTestCase):
         cliente = self.abrir("CLIENTE", "America/Los_Angeles")
         self.ir(admin, "/admin/tickets")
         self.ir(cliente, "/cliente/tickets?novo=1")
-        cliente.fill("input[name=assunto]", "Dúvida fictícia sobre o relatório")
+        cliente.fill("input[name=assunto]", ASSUNTO_COM_HTML)
         cliente.select_option("select[name=categoria]", "DUVIDA_TECNICA")
         cliente.fill("textarea[name=mensagem]", "Mensagem fictícia do cliente.")
         with cliente.expect_navigation(wait_until="load"):
@@ -932,10 +1015,12 @@ class HorarioBrasiliaNavegadorTests(DeployTestCase):
         sino = tempo("29/10 14:34", "2026-10-29T17:34:00+00:00", "29/10/2026 às 14:34")
         self.assertEqual(self.tempo_no_dom(admin, "#bellList .bell-item time"), sino)
         self.assertEqual(admin.text_content("#bellBadge").strip(), "1")
+        self.assert_sem_html_injetado(admin)
         # Recarga: o mesmo texto, agora vindo do banco.
         self.ir(admin, "/admin/tickets")
         self.assertEqual(self.tempo_no_dom(admin, "#bellList .bell-item time"), sino)
         self.assertEqual(self.tempo_no_dom(admin, "table.nexo-table tbody time"), abertura)
+        self.assert_sem_html_injetado(admin)
         # O admin responde às 14:52; o cliente recebe em tempo real.
         self.ir(admin, f"/admin/tickets/{id_chamado}")
         self.ir(cliente, f"/cliente/tickets/{id_chamado}")
