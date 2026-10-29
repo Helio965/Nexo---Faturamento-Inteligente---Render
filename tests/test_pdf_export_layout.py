@@ -226,6 +226,7 @@ class PDFLayoutGeometriaTests(unittest.TestCase):
         self.assertIn("Documento gerado pelo portal NEXO em 29/10/2026 às 12:02 (horário de Brasília).", conteudo)
 
     def test_inconsistencia_soma_maior_que_o_total_e_explicita(self):
+        apoio.reativar_logger_do_gerador(self)
         analise = apoio.analise_referencia()
         analise.indicador.faturamento_total = Decimal("4000.00")
         with self.assertLogs("pdf_export", level="WARNING"):
@@ -275,6 +276,7 @@ class PDFLayoutEstruturaTests(unittest.TestCase):
         self.assertLess(abs(sum(f.percentual for f in sem_outros.fatias) - 100), Decimal("1e-20"))
 
     def test_inconsistencias_tratadas_explicitamente(self):
+        apoio.reativar_logger_do_gerador(self)
         produtos = apoio.analise_referencia().curva_abc[:5]
         with self.assertLogs("pdf_export", level="WARNING"):
             maior = pdf_export.calcular_distribuicao(Decimal("4000"), produtos)

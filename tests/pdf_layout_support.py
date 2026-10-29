@@ -10,6 +10,7 @@ stdin/stdout; sem ele, os testes que dependem de geometria são ignorados.
 from datetime import date, datetime, timezone
 from decimal import Decimal
 import html
+import logging
 import re
 import shutil
 import subprocess
@@ -92,6 +93,14 @@ def gerar(analise=None, semaforos=None, produtos=None, gerado_em=INSTANTE_UTC):
     semaforos = semaforos_referencia() if semaforos is None else semaforos
     produtos = analise.curva_abc if produtos is None else produtos
     return pdf_export.gerar_pdf_analise(analise, semaforos, produtos, gerado_em=gerado_em)
+
+
+def reativar_logger_do_gerador(caso):
+    """As migrations de teste chamam fileConfig() do Alembic, que desativa os loggers
+    já criados; reativa o do gerador durante o teste e restaura o estado ao fim."""
+    logger = logging.getLogger(pdf_export.__name__)
+    caso.addCleanup(setattr, logger, "disabled", logger.disabled)
+    logger.disabled = False
 
 
 def pdftotext_disponivel():
