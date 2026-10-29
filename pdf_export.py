@@ -343,14 +343,19 @@ def _abc_flowable(abc_top, largura, est):
         ("LINEBELOW", (0, 0), (-1, -2), 0.4, LINHA),
         ("BOX", (0, 0), (-1, -1), 0.5, LINHA),
     ]
+    util_valor = larguras[3] - 12
     for i, p in enumerate(abc_top[:TOP_N_PDF], start=1):
+        valor = _brl(p.faturamento)
         linhas.append([
             str(p.posicao_ranking),
             Paragraph(_texto_pdf(p.produto_nome), est["cell"]),
             p.classe_abc,
-            _brl(p.faturamento),
-            f"{float(p.percentual_acumulado or 0):.1f}%",
+            valor,
+            _pct(p.percentual_acumulado, 1),
         ])
+        corpo = _tamanho_que_cabe(valor, "Helvetica", 9, util_valor, minimo=6.5)
+        if corpo != 9:
+            estilo.append(("FONTSIZE", (3, i), (3, i), corpo))
         # Cor da célula de classe + zebra
         cor = CLASSE_COR.get(p.classe_abc, CINZA)
         estilo.append(("TEXTCOLOR", (2, i), (2, i), cor))
@@ -459,6 +464,8 @@ def _grafico_pizza(distribuicao, diametro):
     for i, fatia in enumerate(distribuicao.fatias):
         pizza.slices[i].fillColor = fatia.cor
         pizza.slices[i].fontColor = _tinta_sobre(fatia.cor)
+    if len(distribuicao.fatias) == 1:
+        pizza.slices[0].labelRadius = 0      # círculo inteiro: o percentual vai ao centro
     desenho.add(pizza)
     # Contorno fino do círculo: mantém visível a borda de fatias claras sobre o papel branco.
     desenho.add(Circle(folga + diametro / 2, folga + diametro / 2, diametro / 2,
@@ -642,7 +649,8 @@ def gerar_pdf_analise(analise, semaforos, abc_top) -> bytes:
     # Curva ABC: título, tabela e explicação juntos; depois, o gráfico de pizza.
     if produtos:
         elems.append(KeepTogether([
-            Paragraph(f"Curva ABC · Top {len(produtos)} produtos (Princípio de Pareto)", est["h2"]),
+            Paragraph(f"Curva ABC · Top {len(produtos)} {'produto' if len(produtos) == 1 else 'produtos'} "
+                      "(Princípio de Pareto)", est["h2"]),
             _abc_flowable(produtos, largura, est),
             Spacer(1, 2 * mm),
             Paragraph("Classe A: até 80% do faturamento acumulado (estratégicos) · "
