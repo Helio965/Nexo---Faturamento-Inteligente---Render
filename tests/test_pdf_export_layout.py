@@ -226,6 +226,27 @@ class PDFLayoutGeometriaTests(unittest.TestCase):
         conteudo = apoio.texto(apoio.gerar())
         self.assertIn("Documento gerado pelo portal NEXO em 29/10/2026 às 12:02 (horário de Brasília).", conteudo)
 
+    def test_18_horario_de_brasilia_no_rodape_e_na_frase_final(self):
+        # Os casos de fuso (servidor em UTC, virada do dia, verão) estão em test_pdf_export_horario.py.
+        from datetime import datetime, timezone
+        documento = apoio.gerar(gerado_em=datetime(2026, 10, 30, 1, 15, tzinfo=timezone.utc))
+        paginas = apoio.paginas(documento)
+        for pagina in paginas:
+            rodape = " ".join(l["texto"] for l in apoio.linhas_do_rodape(pagina))
+            self.assertIn("Gerado em 29/10/2026 às 22:15 (horário de Brasília)", rodape)
+        conteudo = apoio.texto(documento)
+        self.assertIn("Documento gerado pelo portal NEXO em 29/10/2026 às 22:15 (horário de Brasília).", conteudo)
+        self.assertNotIn("01:15", conteudo)
+
+    def test_19_exportacoes_em_momentos_diferentes(self):
+        from datetime import datetime, timezone
+        primeira = apoio.texto(apoio.gerar(gerado_em=datetime(2026, 10, 29, 15, 2, tzinfo=timezone.utc)))
+        segunda = apoio.texto(apoio.gerar(gerado_em=datetime(2026, 10, 29, 18, 47, tzinfo=timezone.utc)))
+        self.assertIn("29/10/2026 às 12:02", primeira)
+        self.assertIn("29/10/2026 às 15:47", segunda)
+        # Só o carimbo muda: conteúdo, valores e período são os mesmos nas duas exportações.
+        self.assertEqual(primeira.replace("12:02", "#"), segunda.replace("15:47", "#"))
+
     def test_inconsistencia_soma_maior_que_o_total_e_explicita(self):
         apoio.reativar_logger_do_gerador(self)
         analise = apoio.analise_referencia()
