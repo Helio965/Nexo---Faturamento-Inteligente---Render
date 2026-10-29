@@ -14,19 +14,26 @@ recuo interno); nenhum título fica sozinho no fim de uma página — cada títu
 viaja com o primeiro bloco do seu conteúdo —, blocos curtos (indicadores,
 tabela, gráfico com legenda, cada cartão) não se partem e os textos longos da
 devolutiva quebram entre páginas normalmente. O rodapé de todas as páginas traz
-"Página X de Y".
+"Página X de Y" e a data/hora de geração.
+
+Data e hora de geração: sempre no horário oficial de Brasília
+(America/Sao_Paulo), lidas no momento de cada exportação a partir de um instante
+com fuso explícito. Não dependem do fuso configurado no servidor e não alteram
+o período analisado nem nenhum dado gravado.
 
 Função pública:
-    gerar_pdf_analise(analise, semaforos, abc_top) -> bytes
+    gerar_pdf_analise(analise, semaforos, abc_top, *, gerado_em=None) -> bytes
 """
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from functools import lru_cache
 from io import BytesIO
 import logging
 import re
 from xml.sax.saxutils import escape
+from zoneinfo import ZoneInfo
 
 from reportlab.graphics.charts.piecharts import Pie
 from reportlab.graphics.shapes import Circle, Drawing, Rect
@@ -84,6 +91,39 @@ MARGEM_TOPO = 15 * mm
 MARGEM_BASE = 24 * mm        # área reservada ao rodapé (régua em 17 mm, textos em 12,5 e 8,5 mm)
 AVISO_RODAPE = ("Sinalização gerencial estimada (faturamento e Curva ABC). Não representa "
                 "lucro, margem ou CMV.")
+
+# ---- Horário oficial de Brasília ----
+FUSO_HORARIO_OFICIAL = "America/Sao_Paulo"
+
+
+@lru_cache(maxsize=1)
+def fuso_brasilia() -> ZoneInfo:
+    """Fuso IANA do horário oficial de Brasília (regras do banco de fusos)."""
+    return ZoneInfo(FUSO_HORARIO_OFICIAL)
+
+
+def _agora_utc() -> datetime:
+    """Instante atual com fuso explícito. Único ponto de leitura do relógio
+    (os testes o substituem para simular horários conhecidos)."""
+    return datetime.now(timezone.utc)
+
+
+def instante_de_geracao(gerado_em: datetime | None = None) -> datetime:
+    """Instante da geração no horário oficial de Brasília.
+
+    Sem argumento, lê o relógio agora — portanto cada exportação recebe o seu
+    próprio horário. Um instante sem fuso é recusado: não há como saber a qual
+    horário ele se refere (é exatamente o defeito do datetime.now() ingênuo).
+    """
+    instante = _agora_utc() if gerado_em is None else gerado_em
+    if instante.tzinfo is None or instante.utcoffset() is None:
+        raise ValueError("O instante de geração do PDF precisa ter fuso horário explícito.")
+    return instante.astimezone(fuso_brasilia())
+
+
+def formatar_data_hora(instante_local: datetime) -> str:
+    """'29/10/2026 às 12:02' (o instante já deve estar no fuso de exibição)."""
+    return instante_local.strftime("%d/%m/%Y às %H:%M")
 
 
 # ---- Formatação ----
@@ -208,8 +248,8 @@ class _BarraTopo(Flowable):
         c.restoreState()
 
 
-def _desenhar_rodape(canvas, pagina, total, identificacao):
-    """Rodapé de todas as páginas: aviso, 'Página X de Y' e identificação."""
+def _desenhar_rodape(canvas, pagina, total, identificacao, carimbo):
+    """Rodapé de todas as páginas: aviso, 'Página X de Y', identificação e geração."""
     x0, x1 = MARGEM_X, A4[0] - MARGEM_X
     canvas.saveState()
     canvas.setStrokeColor(LINHA)
@@ -223,12 +263,15 @@ def _desenhar_rodape(canvas, pagina, total, identificacao):
     canvas.setFont("Helvetica", 7.5)
     canvas.setFillColor(CINZA)
     canvas.drawString(x0, 12.5 * mm, _encurtar(AVISO_RODAPE, "Helvetica", 7.5, espaco))
+    geracao = f"Gerado em {carimbo} (horário de Brasília)"
     canvas.setFont("Helvetica", 7)
-    canvas.drawString(x0, 8.5 * mm, _encurtar(identificacao, "Helvetica", 7, x1 - x0))
+    canvas.drawRightString(x1, 8.5 * mm, geracao)
+    espaco = x1 - x0 - stringWidth(geracao, "Helvetica", 7) - 6 * mm
+    canvas.drawString(x0, 8.5 * mm, _encurtar(identificacao, "Helvetica", 7, espaco))
     canvas.restoreState()
 
 
-def _canvas_com_rodape(identificacao):
+def _canvas_com_rodape(identificacao, carimbo):
     """Canvas que adia o rodapé até o fim do documento para conhecer o total de páginas."""
     class _CanvasNexo(Canvas):
         def __init__(self, *args, **kwargs):
@@ -243,7 +286,7 @@ def _canvas_com_rodape(identificacao):
             total = len(self._paginas_pendentes)
             for estado in self._paginas_pendentes:
                 self.__dict__.update(estado)
-                _desenhar_rodape(self, self._pageNumber, total, identificacao)
+                _desenhar_rodape(self, self._pageNumber, total, identificacao, carimbo)
                 super().showPage()
             super().save()
 
@@ -607,8 +650,13 @@ def _devolutiva(rel, est):
     return elems
 
 
-def gerar_pdf_analise(analise, semaforos, abc_top) -> bytes:
-    """Monta o PDF da análise e devolve os bytes."""
+def gerar_pdf_analise(analise, semaforos, abc_top, *, gerado_em=None) -> bytes:
+    """Monta o PDF da análise e devolve os bytes.
+
+    `gerado_em` (opcional, com fuso) fixa o instante da geração; sem ele, o
+    relógio é lido agora — cada chamada recebe o horário da própria exportação.
+    """
+    geracao = formatar_data_hora(instante_de_geracao(gerado_em))
     buf = BytesIO()
     doc = BaseDocTemplate(
         buf, pagesize=A4,
@@ -677,8 +725,8 @@ def gerar_pdf_analise(analise, semaforos, abc_top) -> bytes:
 
     elems.append(Spacer(1, 6 * mm))
     elems.append(Paragraph(
-        f"Documento gerado pelo portal NEXO em {datetime.now().strftime('%d/%m/%Y %H:%M')}.", est["small"]))
+        f"Documento gerado pelo portal NEXO em {geracao} (horário de Brasília).", est["small"]))
 
     identificacao = f"NEXO · {nome_empresa or ''} · Referência {ref}"
-    doc.build(elems, canvasmaker=_canvas_com_rodape(identificacao))
+    doc.build(elems, canvasmaker=_canvas_com_rodape(identificacao, geracao))
     return buf.getvalue()

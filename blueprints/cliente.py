@@ -312,7 +312,9 @@ def analise(id_analise):
 @cliente_bp.route("/analise/<int:id_analise>/pdf")
 @cliente_required
 def analise_pdf(id_analise):
-    """Exporta a Análise Executiva (ABC + 5W2H + devolutiva) em PDF (ReportLab)."""
+    """Exporta a Análise Executiva (indicadores, Curva ABC com gráfico de pizza,
+    síntese executiva e devolutiva) em PDF (ReportLab). Cada pedido gera um
+    documento novo, com a data e a hora daquela exportação no horário de Brasília."""
     analise = db.session.get(Analise, id_analise)
     if (
         analise is None
@@ -337,7 +339,13 @@ def analise_pdf(id_analise):
     nome = f"analise_nexo_{analise.ano_referencia}{analise.mes_referencia:02d}_{analise.id_analise}.pdf"
     return Response(
         pdf_bytes, mimetype="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{nome}"'},
+        headers={
+            "Content-Disposition": f'attachment; filename="{nome}"',
+            # Documento privado e datado: nenhum cache (navegador, proxy ou CDN)
+            # pode guardar nem devolver uma exportação anterior.
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
     )
 
 
