@@ -609,9 +609,12 @@ class SuspensaoExpiradaTests(PortalContratualCase):
                                   headers={"X-CSRFToken": token})
         self.assertEqual(ok.status_code, 200)
         self.assertIn("resposta", ok.get_json())
+        # SEC-001: o login rotaciona a sessão (o token CSRF nasce depois dele);
+        # a cópia do cookie precisa ser a que já carrega o token usado acima.
+        cookie = self._cookie(self.client_cli)
         self.relogio(SUSPENSAO_LIMITE)
-        negado = self._replay(self.cookie).post("/api/suporte-bot", json={"mensagem": "Abra o dashboard."},
-                                                headers={"X-CSRFToken": token})
+        negado = self._replay(cookie).post("/api/suporte-bot", json={"mensagem": "Abra o dashboard."},
+                                           headers={"X-CSRFToken": token})
         self._assert_para_login(negado)
         self.assertFalse(negado.is_json)
 

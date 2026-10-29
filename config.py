@@ -117,6 +117,22 @@ class Config:
     if os.environ.get("RENDER_EXTERNAL_URL"):
         SOCKETIO_CORS_ORIGINS.append(os.environ["RENDER_EXTERNAL_URL"].rstrip("/"))
 
+    # === Origem pública canônica (SEC-005) ===
+    # Links sensíveis enviados por e-mail (ativação, recuperação de senha,
+    # chamados, publicação) são montados SEMPRE a partir desta origem, nunca
+    # do cabeçalho Host da requisição (ver origem_publica.py). Domínio próprio
+    # em NEXO_PUBLIC_URL; sem ela, vale a URL que o Render injeta. A factory
+    # valida o valor (produção: https obrigatório) e, sem nenhuma das duas,
+    # usa http://127.0.0.1:5000 apenas em desenvolvimento.
+    PUBLIC_URL = (os.environ.get("NEXO_PUBLIC_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "").strip()
+    PUBLIC_URL_PLATAFORMA = os.environ.get("RENDER_EXTERNAL_URL", "").strip()
+    # Hosts adicionais aceitos nas requisições (CSV; ".exemplo.com" aceita os
+    # subdomínios). O host da origem pública e o da plataforma entram sempre
+    # em produção; em desenvolvimento, sem a variável, não há restrição.
+    TRUSTED_HOSTS_EXTRAS = [
+        h.strip() for h in os.environ.get("NEXO_TRUSTED_HOSTS", "").split(",") if h.strip()
+    ]
+
     # === Proxy reverso ===
     # Nº de proxies confiáveis à frente da app (Render = 1). 0 = sem proxy (dev).
     # Ver ProxyFix em app.py.

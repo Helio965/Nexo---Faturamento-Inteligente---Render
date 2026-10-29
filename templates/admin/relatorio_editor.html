@@ -28,9 +28,11 @@
             <h2 style="font-size:1.02rem;margin:0 0 4px;"><i class="bi bi-robot text-purple"></i> Gerar devolutiva por Inteligência Artificial</h2>
             <p class="sub mb-0" style="color:var(--text-muted);font-size:0.88rem;">A IA Nexo redige o <strong>Resumo Executivo</strong> e a <strong>Conclusão Estratégica</strong> a partir dos indicadores e da Curva ABC — sem digitação manual. Você revisa e publica.</p>
             {% if rel and rel.gerado_por_ia %}<span class="nexo-badge b-purple mt-2"><i class="bi bi-robot"></i> Conteúdo atual gerado por IA</span>{% endif %}
+            {% if rel and rel.rascunho_difere_da_publicacao %}<span class="nexo-badge b-amber mt-2"><i class="bi bi-pencil"></i> Rascunho diferente do texto publicado: o cliente continua vendo a versão publicada</span>{% endif %}
         </div>
         <form method="POST" action="{{ url_for('admin.analise_relatorio', id_analise=analise.id_analise) }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="versao_rascunho" value="{{ rel.versao_rascunho if rel else 0 }}">
             <button type="submit" name="acao" value="gerar_ia" class="btn-nexo" {{ '' if analise.indicador else 'disabled' }}>
                 <i class="bi bi-stars"></i> Gerar com IA
             </button>
@@ -40,6 +42,8 @@
 
 <form method="POST" action="{{ url_for('admin.analise_relatorio', id_analise=analise.id_analise) }}" class="relatorio-doc">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {# SEC-003: versão exibida; o servidor recusa salvar por cima de uma edição mais nova. #}
+    <input type="hidden" name="versao_rascunho" value="{{ rel.versao_rascunho if rel else 0 }}">
     <div class="nexo-card mb-4">
         <div class="nexo-card-body">
             <div class="mb-3">
@@ -72,10 +76,19 @@
         </div>
     </div>
 
+    {% if rel and rel.gerado_por_ia %}
+    <div class="form-check mb-3" style="color:var(--text-muted);">
+        {# SEC-003/SEC-006: texto gerado por IA só é publicado após revisão humana declarada. #}
+        <input class="form-check-input" type="checkbox" id="revisao_confirmada" name="revisao_confirmada" value="1">
+        <label class="form-check-label" for="revisao_confirmada">Revisei o texto gerado por IA (resumo e conclusão) e confirmo que os valores e recomendações estão corretos para publicação.</label>
+    </div>
+    {% endif %}
     <div class="d-flex flex-wrap gap-2 justify-content-end">
         <button type="submit" name="acao" value="rascunho" class="btn-ghost"><i class="bi bi-save"></i> Salvar rascunho</button>
         {% if publicado %}
         <button type="submit" name="acao" value="despublicar" class="btn-ghost is-danger"><i class="bi bi-eye-slash"></i> Despublicar</button>
+        {# SEC-003: o texto editado só chega ao cliente por uma nova publicação explícita. #}
+        <button type="submit" name="acao" value="publicar" class="btn-nexo"><i class="bi bi-broadcast"></i> Publicar alterações</button>
         {% else %}
         <button type="submit" name="acao" value="publicar" class="btn-nexo"><i class="bi bi-broadcast"></i> Publicar para cliente</button>
         {% endif %}

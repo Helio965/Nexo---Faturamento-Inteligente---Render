@@ -17,6 +17,7 @@ class ConfigurationTests(unittest.TestCase):
             "SECRET_KEY", "DATABASE_URL", "DIRECT_URL", "NEXO_DB_DIRECT",
             "MAIL_USERNAME", "MAIL_PASSWORD", "BREVO_API_KEY", "ANTHROPIC_API_KEY",
             "HF_API_TOKEN", "RATELIMIT_STORAGE_URI", "RENDER_EXTERNAL_URL",
+            "NEXO_PUBLIC_URL", "NEXO_TRUSTED_HOSTS",
         ):
             env.pop(key, None)
         env.update(
@@ -72,6 +73,43 @@ class ConfigurationTests(unittest.TestCase):
             DATABASE_URL="postgresql://localhost/nexo_test",
         )
 
+    # --- SEC-005: origem pública canônica e hosts confiáveis ---------------
+
+    _PRODUCAO = dict(DATABASE_URL="postgresql://localhost/nexo_test")
+
+    def test_production_requires_public_origin(self):
+        self.assert_rejected("NEXO_PUBLIC_URL", SECRET_KEY=secrets.token_hex(32), **self._PRODUCAO)
+
+    def test_production_rejects_http_or_malformed_public_origin(self):
+        for value in ("http://nexo-test.example.invalid", "https://nexo-test.example.invalid/portal",
+                      "https://user:secret@nexo-test.example.invalid", "https://nexo test.invalid"):
+            with self.subTest(value=value):
+                self.assert_rejected("NEXO_PUBLIC_URL", SECRET_KEY=secrets.token_hex(32),
+                                     NEXO_PUBLIC_URL=value, **self._PRODUCAO)
+
+    def test_platform_url_serves_as_public_origin_and_trusted_host(self):
+        self.run_case(
+            "from app import create_app\n"
+            "app = create_app('production')\n"
+            "assert app.config['PUBLIC_URL'] == 'https://nexo-test.example.invalid'\n"
+            "assert app.config['TRUSTED_HOSTS'] == ['nexo-test.example.invalid']\n"
+            "assert 'https://nexo-test.example.invalid' in app.config['SOCKETIO_CORS_ORIGINS']\n",
+            SECRET_KEY=secrets.token_hex(32), RENDER_EXTERNAL_URL="https://nexo-test.example.invalid/",
+            **self._PRODUCAO,
+        )
+
+    def test_custom_domain_keeps_platform_host_and_extra_hosts_trusted(self):
+        self.run_case(
+            "from app import create_app\n"
+            "app = create_app('production')\n"
+            "assert app.config['PUBLIC_URL'] == 'https://portal.example.invalid'\n"
+            "assert app.config['TRUSTED_HOSTS'] == ['portal.example.invalid', 'nexo-test.example.invalid',"
+            " '.interno.example.invalid', 'outro.example.invalid']\n",
+            SECRET_KEY=secrets.token_hex(32), NEXO_PUBLIC_URL="https://Portal.Example.invalid",
+            RENDER_EXTERNAL_URL="https://nexo-test.example.invalid",
+            NEXO_TRUSTED_HOSTS=".interno.example.invalid, Outro.Example.invalid", **self._PRODUCAO,
+        )
+
     def test_postgres_alias_and_parameters(self):
         self.run_case(
             "from config import _resolve_database_uri\n"
@@ -101,10 +139,16 @@ class ConfigurationTests(unittest.TestCase):
             "assert app.config['SESSION_COOKIE_SECURE']\n"
             "assert app.config['SESSION_COOKIE_HTTPONLY']\n"
             "assert app.config['SESSION_COOKIE_SAMESITE'] == 'Lax'\n"
-            "assert app.test_client().get('/healthz').status_code == 200\n"
-            "assert app.test_client().get('/auth/login').status_code == 200\n",
+            "client = app.test_client()\n"
+            "host = {'Host': 'nexo-test.example.invalid'}\n"
+            "assert client.get('/healthz', headers=host).status_code == 200\n"
+            "assert client.get('/auth/login', headers=host).status_code == 200\n"
+            # SEC-005: em produção, Host fora da lista confiável recebe 400.
+            "assert client.get('/healthz').status_code == 400\n"
+            "assert client.get('/healthz', headers={'Host': 'evil.invalid'}).status_code == 400\n",
             SECRET_KEY=secrets.token_hex(32),
             DATABASE_URL="postgresql://localhost/nexo_test",
+            NEXO_PUBLIC_URL="https://nexo-test.example.invalid",
         )
 
 

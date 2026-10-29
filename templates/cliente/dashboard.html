@@ -128,8 +128,9 @@
             <div class="nexo-card-head"><div><h2>Relatório estratégico</h2><p class="sub">Última devolutiva</p></div></div>
             <div class="nexo-card-body">
                 {% if analise.relatorio %}
-                <div class="fw-bold mb-2">{{ analise.relatorio.titulo }}</div>
-                <p class="text-muted-2" style="font-size:0.9rem;">{{ (analise.relatorio.conclusao_estrategica or '')|truncate(160) }}</p>
+                {# SEC-003: somente a versão publicada chega ao cliente. #}
+                <div class="fw-bold mb-2">{{ analise.relatorio.publicada.titulo }}</div>
+                <p class="text-muted-2" style="font-size:0.9rem;">{{ (analise.relatorio.publicada.conclusao_estrategica or '')|truncate(160) }}</p>
                 {% endif %}
                 <a href="{{ url_for('cliente.analise', id_analise=analise.id_analise) }}" class="btn-nexo mt-2"><i class="bi bi-file-earmark-text"></i> Abrir análise completa</a>
             </div>
@@ -168,7 +169,7 @@
 <div class="nexo-card mb-4">
     <div class="nexo-card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
         <div>
-            <div class="fw-bold mb-1">{{ analise.relatorio.titulo if analise.relatorio else 'Análise publicada' }}</div>
+            <div class="fw-bold mb-1">{{ analise.relatorio.publicada.titulo if analise.relatorio else 'Análise publicada' }}</div>
             <p class="sub mb-0" style="color:var(--text-muted);font-size:0.9rem;">Sua devolutiva estratégica está disponível.</p>
         </div>
         <a href="{{ url_for('cliente.analise', id_analise=analise.id_analise) }}" class="btn-nexo"><i class="bi bi-file-earmark-text"></i> Abrir análise</a>

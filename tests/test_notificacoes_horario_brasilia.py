@@ -167,8 +167,10 @@ class Portal:
         pagina = self.pagina(papel, "/admin/tickets" if papel == "ADMIN" else "/cliente/tickets")
         lista = re.search(r'id="bellList">(.*?)id="bellEmpty"', pagina, re.S).group(1)
         itens = {}
+        # SEC-002: cada item é um <form method="POST"> com um <button class="bell-item">.
         for id_notificacao, corpo in re.findall(
-                r'<a class="bell-item[^"]*" href="/notificacoes/(\d+)/abrir">(.*?)</a>', lista, re.S):
+                r'<form method="POST" action="/notificacoes/(\d+)/abrir" class="bell-item-form">'
+                r'.*?<button type="submit" class="bell-item[^"]*">(.*?)</button>', lista, re.S):
             itens[int(id_notificacao)] = self.horarios(re.search(r"<small>(.*?)</small>", corpo, re.S).group(1))[0]
         return itens
 

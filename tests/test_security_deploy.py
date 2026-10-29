@@ -22,7 +22,9 @@ import session_security
 
 def _app():
     app = Flask(__name__)
-    app.config.update(SECRET_KEY="isolated-security-test-key", BOOT_ID="test-boot")
+    # PUBLIC_URL: origem canônica fictícia dos links (SEC-005), como a factory define.
+    app.config.update(SECRET_KEY="isolated-security-test-key", BOOT_ID="test-boot",
+                      PUBLIC_URL="https://nexo-test.example.invalid")
     return app
 
 
@@ -92,6 +94,8 @@ class SocketSessionTests(token_cases._TokenCase):
                 stored = db.session.get(Usuario, self.ids["active"])
                 stored.ativo = usuario.is_active
                 stored.primeiro_acesso = usuario.primeiro_acesso
+                # SEC-001: só um cookie com sessão registrada no banco conecta.
+                token, _ = session_security.registrar_sessao(db.session, stored.id_usuario)
                 db.session.commit()
                 fingerprint = session_security.impressao_sessao(stored)
                 with client.session_transaction() as session:
@@ -99,6 +103,7 @@ class SocketSessionTests(token_cases._TokenCase):
                     session["_fresh"] = True
                     session["boot_id"] = self.app.config["BOOT_ID"] if boot_id == "test-boot" else boot_id
                     session[session_security.CHAVE_CREDENCIAL] = fingerprint
+                    session[session_security.CHAVE_SESSAO] = token
         connection = socketio.test_client(self.app, flask_test_client=client)
         connected = connection.is_connected()
         if connected:

@@ -833,6 +833,19 @@ def _devolutiva(rel, est, largura):
     return elems
 
 
+def _versao_publicada(relatorio):
+    """SEC-003: o PDF reproduz a versão PUBLICADA do relatório, nunca o rascunho.
+
+    Para o modelo persistido, a leitura é RelatorioAnalise.publicada (cópia
+    congelada na publicação, ou o texto legado quando a cópia não existe).
+    Objetos simples já representam o texto a imprimir e passam inalterados.
+    """
+    from models import RelatorioAnalise
+    if isinstance(relatorio, RelatorioAnalise):
+        return relatorio.publicada
+    return relatorio
+
+
 def gerar_pdf_analise(analise, semaforos, abc_top, *, gerado_em=None) -> bytes:
     """Monta o PDF da análise e devolve os bytes.
 
@@ -854,7 +867,7 @@ def gerar_pdf_analise(analise, semaforos, abc_top, *, gerado_em=None) -> bytes:
     largura = doc.width
     est = _estilos()
     emp = analise.empresa
-    rel = analise.relatorio
+    rel = _versao_publicada(analise.relatorio)
     ind = analise.indicador
     produtos = list(abc_top or [])[:TOP_N_PDF]
 

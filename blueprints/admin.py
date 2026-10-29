@@ -26,12 +26,14 @@ from etl_uploads import ler_upload_validado, limitar_upload, limitar_processamen
 from notifications import notificar_clientes_empresa
 from emails import email_analise_publicada, email_ticket_resolvido, email_boas_vindas
 from sqlalchemy.exc import IntegrityError, DataError, SQLAlchemyError
+from sqlalchemy.orm.exc import StaleDataError
 from company_security import (
     STATUS_CONTA, aplicar_status_conta, bloquear_empresa, bloquear_usuarios_empresa,
     excluir_empresa as excluir_empresa_segura,
     restaurar_empresa as restaurar_empresa_segura,
 )
 from session_security import STATUS_CONTA_SEM_ACESSO
+from origem_publica import url_publica
 from contract_policy import (
     contrato_da_vigencia, esquema_contratual_disponivel, motivo_bloqueio_nova_analise,
     obter_contrato_aplicavel,
@@ -477,7 +479,8 @@ def empresa_nova():
         try:
             from blueprints.auth import gerar_token_definir_senha
             token = gerar_token_definir_senha(novo_user)
-            link_definir = url_for("auth.ativar_acesso", token=token, _external=True)
+            # SEC-005: origem canônica configurada, nunca o Host da requisição.
+            link_definir = url_publica("auth.ativar_acesso", token=token)
             current_app.logger.info("Link de ativação gerado para o novo cadastro.")
             agendado = email_boas_vindas(novo_user, link_definir)
         except Exception as e:  # noqa: BLE001
@@ -688,7 +691,8 @@ def empresa_excluir_permanente(id_empresa):
                 select(UploadRelatorio).where(UploadRelatorio.id_analise == analise.id_analise)
             ).scalars().all()
             for up in uploads:
-                storage.remover(up.caminho_arquivo)  # best-effort (ver storage.py)
+                # 'db:' sai nesta transação; legado em disco só após o commit (SEC-004).
+                storage.remover(up.caminho_arquivo)
                 db.session.delete(up)
             if analise.indicador is not None:
                 db.session.delete(analise.indicador)
@@ -793,7 +797,6 @@ def analise_upload(id_analise):
         nome_final = f"analise_{id_analise}_{tipo}_{sha[:8]}.{ext}"
         existente = _buscar_upload(id_analise, tipo)
         caminho_final = storage.salvar(conteudo, nome_final)
-        legado_substituido = None
         if existente and existente.caminho_arquivo and existente.caminho_arquivo != caminho_final:
             # Não remover uma referência ainda usada por outra análise.
             compartilhado = db.session.scalar(select(func.count()).select_from(UploadRelatorio).where(
@@ -801,11 +804,9 @@ def analise_upload(id_analise):
                 UploadRelatorio.id_upload != existente.id_upload,
             ))
             if not compartilhado:
-                if existente.caminho_arquivo.startswith(storage.PREFIXO_DB):
-                    storage.remover(existente.caminho_arquivo)
-                else:
-                    # O arquivo legado só pode sair depois do commit válido.
-                    legado_substituido = existente.caminho_arquivo
+                # 'db:' sai nesta transação; o legado em disco só depois do
+                # commit válido (agendado por storage.remover, SEC-004).
+                storage.remover(existente.caminho_arquivo)
         if existente:
             db.session.delete(existente)
             db.session.flush()
@@ -820,8 +821,6 @@ def analise_upload(id_analise):
         if outro and analise.status_analise == "AGUARDANDO_RELATORIO":
             analise.status_analise = "RELATORIO_RECEBIDO"
         db.session.commit()
-        if legado_substituido:
-            storage.remover(legado_substituido)
         flash(f"Relatório de {tipo} enviado com sucesso.", "success")
         return redirect(url_for("admin.analise_upload", id_analise=id_analise))
     except ETLInputError as erro:
@@ -833,6 +832,34 @@ def analise_upload(id_analise):
         current_app.logger.warning("Upload administrativo indisponível (%s).", type(erro).__name__)
         flash("Não foi possível salvar o relatório. Tente novamente.", "danger")
         return redirect(url_for("admin.analise_upload", id_analise=id_analise))
+
+
+def _versao_rascunho_confere(form, rel) -> bool:
+    """O formulário foi aberto sobre a versão atual do rascunho (SEC-003)."""
+    valor = (form.get("versao_rascunho") or "").strip()
+    return valor.isdecimal() and int(valor) == rel.versao_rascunho
+
+
+def _confirmar_relatorio(id_analise) -> bool:
+    """COMMIT do editor: nada parcial chega ao banco (SEC-003 invariante 8).
+
+    StaleDataError: outra sessão gravou entre a leitura e o UPDATE (controle
+    otimista do version_id_col). Qualquer falha reverte texto, cópia publicada
+    e status juntos; o chamador só notifica o cliente após True.
+    """
+    try:
+        db.session.commit()
+        return True
+    except StaleDataError:
+        db.session.rollback()
+        flash("O relatório foi alterado em outra sessão enquanto você editava. "
+              "Recarregue a página, revise o texto atual e tente novamente.", "warning")
+    except SQLAlchemyError as e:
+        db.session.rollback()
+        current_app.logger.warning("Falha ao salvar relatório da análise %s: %s", id_analise,
+                                   type(getattr(e, "orig", None) or e).__name__)
+        flash("Não foi possível salvar o relatório. Verifique os dados e tente novamente.", "danger")
+    return False
 
 
 @admin_bp.route("/analise/<int:id_analise>/relatorio", methods=["GET", "POST"])
@@ -848,6 +875,12 @@ def analise_relatorio(id_analise):
       - despublicar  → exige análise em CONCLUIDO; volta publicado=False e status_analise → EM_ANALISE.
 
     Esta rota é o único ponto do sistema onde CONCLUIDO pode ser aplicado (nunca o ETL).
+
+    SEC-003: o cliente lê a CÓPIA publicada (models.RelatorioAnalise.publicada).
+    Rascunho e geração por IA alteram só o texto em edição; "publicar" copia o
+    rascunho revisado para a cópia, na mesma transação da mudança de status.
+    O formulário devolve `versao_rascunho`: salvar por cima de uma edição mais
+    nova é recusado (controle otimista, também no UPDATE via version_id_col).
     """
     analise = db.session.get(Analise, id_analise)
     if not analise:
@@ -857,6 +890,12 @@ def analise_relatorio(id_analise):
     if request.method == "POST":
         form = request.form
         acao = form.get("acao", "").strip().lower()
+        destino = url_for("admin.analise_relatorio", id_analise=id_analise)
+
+        if analise.relatorio is not None and not _versao_rascunho_confere(form, analise.relatorio):
+            flash("O relatório foi alterado em outra sessão depois que esta tela foi aberta. "
+                  "Recarregue a página, revise o texto atual e tente novamente.", "warning")
+            return redirect(destino)
 
         # --- Geração automatizada por IA (sem digitação manual) ---
         # Preenche resumo_executivo + conclusao_estrategica a partir dos números.
@@ -864,7 +903,7 @@ def analise_relatorio(id_analise):
         if acao == "gerar_ia":
             if not analise.indicador:
                 flash("Gere os indicadores (Processar) antes de gerar a devolutiva por IA.", "warning")
-                return redirect(url_for("admin.analise_relatorio", id_analise=id_analise))
+                return redirect(destino)
             from ai_devolutiva import gerar_devolutiva_ia
             ref = f"{analise.mes_referencia:02d}/{analise.ano_referencia}"
             rel = analise.relatorio
@@ -874,6 +913,8 @@ def analise_relatorio(id_analise):
                     conclusao_estrategica="(gerando...)",
                 )
                 db.session.add(rel)
+            else:
+                rel.preservar_publicacao_legada()  # o cliente segue vendo o texto publicado
             gerado = gerar_devolutiva_ia(analise)
             rel.resumo_executivo = gerado["resumo_executivo"]
             rel.conclusao_estrategica = gerado["conclusao_estrategica"]
@@ -881,7 +922,8 @@ def analise_relatorio(id_analise):
             if not rel.titulo:
                 rel.titulo = f"Análise {ref}"
             analise.data_atualizacao = datetime.now(timezone.utc)
-            db.session.commit()
+            if not _confirmar_relatorio(id_analise):
+                return redirect(destino)
             if gerado["fonte"] == "ia":
                 flash("Devolutiva gerada por Inteligência Artificial Nexo. Revise e publique.", "success")
             else:
@@ -910,6 +952,10 @@ def analise_relatorio(id_analise):
         if rel is None:
             rel = RelatorioAnalise(id_analise=id_analise, titulo=titulo, conclusao_estrategica=conclusao)
             db.session.add(rel)
+        else:
+            # Relatório publicado antes de existir a cópia: congela o texto que
+            # o cliente já vê ANTES de o rascunho mudar (SEC-003).
+            rel.preservar_publicacao_legada()
 
         # Sempre atualizamos o conteúdo a partir do form (rascunho ou publicação).
         rel.titulo = titulo
@@ -940,7 +986,15 @@ def analise_relatorio(id_analise):
                 flash(f"Para publicar é necessário preencher: {', '.join(faltando)}.", "danger")
                 db.session.rollback()
                 return redirect(url_for("admin.analise_relatorio", id_analise=id_analise))
+            # SEC-003/SEC-006: texto gerado por IA só é entregue ao cliente com
+            # revisão humana declarada no próprio formulário de publicação.
+            if rel.gerado_por_ia and form.get("revisao_confirmada") != "1":
+                flash("O texto atual foi gerado por IA: confirme a revisão humana (caixa de "
+                      "seleção) antes de publicar.", "danger")
+                db.session.rollback()
+                return redirect(url_for("admin.analise_relatorio", id_analise=id_analise))
 
+            rel.congelar_publicacao()  # a cópia publicada nasce do rascunho revisado
             rel.publicado = True
             rel.data_publicacao = agora
             analise.status_analise = "CONCLUIDO"
@@ -967,12 +1021,7 @@ def analise_relatorio(id_analise):
 
         analise.data_atualizacao = agora
 
-        try:
-            db.session.commit()
-        except IntegrityError as e:
-            db.session.rollback()
-            current_app.logger.warning("Falha ao salvar relatório da análise %s: %s", id_analise, type(e.orig or e).__name__)
-            flash("Não foi possível salvar o relatório. Verifique os dados e tente novamente.", "danger")
+        if not _confirmar_relatorio(id_analise):
             return redirect(url_for("admin.analise_relatorio", id_analise=id_analise))
 
         # Dispatch-after-commit: só agora que a transação foi confirmada disparamos
@@ -996,7 +1045,7 @@ def analise_relatorio(id_analise):
                 db.session.commit()  # persiste as notificações criadas
                 email_analise_publicada(
                     analise,
-                    url_for("cliente.analise", id_analise=analise.id_analise, _external=True),
+                    url_publica("cliente.analise", id_analise=analise.id_analise),
                 )
             except Exception as e:  # noqa: BLE001 — efeito colateral nunca derruba o fluxo
                 db.session.rollback()
@@ -1107,28 +1156,25 @@ def _excluir_analise(analise):
     A remoção das linhas-filhas (uploads, indicador, relatório e Curva ABC) é
     automática via cascade="all, delete-orphan" (models.py). Arquivos dos
     uploads: os guardados no banco ('db:<chave>') saem na MESMA transação do
-    commit; os legados em disco só são removidos DEPOIS do commit bem-sucedido,
-    para uma falha no banco não deixar registros sem arquivo (falha parcial).
-    A exclusão é definitiva (não há lixeira para análises).
+    commit; os legados em disco são agendados por storage.remover e só saem
+    DEPOIS do commit confirmado (SEC-004), para uma falha no banco não deixar
+    registros sem arquivo (falha parcial). A exclusão é definitiva (não há
+    lixeira para análises).
 
     Devolve (ok, mensagem).
     """
     id_str = f"#{analise.id_analise}"
     periodo = f"{analise.periodo_inicio.strftime('%d/%m/%Y')} – {analise.periodo_fim.strftime('%d/%m/%Y')}"
     caminhos = [up.caminho_arquivo for up in analise.uploads if up.caminho_arquivo]
-    em_disco = [c for c in caminhos if not c.startswith(storage.PREFIXO_DB)]
     try:
         for caminho in caminhos:
-            if caminho.startswith(storage.PREFIXO_DB):
-                storage.remover(caminho)  # linha de mídia na mesma transação
+            storage.remover(caminho)  # 'db:' na transação; legado só após o commit
         db.session.delete(analise)  # cascata ORM apaga todos os filhos na ordem certa
         db.session.commit()
     except (IntegrityError, SQLAlchemyError) as e:
         db.session.rollback()
         current_app.logger.warning("Falha ao excluir análise %s: %s", id_str, type(getattr(e, "orig", None) or e).__name__)
         return False, f"Não foi possível excluir a análise {id_str} ({periodo}): ainda há dados vinculados. Nada foi alterado."
-    for caminho in em_disco:
-        storage.remover(caminho)  # best-effort (ver storage.py)
     return True, f"Análise {id_str} ({periodo}) excluída. As demais análises da empresa foram preservadas."
 
 
@@ -1277,7 +1323,7 @@ def ticket_detalhe(id_chamado):
                 )
                 email_ticket_resolvido(
                     chamado,
-                    url_for("cliente.ticket_detalhe", id_chamado=id_chamado, _external=True),
+                    url_publica("cliente.ticket_detalhe", id_chamado=id_chamado),
                 )
             else:
                 chamado.data_fechamento = None

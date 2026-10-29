@@ -368,7 +368,9 @@ Limitações conhecidas do plano free: 512 MB de RAM e 0,1 CPU (ETL e PDF ficam 
 | `HF_API_TOKEN` / `HF_MODEL` | Não (fail-safe) | Redação opcional das respostas do NexoBot via roteador da Hugging Face (uso cobrado pela HF). Sem token, o NexoBot funciona 100% local. |
 | `BREVO_API_KEY` / `BREVO_API_URL` | Não (fail-safe) | Envio de e-mail pela API HTTPS do Brevo. Com a chave definida, substitui o SMTP (necessário no Render Free, que bloqueia SMTP). |
 | `PROXY_FIX_HOPS` | Não (default `0`) | Nº de proxies reversos confiáveis à frente da app (Render = `1`): IP real do cliente no rate limit e links `https://` nos e-mails. |
-| `RENDER_EXTERNAL_URL` | Automática no Render | URL pública do serviço; é adicionada às origens permitidas do WebSocket. |
+| `RENDER_EXTERNAL_URL` | Automática no Render | URL pública do serviço; é adicionada às origens permitidas do WebSocket e, sem `NEXO_PUBLIC_URL`, é a origem canônica dos links sensíveis. |
+| `NEXO_PUBLIC_URL` | Sim em produção (ou `RENDER_EXTERNAL_URL`) | Origem pública canônica (`https://dominio`) usada para montar os links de ativação, recuperação de senha, chamados e publicação — nunca o cabeçalho `Host` da requisição. Em produção precisa ser `https`. |
+| `NEXO_TRUSTED_HOSTS` | Não | Hosts adicionais aceitos nas requisições (CSV; `.dominio` aceita subdomínios). Em produção, o host da origem pública e o da plataforma são aceitos sempre; qualquer outro `Host` recebe 400. |
 | `HOST` / `PORT` | Não | Bind do servidor (`python app.py`). |
 
 Template completo em [`.env.example`](.env.example).

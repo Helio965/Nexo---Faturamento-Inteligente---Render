@@ -107,9 +107,13 @@
                     <small><span class="session-dot" aria-hidden="true"></span> Sessão ativa · {{ 'Administrador' if current_user.is_admin else 'Cliente' }}</small>
                 </div>
             </div>
-            <a class="nav-item nav-logout" href="{{ url_for('auth.logout') }}">
-                <i class="bi bi-box-arrow-right"></i> Sair
-            </a>
+            {# SEC-002: sair é uma ação (POST + CSRF), não um link navegável. #}
+            <form method="POST" action="{{ url_for('auth.logout') }}" class="nav-logout-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="nav-item nav-logout">
+                    <i class="bi bi-box-arrow-right"></i> Sair
+                </button>
+            </form>
         </div>
     </aside>
 
@@ -137,14 +141,18 @@
                             {% from "_macros.html" import horario %}
                             {% for n in notif_recentes %}
                             {% set _b = badge_notif(n.texto) %}
-                            <a class="bell-item {{ 'is-unread' if not n.lida }}" href="{{ url_for('notificacoes.abrir', id_notificacao=n.id_notificacao) }}">
-                                <span class="bell-dot"></span>
-                                <span class="bell-text">
-                                    <span class="nbadge nb-{{ _b.tipo }}">{{ _b.rotulo }}</span>
-                                    <span class="bell-msg">{{ n.texto }}</span>
-                                    <small>{{ horario(n.data_criacao, 'curto') }}</small>
-                                </span>
-                            </a>
+                            {# SEC-002: abrir marca como lida, logo é POST + CSRF (botão), não link. #}
+                            <form method="POST" action="{{ url_for('notificacoes.abrir', id_notificacao=n.id_notificacao) }}" class="bell-item-form">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="bell-item {{ 'is-unread' if not n.lida }}">
+                                    <span class="bell-dot"></span>
+                                    <span class="bell-text">
+                                        <span class="nbadge nb-{{ _b.tipo }}">{{ _b.rotulo }}</span>
+                                        <span class="bell-msg">{{ n.texto }}</span>
+                                        <small>{{ horario(n.data_criacao, 'curto') }}</small>
+                                    </span>
+                                </button>
+                            </form>
                             {% endfor %}
                             <div class="bell-empty" id="bellEmpty" {% if notif_recentes %}style="display:none;"{% endif %}><i class="bi bi-bell-slash"></i> Nenhuma notificação ainda.</div>
                         </div>
@@ -907,9 +915,20 @@
           if (list) {
             var tipo = n.badge || 'aberto';
             var rotulo = n.badge_rotulo || ROTULO_PADRAO[tipo] || 'Aberto';
-            var a = document.createElement('a');
+            // SEC-002: mesmo formulário POST + CSRF do item renderizado pelo servidor.
+            var form = document.createElement('form');
+            form.method = 'POST';
+            form.action = '/notificacoes/' + parseInt(n.id, 10) + '/abrir';
+            form.className = 'bell-item-form';
+            var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+            var csrf = document.createElement('input');
+            csrf.type = 'hidden';
+            csrf.name = 'csrf_token';
+            csrf.value = csrfMeta ? csrfMeta.getAttribute('content') : '';
+            form.appendChild(csrf);
+            var a = document.createElement('button');
+            a.type = 'submit';
             a.className = 'bell-item is-unread';
-            a.href = '/notificacoes/' + n.id + '/abrir';
             a.innerHTML = '<span class="bell-dot"></span><span class="bell-text">' +
                           '<span class="nbadge nb-' + escapeHtml(tipo) + '">' + escapeHtml(rotulo) + '</span>' +
                           '<span class="bell-msg">' + escapeHtml(n.texto) + '</span>' +
@@ -926,10 +945,11 @@
             } else {
               hora.textContent = n.hora || '';
             }
-            var first = list.querySelector('.bell-item');
-            if (first) { list.insertBefore(a, first); } else { list.insertBefore(a, list.firstChild); }
+            form.appendChild(a);
+            var first = list.querySelector('.bell-item-form');
+            if (first) { list.insertBefore(form, first); } else { list.insertBefore(form, list.firstChild); }
             // mantém no máximo 5 itens visíveis
-            var items = list.querySelectorAll('.bell-item');
+            var items = list.querySelectorAll('.bell-item-form');
             for (var i = items.length - 1; i >= 5; i--) { items[i].remove(); }
           }
 

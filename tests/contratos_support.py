@@ -4,7 +4,7 @@ Nenhum dado real: empresas, CNPJs e e-mails são fictícios (example.invalid).
 O relógio da política é injetado por NEXO_RELOGIO; nenhum teste espera tempo real.
 """
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -24,6 +24,10 @@ class ContratosCase(DeployTestCase):
         self.admin = self.db.session.get(Usuario, self.admin_id)
         self.empresa_id = self.db.session.get(Analise, self.analise_id).id_empresa
         self.outra_empresa_id = self.db.session.get(Analise, self.outra_analise_id).id_empresa
+        # O relógio injetado avança meses entre login e verificação: o que se
+        # testa aqui é o prazo contratual, não a vida absoluta da sessão
+        # registrada (SEC-001, 8 h em produção pelo mesmo relógio).
+        self.app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=3650)
         self.relogio(T0)
 
     # ------------------------------------------------------------------ relógio

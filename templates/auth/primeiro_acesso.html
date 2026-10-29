@@ -49,9 +49,11 @@
         </button>
     </form>
 
-    <p class="auth-aside text-center mt-4 mb-0" style="font-size:0.88rem;color:var(--text-muted);">
-        <a href="{{ url_for('auth.logout') }}" style="color:var(--text-dim);text-decoration:none;"><i class="bi bi-box-arrow-right"></i> Sair</a>
-    </p>
+    {# SEC-002: sair é POST + CSRF (o GET do endereço apenas confirma). #}
+    <form method="POST" action="{{ url_for('auth.logout') }}" class="auth-aside text-center mt-4 mb-0" style="font-size:0.88rem;color:var(--text-muted);">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-link-dim"><i class="bi bi-box-arrow-right"></i> Sair</button>
+    </form>
 </div>
 <p class="auth-tagline">Sua senha é pessoal e intransferível.</p>
 {% endblock %}

@@ -300,6 +300,8 @@ def analise(id_analise):
     return render_template(
         "cliente/analise.html",
         analise=analise,
+        # SEC-003: o cliente lê a cópia publicada, nunca o rascunho em edição.
+        rel=analise.relatorio.publicada,
         semaforos=semaforos,
         abc_chart=abc_chart,
         auditoria=_auditoria(analise),
@@ -427,17 +429,15 @@ def upload():
         nome_final = f"analise_{id_analise}_{tipo}_{sha[:8]}.{ext}"
         existente = _buscar_upload(id_analise, tipo)
         caminho_final = storage.salvar(conteudo, nome_final)
-        legado_substituido = None
         if existente and existente.caminho_arquivo and existente.caminho_arquivo != caminho_final:
             compartilhado = db.session.scalar(select(func.count()).select_from(UploadRelatorio).where(
                 UploadRelatorio.caminho_arquivo == existente.caminho_arquivo,
                 UploadRelatorio.id_upload != existente.id_upload,
             ))
             if not compartilhado:
-                if existente.caminho_arquivo.startswith(storage.PREFIXO_DB):
-                    storage.remover(existente.caminho_arquivo)
-                else:
-                    legado_substituido = existente.caminho_arquivo
+                # 'db:' sai nesta transação; o legado em disco só depois do
+                # commit válido (agendado por storage.remover, SEC-004).
+                storage.remover(existente.caminho_arquivo)
         if existente:
             db.session.delete(existente)
             db.session.flush()
@@ -457,8 +457,6 @@ def upload():
             url_for("admin.analise_upload", id_analise=id_analise),
         )
         db.session.commit()
-        if legado_substituido:
-            storage.remover(legado_substituido)
         flash(f"Relatório de {tipo} enviado. A equipe NEXO fará a validação e o processamento.", "success")
         return redirect(url_for("cliente.upload"))
     except ETLInputError as erro:

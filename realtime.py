@@ -1,7 +1,8 @@
 """NEXO-SEC-003: Socket.IO com autorização pela credencial persistida.
+SEC-001: cada conexão pertence a UMA sessão registrada (sala por sessão).
 
 O registro de SIDs apenas localiza conexões. A autoridade é o banco; salas
-por geração e FOR SHARE impedem enfileirar dados privados após a revogação.
+por sessão e FOR SHARE impedem enfileirar dados privados após a revogação.
 """
 
 from functools import wraps
@@ -16,8 +17,8 @@ from sqlalchemy.orm import Session
 from extensions import db, socketio
 from models import Usuario
 from session_security import (
-    CHAVE_CREDENCIAL, carregar_usuario, id_sessao, impressao_sessao,
-    mesma_impressao, sessao_valida,
+    CHAVE_CREDENCIAL, CHAVE_SESSAO, carregar_usuario, hash_token_sessao, id_sessao,
+    impressao_sessao, mesma_impressao, sessao_valida,
 )
 
 
@@ -38,8 +39,27 @@ def _estado(app=None):
     return app.extensions[_EXTENSAO]
 
 
-def sala_do_usuario(id_usuario, impressao: str) -> str:
-    return f"user_{id_usuario}_{impressao}"
+def sala_da_sessao(hash_sessao: str, impressao: str) -> str:
+    """Sala privada de UMA sessão registrada, na credencial vigente.
+
+    O logout de um navegador não silencia os demais e a sessão revogada deixa
+    de ser destinatária. A impressão da credencial continua no nome: uma
+    troca de senha feita fora da aplicação (SQL direto) muda a sala antes
+    mesmo de a varredura derrubar o socket antigo.
+    """
+    return f"sessao_{hash_sessao}_{impressao}"
+
+
+def revogar_conexoes_sessao(hash_sessao, app=None):
+    """Após COMMIT da revogação (logout), fecha os SIDs locais dessa sessão."""
+    if not isinstance(hash_sessao, str):
+        return
+    estado = _estado(app)
+    with estado["lock"]:
+        alvos = [sid for sid, dados in estado["sids"].items()
+                 if dados.get("hash_sessao") == hash_sessao]
+    for sid in alvos:
+        _desconectar(estado, sid)
 
 
 def _desconectar(estado, sid):
@@ -89,7 +109,8 @@ def revogar_sockets_invalidos(app=None):
                         CHAVE_CREDENCIAL: dados["impressao"],
                     }
                     if not sessao_valida(
-                            usuario, cookie, permitir_primeiro_acesso=False, consulta=consulta):
+                            usuario, cookie, permitir_primeiro_acesso=False, consulta=consulta,
+                            hash_sessao=dados.get("hash_sessao")):
                         invalidos.append(sid)
         except SQLAlchemyError as erro:
             logger.warning("Verificação Socket.IO indisponível (%s).", type(erro).__name__)
@@ -152,15 +173,19 @@ def _on_connect(auth=None):
             return False
         estado = _estado()
         impressao = impressao_sessao(usuario)
+        # sessao_valida já conferiu a linha registrada deste identificador.
+        hash_sessao = hash_token_sessao(session.get(CHAVE_SESSAO))
+        if hash_sessao is None:
+            return False
         # Registrar/entrar na sala antes de liberar FOR SHARE evita handshake
         # validado antes do reset, mas admitido na sala depois de sua revogação.
         with estado["lock"]:
             estado["sids"][request.sid] = {
                 "id_usuario": usuario.id_usuario, "impressao": impressao,
-                "boot_id": session["boot_id"],
+                "boot_id": session["boot_id"], "hash_sessao": hash_sessao,
             }
         estado["server"].enter_room(
-            request.sid, sala_do_usuario(usuario.id_usuario, impressao), namespace="/",
+            request.sid, sala_da_sessao(hash_sessao, impressao), namespace="/",
         )
         _iniciar_varredura(current_app._get_current_object(), estado)
         return True

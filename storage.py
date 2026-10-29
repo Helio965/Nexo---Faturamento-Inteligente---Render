@@ -17,6 +17,7 @@ REFERÊNCIAS PERSISTIDAS (ex.: upload_relatorio.caminho_arquivo):
     para o banco.
 """
 
+import logging
 import os
 import stat
 from contextlib import contextmanager
@@ -32,8 +33,11 @@ from etl_inputs import ETLInputError
 
 from extensions import db
 from models import ArquivoArmazenado
+import pos_commit
 
 PREFIXO_DB = "db:"
+_REMOCAO_LEGADA = "arquivos_legados"
+logger = logging.getLogger(__name__)
 
 # Cópias locais temporárias dos arquivos do banco: o motor de ETL (pandas/csv)
 # lê de um caminho no disco. As chaves carregam o hash do conteúdo, então a
@@ -80,16 +84,38 @@ def resolver(caminho_arquivo: str) -> str:
     """
     if caminho_arquivo.startswith(PREFIXO_DB):
         return _materializar(_chave(caminho_arquivo))
+    return _caminho_legado(caminho_arquivo)
 
+
+def _pasta_uploads() -> str:
+    return os.path.realpath(str(current_app.config["UPLOAD_FOLDER"]))
+
+
+def _dentro_dos_uploads(caminho: str) -> bool:
+    pasta = _pasta_uploads()
+    real = os.path.realpath(caminho)
+    return real != pasta and real.startswith(pasta + os.sep)
+
+
+def _caminho_legado(caminho_arquivo: str) -> str:
+    """Caminho legado confinado ao UPLOAD_FOLDER (SEC-004).
+
+    O valor persistido só é usado se já aponta para dentro da pasta de
+    uploads; caso contrário vale o nome do arquivo dentro dela. Vale também
+    para caminho ABSOLUTO obsoleto (projeto que mudou de pasta ou de máquina)
+    e para paths do Windows lidos em Linux (basename não separa por "\\" fora
+    do Windows). Um valor adulterado no banco nunca leva a ler ou apagar
+    arquivos fora da pasta de uploads.
+    """
     caminho = caminho_arquivo
-    # Vale também para caminho ABSOLUTO inexistente: se o projeto mudou de pasta
-    # (ou de máquina), o path gravado no banco fica obsoleto, mas o arquivo segue
-    # no UPLOAD_FOLDER atual com o mesmo nome. O replace cobre paths do Windows
-    # lidos em Linux (basename não separa por "\" fora do Windows).
-    if not os.path.exists(caminho):
-        nome = os.path.basename(caminho.replace("\\", "/"))
-        caminho = os.path.join(current_app.config["UPLOAD_FOLDER"], nome)
-    return caminho
+    if not os.path.isabs(caminho):
+        caminho = os.path.join(_pasta_uploads(), caminho)
+    if _dentro_dos_uploads(caminho) and os.path.exists(caminho):
+        return caminho
+    nome = os.path.basename(caminho_arquivo.replace("\\", "/"))
+    if not nome or nome in (".", ".."):
+        nome = "arquivo-inexistente"
+    return os.path.join(_pasta_uploads(), nome)
 
 
 
@@ -186,12 +212,14 @@ def _materializar(chave: str) -> str:
 
 
 def remover(caminho_arquivo: str) -> None:
-    """Remove o arquivo referenciado.
+    """Remove o arquivo referenciado, sempre subordinado ao COMMIT do chamador.
 
     - 'db:<chave>': apaga a linha na transação do chamador (efetivada no commit
       dele) e descarta a cópia local temporária.
-    - Legado: remove o arquivo físico (best-effort: erros de IO são silenciados,
-      pois a remoção do registro no banco é o que de fato importa).
+    - Legado (SEC-004): o arquivo físico NÃO é apagado aqui. A remoção é
+      agendada e só acontece depois de o commit ser confirmado (pos_commit);
+      rollback descarta o agendamento. A exclusão é idempotente, confinada ao
+      UPLOAD_FOLDER e registra falhas sem expor o caminho.
     """
     if not caminho_arquivo:
         return
@@ -205,12 +233,26 @@ def remover(caminho_arquivo: str) -> None:
         except OSError:
             pass
         return
+    pos_commit.agendar(db.session, _REMOCAO_LEGADA, _caminho_legado(caminho_arquivo))
+
+
+def _remover_legado_confirmado(caminho: str) -> None:
+    """Executado após o COMMIT: apaga só arquivo regular dentro de UPLOAD_FOLDER."""
     try:
-        alvo = resolver(caminho_arquivo)
-        if alvo and os.path.exists(alvo):
-            os.remove(alvo)
-    except OSError:
-        pass
+        if not _dentro_dos_uploads(caminho):
+            logger.warning("Remoção de arquivo legado recusada: fora da pasta de uploads.")
+            return
+        if os.path.lexists(caminho) and not os.path.isfile(caminho):
+            logger.warning("Remoção de arquivo legado recusada: não é arquivo regular.")
+            return
+        os.remove(caminho)
+    except FileNotFoundError:
+        pass  # idempotente: já removido (ou nunca existiu neste disco)
+    except OSError as erro:
+        logger.warning("Remoção de arquivo legado pendente falhou (%s).", type(erro).__name__)
+
+
+pos_commit.registrar_processador(_REMOCAO_LEGADA, _remover_legado_confirmado)
 
 
 def url_midia(referencia: str) -> str:

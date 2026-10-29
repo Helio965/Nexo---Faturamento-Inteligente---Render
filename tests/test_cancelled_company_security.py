@@ -317,6 +317,7 @@ class CancelledCompanySecurityTests(token_cases._TokenCase):
         self.assertFalse(api.is_json)
         for response in (
             self._replay(cookie).post("/notificacoes/marcar-lidas", data={"csrf_token": token}),
+            self._replay(cookie).post(f"/notificacoes/{notification}/abrir", data={"csrf_token": token}),
             self._replay(cookie).get(f"/notificacoes/{notification}/abrir"),
         ):
             self._assert_redirected_to_login(response)

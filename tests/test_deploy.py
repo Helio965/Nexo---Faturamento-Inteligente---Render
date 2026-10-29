@@ -108,7 +108,10 @@ class DeployTests(DeployTestCase):
                 response = self.login(email)
                 self.assertEqual(response.headers["Location"], dashboard)
                 self.assertEqual(self.client.get(dashboard).status_code, 200)
-                self.assertEqual(self.client.get("/auth/logout").status_code, 302)
+                # SEC-002: GET apenas confirma e não encerra a sessão.
+                self.assertEqual(self.client.get("/auth/logout").status_code, 200)
+                self.assertEqual(self.client.get(dashboard).status_code, 200)
+                self.logout()
                 self.assertEqual(self.client.get(dashboard).status_code, 302)
 
     def test_missing_csrf_and_invalid_password_do_not_authenticate(self):

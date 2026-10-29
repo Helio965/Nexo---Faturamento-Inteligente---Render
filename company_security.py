@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 
 from models import Empresa, Usuario
-from session_security import STATUS_CONTA_SEM_ACESSO
+from session_security import STATUS_CONTA_SEM_ACESSO, revogar_sessoes_usuario
 
 # Mesmo domínio do CHECK de empresa.status_conta (models.py).
 STATUS_CONTA = ("ATIVA", "SUSPENSA", STATUS_CONTA_SEM_ACESSO)
@@ -63,6 +63,8 @@ def excluir_empresa(sessao, id_empresa: int) -> ResultadoLixeira | None:
     for usuario in usuarios:
         usuario.geracao_autorizacao += 1
         usuario.data_atualizacao = agora
+        # SEC-001: as sessões registradas caem na mesma transação da lixeira.
+        revogar_sessoes_usuario(sessao, usuario.id_usuario, "empresa")
     return ResultadoLixeira(empresa, usuarios)
 
 
@@ -93,5 +95,6 @@ def aplicar_status_conta(sessao, empresa: Empresa, novo_status: str) -> tuple[Us
         for usuario in revogados:
             usuario.geracao_autorizacao += 1
             usuario.data_atualizacao = agora
+            revogar_sessoes_usuario(sessao, usuario.id_usuario, "empresa")
     empresa.status_conta = novo_status
     return revogados

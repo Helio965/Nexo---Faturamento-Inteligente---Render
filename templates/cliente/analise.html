@@ -6,7 +6,8 @@
 {% block page_title %}Análise{% endblock %}
 
 {% block content %}
-{% set rel = analise.relatorio %}
+{# SEC-003: `rel` é a versão PUBLICADA (cliente.analise); o rascunho não chega aqui. #}
+{% set rel = rel if rel is defined else (analise.relatorio.publicada if analise.relatorio else none) %}
 {% set ind = analise.indicador %}
 
 <div class="page-head">

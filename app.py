@@ -101,6 +101,11 @@ def create_app(config_name: str = None) -> Flask:
         if make_url(app.config["SQLALCHEMY_DATABASE_URI"]).get_backend_name() != "postgresql":
             raise RuntimeError("Produção exige PostgreSQL; SQLite é apenas para desenvolvimento/testes.")
 
+    # SEC-005: origem pública canônica (links sensíveis) e hosts confiáveis,
+    # validadas antes das extensões (o Socket.IO lê a lista de origens aqui).
+    from origem_publica import configurar_origem_publica
+    configurar_origem_publica(app, producao=config_name == "production")
+
     # Garante que a pasta instance/ exista (onde o SQLite vai morar).
     Path(app.instance_path).mkdir(parents=True, exist_ok=True)
     # E a pasta de uploads.
@@ -382,6 +387,19 @@ def create_app(config_name: str = None) -> Flask:
                 pass
             contexto["painel_url"] = None
             return app.jinja_env.get_template("erro_simples.html").render(**contexto), status
+
+    from werkzeug.exceptions import SecurityError
+
+    @app.errorhandler(SecurityError)
+    def _host_nao_confiavel(e):
+        # Host fora de TRUSTED_HOSTS (SEC-005): o adaptador de URLs não existe
+        # nesta requisição, então nada de templates ou url_for. O valor
+        # recebido não é registrado (é controlado pelo cliente).
+        app.logger.warning("Requisição recusada: cabeçalho Host fora dos hosts confiáveis.")
+        resposta = make_response("Requisição inválida: host não reconhecido.", 400)
+        resposta.headers["Content-Type"] = "text/plain; charset=utf-8"
+        resposta.headers["Cache-Control"] = "no-store"
+        return resposta
 
     @app.errorhandler(404)
     def _nao_encontrado(e):
