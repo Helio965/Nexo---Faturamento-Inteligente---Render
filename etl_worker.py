@@ -1,7 +1,6 @@
 """Entrypoint privado SEC-005: stdin/rede/banco não fazem parte do protocolo."""
 
 import json
-import math
 from pathlib import Path
 import sys
 
@@ -27,13 +26,22 @@ def main():
             "A plataforma não oferece o isolamento de recursos exigido para processar arquivos."}))
         return 2
 
+    # Rede e qualquer primitiva de execução/forja de processo (não só Popen):
+    # a leitura da planilha nunca precisa delas. Os eventos de ctypes ficam de
+    # fora porque o próprio import do numpy/pandas dispara ctypes.dlopen.
+    _EVENTOS_RECUSADOS = frozenset({
+        "socket.connect", "socket.getaddrinfo", "socket.sendto", "socket.sendmsg",
+        "subprocess.Popen", "os.system", "os.exec", "os.posix_spawn", "os.spawn",
+        "os.fork", "os.forkpty", "os.startfile",
+    })
+
     def refuse_external(event, args):
-        if event in {"socket.connect", "socket.getaddrinfo", "subprocess.Popen", "os.system"}:
+        if event in _EVENTOS_RECUSADOS:
             raise PermissionError("Operação externa não permitida no ETL isolado.")
     sys.addaudithook(refuse_external)
     envelope = None
     try:
-        from etl_inputs import ETLInputError, validate_input
+        from etl_inputs import validate_input
         with using_limits(limits):
             if request["operation"] == "validate" and len(request["paths"]) == 1:
                 result = validate_input(request["paths"][0], request["extension"], limits)

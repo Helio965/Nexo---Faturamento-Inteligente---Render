@@ -102,23 +102,48 @@ class StorageDeletionSecurityTests(DeployTestCase):
         caminho = f"/admin/empresa/excluir-permanente/{self.empresa_id}"
         token = self.csrf_token("/admin/lixeira")
         with patch.object(self.db.session, "commit", side_effect=SQLAlchemyError("PRIVATE_HARD_DELETE")):
-            response = self.client.post(caminho, data={"csrf_token": token})
+            response = self.client.post(caminho, data={"csrf_token": token, "senha_confirmacao": self.password})
         self.assertEqual(response.status_code, 302)
         self.assertTrue(self.legado.exists())
         self.assertEqual(len(self._uploads()), 2)
         self.assertIsNotNone(self.db.session.get(Empresa, self.empresa_id))
 
-        response = self.client.post(caminho, data={"csrf_token": self.csrf_token("/admin/lixeira")})
+        response = self.client.post(caminho, data={"csrf_token": self.csrf_token("/admin/lixeira"),
+                                                   "senha_confirmacao": self.password})
         self.assertEqual(response.status_code, 302)
         self.db.session.expire_all()
         self.assertIsNone(self.db.session.get(Empresa, self.empresa_id))
         self.assertFalse(self.legado.exists())
         self.assertTrue(self.fora.exists())
 
+    def _desreferenciar(self, caminho):
+        """Como fazem as rotas: a linha que cita o arquivo sai na mesma transação."""
+        for upload in self._uploads():
+            if upload.caminho_arquivo == caminho:
+                self.db.session.delete(upload)
+
+    def test_legacy_file_still_referenced_by_another_upload_is_preserved(self):
+        # O segundo upload cita o mesmo arquivo legado pelo nome relativo à pasta.
+        compras = next(u for u in self._uploads() if u.tipo_relatorio == "COMPRAS")
+        compras.caminho_arquivo = os.path.basename(self.legado)
+        self.db.session.commit()
+        vendas = next(u for u in self._uploads() if u.tipo_relatorio == "VENDAS")
+        self.db.session.delete(vendas)
+        storage.remover(str(self.legado))
+        with self.assertLogs(storage.logger, level="INFO") as logs:
+            self.db.session.commit()
+        self.assertTrue(self.legado.exists(), "outro upload ainda aponta para o arquivo")
+        self.assertNotIn(str(self.legado), "\n".join(logs.output))
+        # Sem mais referências (a restante usa só o nome relativo), a remoção acontece.
+        self._desreferenciar(os.path.basename(self.legado))
+        storage.remover(os.path.basename(self.legado))
+        self.db.session.commit()
+        self.assertFalse(self.legado.exists())
+
     def test_savepoint_rollback_discards_only_its_scheduled_removals(self):
         outro = self.uploads / "outro_legado.csv"
         outro.write_text("x\n", encoding="utf-8")
-        self._uploads()  # abre a transação, como qualquer rota faz antes de remover
+        self._desreferenciar(str(self.legado))  # abre a transação, como qualquer rota faz antes de remover
         storage.remover(str(self.legado))
         try:
             with self.db.session.begin_nested():
@@ -140,7 +165,7 @@ class StorageDeletionSecurityTests(DeployTestCase):
         self.assertTrue(self.legado.exists())
 
     def test_removal_failure_is_logged_without_the_path_and_is_idempotent(self):
-        self._uploads()
+        self._desreferenciar(str(self.legado))
         storage.remover(str(self.legado))
         with patch.object(storage.os, "remove", side_effect=PermissionError("PRIVATE_PATH_SENTINEL")), \
                 self.assertLogs(storage.logger, level="WARNING") as logs:

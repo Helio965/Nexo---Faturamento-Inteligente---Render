@@ -12,11 +12,12 @@ from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from extensions import db, limiter
+from extensions import chave_limite_conta, db, limiter
 from models import Empresa, Usuario
-from emails import email_recuperacao_senha, email_boas_vindas
+from emails import email_recuperacao_senha, email_boas_vindas, email_senha_alterada
 from contract_policy import obter_situacao_contratual
 from origem_publica import url_publica
+from politica_senha import validar_nova_senha
 from session_security import (
     CHAVE_CREDENCIAL, CHAVE_SESSAO, carregar_usuario, condicoes_empresa_acessivel,
     carimbar_sessao, hash_token_sessao, impressao_sessao, impressao_credencial_sessao,
@@ -275,17 +276,21 @@ def _conta_encerrada(usuario) -> bool:
         return False
 
 
-def _validar_nova_senha(nova: str, confirma: str):
-    """Regras mínimas de senha. Retorna mensagem de erro ou None se OK."""
-    if len(nova) < 8:
-        return "A senha deve ter ao menos 8 caracteres."
-    if nova != confirma:
-        return "As senhas não coincidem."
-    return None
+def _validar_nova_senha(nova: str, confirma: str, estado: _CredencialEsperada | None = None):
+    """Política de senha (politica_senha.py) aplicada à credencial que será
+    substituída: a senha não pode conter o e-mail/nome nem repetir a atual."""
+    usuario = estado.usuario if estado is not None else None
+    return validar_nova_senha(
+        nova, confirma,
+        email=getattr(usuario, "email", None), nome=getattr(usuario, "nome", None),
+        hash_atual=estado.senha_hash if estado is not None else None,
+    )
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
 @limiter.limit("10 per minute", methods=["POST"])  # trava brute force de senha
+# Por conta alvo (hash do e-mail), independentemente do IP de origem.
+@limiter.limit("30 per 15 minutes", methods=["POST"], key_func=chave_limite_conta)
 def login():
     """Gere o ecrã e a lógica de login do utilizador."""
     # Se já estiver autenticado, vai DIRETO ao dashboard do perfil correto.
@@ -329,6 +334,7 @@ def login():
             login_user(usuario, remember=False)
             try:
                 token_sessao = registrar_sessao(db.session, usuario.id_usuario)[0]
+                usuario.ultimo_acesso = datetime.now(timezone.utc)
                 db.session.commit()
             except SQLAlchemyError as erro:
                 db.session.rollback()
@@ -424,12 +430,12 @@ def primeiro_acesso():
     if request.method == "POST":
         nova = request.form.get("nova_senha", "")
         confirma = request.form.get("confirma_senha", "")
-        erro = _validar_nova_senha(nova, confirma)
+        estado = _estado_credencial(current_user)
+        erro = _validar_nova_senha(nova, confirma, estado)
         if erro:
             flash(erro, "danger")
             return render_template("auth/primeiro_acesso.html")
 
-        estado = _estado_credencial(current_user)
         if not _atualizar_credencial(estado, nova, renovar_sessao=True):
             flash("Não foi possível definir a senha. Faça login ou solicite um novo link.", "danger")
             return redirect(url_for("auth.login"))
@@ -441,6 +447,8 @@ def primeiro_acesso():
 
 @auth_bp.route("/recuperar-senha", methods=["GET", "POST"])
 @limiter.limit("5 per minute", methods=["POST"])  # evita abuso do envio de e-mail
+# Por conta alvo: ninguém inunda a caixa de um e-mail específico a partir de vários IPs.
+@limiter.limit("3 per 15 minutes", methods=["POST"], key_func=chave_limite_conta)
 def recuperar_senha():
     """
     Solicita recuperação ou reenvio de ativação, conforme o estado da conta.
@@ -489,7 +497,7 @@ def resetar_senha(token):
     if request.method == "POST":
         nova = request.form.get("nova_senha", "")
         confirma = request.form.get("confirma_senha", "")
-        erro = _validar_nova_senha(nova, confirma)
+        erro = _validar_nova_senha(nova, confirma, estado)
         if erro:
             flash(erro, "danger")
             return render_template("auth/resetar_senha.html", token=token)
@@ -497,6 +505,9 @@ def resetar_senha(token):
         if not _atualizar_credencial(estado, nova):
             flash("Token inválido ou expirado. Solicite um novo link de redefinição.", "danger")
             return redirect(url_for("auth.recuperar_senha"))
+        # Aviso ao dono da conta (sem link de token): uma redefinição que ele
+        # não fez vira sinal de comprometimento, com o caminho para reagir.
+        email_senha_alterada(estado.usuario, url_publica("auth.recuperar_senha"))
         flash("Senha redefinida com sucesso. Faça login com a nova senha.", "success")
         return redirect(url_for("auth.login"))
 
@@ -523,7 +534,7 @@ def ativar_acesso(token):
     if request.method == "POST":
         nova = request.form.get("nova_senha", "")
         confirma = request.form.get("confirma_senha", "")
-        erro = _validar_nova_senha(nova, confirma)
+        erro = _validar_nova_senha(nova, confirma, estado)
         if erro:
             flash(erro, "danger")
             return render_template("auth/primeiro_acesso_token.html", token=token, usuario=usuario)

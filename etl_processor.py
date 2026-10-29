@@ -116,6 +116,20 @@ def _normalizar_produto(valor) -> str:
     return s
 
 
+# Limite do nome EXIBÍVEL do produto: um valor vindo da planilha não deve
+# estourar as colunas do banco, o layout do PDF nem os rótulos dos gráficos.
+LIMITE_NOME_PRODUTO = 200
+
+
+def _nome_exibivel(valor) -> str:
+    """Nome de produto com teto de tamanho (proteção de armazenamento/layout) e
+    sem NUL. Preserva o restante do conteúdo: os números financeiros e os nomes
+    permanecem equivalentes ao motor original; a sanitização para uma linha é
+    responsabilidade da camada de exibição (templates/PDF). Não é a chave de
+    agrupamento (essa é _normalizar_produto)."""
+    return str(valor or "").replace("\x00", "")[:LIMITE_NOME_PRODUTO]
+
+
 # Linhas que NÃO são produto e contaminam rankings/Curva ABC quando o PDV as
 # exporta como itens (ex.: "Descontos:" aparecendo como 50% do faturamento).
 # Comparadas contra o nome JÁ normalizado por _normalizar_produto (uppercase,
@@ -643,6 +657,8 @@ def _calcular_kpis_local(caminho_vendas: str, caminho_compras: str) -> Resultado
              nome=("produto", "first"))
         .reset_index()
     )
+    if not grupo.empty:
+        grupo["nome"] = grupo["nome"].map(_nome_exibivel)
     if grupo.empty:
         raise ETLValidationError(f"Sem produtos para agregar em '{nome_v}'.")
     faturamento_total = float(grupo["fat"].sum())
@@ -697,6 +713,8 @@ def _calcular_kpis_local(caminho_vendas: str, caminho_compras: str) -> Resultado
                  nome=("produto", "first"))
             .reset_index()
         )
+        if not compras_prod.empty:
+            compras_prod["nome"] = compras_prod["nome"].map(_nome_exibivel)
         vendas_prod = grupo[["_prod_norm", "qtde"]].rename(columns={"qtde": "qtde_vendida"})
         cruz = compras_prod.merge(vendas_prod, on="_prod_norm", how="left")
         cruz["qtde_vendida"] = cruz["qtde_vendida"].fillna(0.0)

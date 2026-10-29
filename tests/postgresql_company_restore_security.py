@@ -401,7 +401,8 @@ class PostgreSQLCompanyRestoreSecurityTests(token_cases._TokenCase):
         try:
             with ThreadPoolExecutor(max_workers=2, thread_name_prefix="sec004-permanent") as executor:
                 permanent = executor.submit(client.post,
-                    f"/admin/empresa/excluir-permanente/{self.company_id}", data={"csrf_token": csrf})
+                    f"/admin/empresa/excluir-permanente/{self.company_id}",
+                    data={"csrf_token": csrf, "senha_confirmacao": token_cases.OLD_PASSWORD})
                 try:
                     self.assertTrue(locked.wait(8))
                     restored = executor.submit(self._transition, "restore")

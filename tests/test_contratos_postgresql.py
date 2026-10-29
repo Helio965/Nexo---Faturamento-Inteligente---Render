@@ -1141,7 +1141,8 @@ class _PrivateCluster:
         lixeira = admin.post(f"/admin/empresa/excluir/{id_ex}",
                              data={"csrf_token": self._csrf(admin, "/admin/empresas")})
         exclusao = admin.post(f"/admin/empresa/excluir-permanente/{id_ex}",
-                              data={"csrf_token": self._csrf(admin, "/admin/lixeira")})
+                              data={"csrf_token": self._csrf(admin, "/admin/lixeira"),
+                                    "senha_confirmacao": PASSWORD})
         pagina = admin.get("/admin/lixeira").get_data(as_text=True)
         depois = self._contratuais_da_empresa(id_ex)
         with self._sessao() as sessao:

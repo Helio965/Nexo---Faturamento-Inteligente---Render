@@ -36,8 +36,9 @@ class CSPNavegadorTests(NavegadorCase):
         pagina.wait_for_timeout(400)
         violacoes = self._violacoes(pagina)
         self.assertEqual(violacoes, [], f"{caminho}: {json.dumps(violacoes, ensure_ascii=False)}")
-        cabecalho = pagina.evaluate("() => document.querySelector('meta[name=csrf-token]') !== null")
-        self.assertTrue(cabecalho or caminho in ("/", "/como-aderir", "/auth/login"))
+        # A página inteira executou (scripts com nonce rodaram): o shell define NEXO.
+        if status == 200 and caminho.startswith(("/admin/", "/cliente/")):
+            self.assertTrue(pagina.evaluate("() => typeof window.NEXO === 'object'"), caminho)
 
     def test_public_pages_run_under_csp_without_violations(self):
         pagina = self._abrir_com_coletor()

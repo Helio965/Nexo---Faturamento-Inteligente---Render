@@ -34,4 +34,12 @@ def upgrade():
 
 
 def downgrade():
+    # Mesma guarda da 81287c74387a: a tabela guarda as planilhas e as imagens
+    # do Guia; removê-la com dados deixaria referências 'db:' pendentes.
+    conexao = op.get_bind()
+    if conexao.execute(sa.text("SELECT COUNT(*) FROM arquivo_armazenado")).scalar():
+        raise RuntimeError(
+            "Downgrade recusado: arquivo_armazenado contém arquivos (uploads e imagens do "
+            "Guia). Exporte-os para o disco e troque as referências 'db:' antes de remover a tabela."
+        )
     op.drop_table("arquivo_armazenado")

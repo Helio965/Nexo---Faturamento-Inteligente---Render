@@ -19,6 +19,7 @@ REFERÊNCIAS PERSISTIDAS (ex.: upload_relatorio.caminho_arquivo):
 
 import logging
 import os
+import re
 import stat
 from contextlib import contextmanager
 import mimetypes
@@ -28,11 +29,12 @@ from pathlib import Path
 
 from flask import current_app, url_for
 from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from etl_inputs import ETLInputError
 
 from extensions import db
-from models import ArquivoArmazenado
+from models import ArquivoArmazenado, UploadRelatorio
 import pos_commit
 
 PREFIXO_DB = "db:"
@@ -44,13 +46,32 @@ logger = logging.getLogger(__name__)
 # mesma chave sempre corresponde aos mesmos bytes e a cópia pode ser reusada.
 _CACHE_DIR = Path(tempfile.gettempdir()) / "nexo_arquivos"
 
+# Forma das chaves geradas por salvar(): um nome plano (ou 'guia/<nome>'), sem
+# separadores de caminho nem bytes de controle. Os nomes migrados do disco
+# (migrar_arquivos_para_db.py) são basenames quaisquer, por isso só a FORMA é
+# restringida: nada que venha do banco ou da URL vira caminho fora do cache.
+_NOME_CHAVE = re.compile(r"^(?:guia/)?(?P<nome>[^/\\\x00-\x1f\x7f]{1,200})$")
+
+
+def chave_valida(chave) -> bool:
+    if not isinstance(chave, str):
+        return False
+    forma = _NOME_CHAVE.match(chave)
+    return bool(forma) and forma.group("nome") not in (".", "..")
+
 
 def _chave(referencia: str) -> str:
     return referencia[len(PREFIXO_DB):]
 
 
 def _no_cache(chave: str) -> Path:
-    return _CACHE_DIR / chave
+    if not chave_valida(chave):
+        raise ValueError("chave de armazenamento inválida")
+    raiz = os.path.realpath(_CACHE_DIR)
+    destino = _CACHE_DIR / chave
+    if not os.path.realpath(destino).startswith(raiz + os.sep):
+        raise ValueError("chave de armazenamento fora do cache")
+    return destino
 
 
 def salvar(conteudo: bytes, nome_final: str) -> str:
@@ -70,6 +91,8 @@ def salvar(conteudo: bytes, nome_final: str) -> str:
 
 def obter(chave: str):
     """Registro ArquivoArmazenado da chave (ou None). Usado para servir mídia."""
+    if not chave_valida(chave):
+        return None
     return db.session.get(ArquivoArmazenado, chave)
 
 
@@ -139,6 +162,8 @@ def materializar_para_etl(referencia: str, max_bytes: int):
     source_fd = None
     try:
         if referencia.startswith(PREFIXO_DB):
+            # A chave é só a chave primária da consulta (nunca um caminho): a cópia
+            # exclusiva recebe um nome fixo, qualquer que seja o valor persistido.
             chave = _chave(referencia)
             actual_length = func.length(ArquivoArmazenado.conteudo)
             with db.session.no_autoflush:
@@ -196,6 +221,8 @@ def materializar_para_etl(referencia: str, max_bytes: int):
 
 
 def _materializar(chave: str) -> str:
+    if not chave_valida(chave):
+        return str(_CACHE_DIR / "chave-invalida")  # inexistente: "Arquivo não encontrado"
     destino = _no_cache(chave)
     if destino.exists():
         return str(destino)
@@ -225,22 +252,38 @@ def remover(caminho_arquivo: str) -> None:
         return
     if caminho_arquivo.startswith(PREFIXO_DB):
         chave = _chave(caminho_arquivo)
+        if not chave_valida(chave):
+            logger.warning("Remoção recusada: chave de arquivo inválida.")
+            return
         registro = obter(chave)
         if registro is not None:
             db.session.delete(registro)
         try:
             _no_cache(chave).unlink(missing_ok=True)
-        except OSError:
+        except (OSError, ValueError):
             pass
         return
     pos_commit.agendar(db.session, _REMOCAO_LEGADA, _caminho_legado(caminho_arquivo))
 
 
+def _legado_ainda_referenciado(caminho: str) -> bool:
+    """Após o COMMIT: outro upload (de qualquer empresa) ainda aponta para o arquivo?"""
+    with Session(bind=db.engine) as consulta:
+        referencias = consulta.scalars(select(UploadRelatorio.caminho_arquivo).where(
+            UploadRelatorio.caminho_arquivo.not_like(PREFIXO_DB + "%"),
+        ))
+        return any(_caminho_legado(referencia) == caminho for referencia in referencias)
+
+
 def _remover_legado_confirmado(caminho: str) -> None:
-    """Executado após o COMMIT: apaga só arquivo regular dentro de UPLOAD_FOLDER."""
+    """Executado após o COMMIT: apaga só arquivo regular dentro de UPLOAD_FOLDER,
+    e só quando nenhum upload restante (inclusive de outra empresa) o referencia."""
     try:
         if not _dentro_dos_uploads(caminho):
             logger.warning("Remoção de arquivo legado recusada: fora da pasta de uploads.")
+            return
+        if _legado_ainda_referenciado(caminho):
+            logger.info("Arquivo legado preservado: ainda referenciado por outro upload.")
             return
         if os.path.lexists(caminho) and not os.path.isfile(caminho):
             logger.warning("Remoção de arquivo legado recusada: não é arquivo regular.")
@@ -261,5 +304,6 @@ def url_midia(referencia: str) -> str:
     if not referencia:
         return ""
     if referencia.startswith(PREFIXO_DB):
-        return url_for("midia", chave=_chave(referencia))
+        chave = _chave(referencia)
+        return url_for("midia", chave=chave) if chave_valida(chave) else ""
     return url_for("static", filename=referencia)

@@ -107,14 +107,22 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">
-                    Cancelar
-                </button>
-                <form method="POST" action="" id="confirmPurgeForm" class="d-inline m-0">
+                <form method="POST" action="" id="confirmPurgeForm" class="w-100 m-0">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <button type="submit" class="btn btn-danger btn-sm">
-                        <i class="bi bi-trash3"></i> Sim, excluir definitivamente
-                    </button>
+                    {# Step-up: a exclusão irreversível exige a senha do administrador, não só a sessão. #}
+                    <label for="confirmPurgeSenha" class="form-label small text-white-50 mb-1">
+                        Confirme sua senha de administrador
+                    </label>
+                    <input type="password" class="form-control form-control-sm mb-3" id="confirmPurgeSenha"
+                           name="senha_confirmacao" autocomplete="current-password" required minlength="1">
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-outline-light btn-sm" data-bs-dismiss="modal">
+                            Cancelar
+                        </button>
+                        <button type="submit" class="btn btn-danger btn-sm">
+                            <i class="bi bi-trash3"></i> Sim, excluir definitivamente
+                        </button>
+                    </div>
                 </form>
             </div>
         </div>

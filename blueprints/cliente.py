@@ -24,7 +24,6 @@ Regras:
 """
 
 import os
-import hashlib
 from functools import wraps
 
 from flask import (
@@ -39,7 +38,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from etl_inputs import ETLInputError
 from etl_uploads import ler_upload_validado, limitar_upload
 
-from extensions import db
+from extensions import chave_limite_usuario, db, limiter
 from horario import agora_utc
 from models import (
     Analise, IndicadorAnalise, RelatorioAnalise, UploadRelatorio,
@@ -367,6 +366,8 @@ def _buscar_upload(id_analise: int, tipo: str):
 
 @cliente_bp.route("/upload", methods=["GET", "POST"])
 @cliente_required
+# Por usuário: cada POST custa uma validação em processo isolado (CPU/memória).
+@limiter.limit("30 per hour", methods=["POST"], key_func=chave_limite_usuario)
 @limitar_upload
 def upload():
     """Preflight limitado e substituição serializada, sem executar ETL comercial."""
@@ -484,7 +485,8 @@ def tickets():
     empresa = current_user.empresa
 
     if request.method == "POST":
-        assunto = (request.form.get("assunto") or "").strip()
+        # Uma linha curta: o assunto vai para notificações, e-mails e listagens.
+        assunto = " ".join((request.form.get("assunto") or "").split())[:160]
         categoria = (request.form.get("categoria") or "").strip().upper()
         mensagem = (request.form.get("mensagem") or "").strip()
 

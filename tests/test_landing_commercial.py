@@ -11,7 +11,6 @@ import re
 import threading
 import unittest
 from unittest.mock import patch
-from urllib.parse import urlsplit
 
 from flask import render_template
 
@@ -232,7 +231,15 @@ class LandingCommercialBrowserTests(DeployTestCase):
         def route(request):
             url = request.request.url
             if url.startswith(self.base):
-                request.continue_()
+                if plotly_stub is not None and url.rstrip("/") == self.base.rstrip("/"):
+                    # SEC-009: o Plotly da landing é fixado por SRI; o dublê que espia
+                    # newPlot só entra se o TESTE retirar o atributo da própria página
+                    # (o produto continua exigindo o hash do arquivo real).
+                    resposta = request.fetch()
+                    html = re.sub(r'(<script[^>]*plotly\.min\.js[^>]*?)\s+integrity="[^"]*"', r"\1", resposta.text())
+                    request.fulfill(response=resposta, body=html)
+                else:
+                    request.continue_()
             elif "/bootstrap@5.3.3/dist/css/bootstrap.min.css" in url:
                 request.continue_()
             elif plotly_stub is not None and "/plotly.js-dist-min@2.35.2/plotly.min.js" in url:
@@ -341,7 +348,7 @@ class LandingCommercialBrowserTests(DeployTestCase):
             window.__charts.push({id:el.id,data:data});return Promise.resolve(el);
         },relayout:function(){return Promise.resolve();}};"""
         page = self.page(plotly_stub=stub)
-        page.wait_for_function("document.querySelectorAll('[data-chart-ready=true]').length === 3")
+        page.wait_for_function("() => document.querySelectorAll('[data-chart-ready=true]').length === 3")
         values = page.evaluate("window.__charts")
         self.assertEqual([item['id'] for item in values], ['hero-chart', 'demo-chart-evolucao', 'demo-chart-top'])
         self.assertEqual(values[0]['data'][0]['y'], [156300, 142800])

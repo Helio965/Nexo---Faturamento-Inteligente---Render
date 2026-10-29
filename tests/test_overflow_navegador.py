@@ -45,7 +45,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tests.contratos_support import ContratosCase
-from tests.test_contratos_navegador import _BOOTSTRAP_MINIMO, _CDN, _CDN_INTEGRO, _copias_locais_da_cdn
+from tests.test_contratos_navegador import (_BOOTSTRAP_MINIMO, _CDN, _CDN_INTEGRO, _copias_locais_da_cdn,
+                                            _liberar_origem_socketio, _servir_fonte)
 from tests.test_nexobot_navegador import _CONECTAR_LOCAL
 
 try:
@@ -219,6 +220,7 @@ class NavegadorCase(ContratosCase):
             self.stack.enter_context(patch(alvo, original))
         self.servidor = make_server("127.0.0.1", 0, self.app, threaded=True)
         self.base = f"http://127.0.0.1:{self.servidor.server_port}"
+        _liberar_origem_socketio(self, self.base)
         threading.Thread(target=self.servidor.serve_forever, daemon=True).start()
         self.addCleanup(self._parar_servidor)
         self.pw = sync_playwright().start()
@@ -332,6 +334,8 @@ class NavegadorCase(ContratosCase):
             rota.fulfill(status=200, path=caminho, content_type=tipo)
         elif url == _PLOTLY_URL and self.plotly_local:
             rota.fulfill(status=200, path=self.plotly_local, content_type="application/javascript")
+        elif requisicao.resource_type == "font":
+            _servir_fonte(rota, url)
         elif url == _CDN + "bootstrap@5.3.3/dist/css/bootstrap.min.css":
             rota.fulfill(status=200, content_type="text/css", body=_BOOTSTRAP_MINIMO)
         elif requisicao.resource_type == "stylesheet":

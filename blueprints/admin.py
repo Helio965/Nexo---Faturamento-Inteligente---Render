@@ -12,7 +12,7 @@ from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from sqlalchemy import select, func
 
-from extensions import db
+from extensions import chave_limite_usuario, db, limiter
 from horario import agora_utc
 from models import (
     Analise, UploadRelatorio, Empresa, Plano, Segmento, Usuario, RelatorioAnalise,
@@ -636,6 +636,9 @@ def empresa_restaurar(id_empresa):
 
 @admin_bp.route("/empresa/excluir-permanente/<int:id_empresa>", methods=["POST"])
 @admin_required
+# Reautenticação por tentativa (senha errada também conta): um cookie
+# sequestrado não apaga clientes em série.
+@limiter.limit("5 per 15 minutes", methods=["POST"], key_func=chave_limite_usuario)
 def empresa_excluir_permanente(id_empresa):
     """
     HARD DELETE — exclusão física DEFINITIVA e IRREVERSÍVEL.
@@ -659,6 +662,11 @@ def empresa_excluir_permanente(id_empresa):
 
     Qualquer falha de integridade → rollback atômico (nada é apagado) + aviso.
     """
+    # Step-up: ação irreversível exige a senha do administrador logado, não só
+    # o cookie de sessão (que pode ter sido deixado aberto ou sequestrado).
+    if not current_user.check_senha(request.form.get("senha_confirmacao") or ""):
+        flash("Confirme sua senha de administrador para excluir definitivamente um cliente.", "danger")
+        return redirect(url_for("admin.lixeira"))
     nome_emp = "empresa"
     try:
         empresa = bloquear_empresa(db.session, id_empresa)
@@ -775,6 +783,11 @@ def analise_upload(id_analise):
         if tipo not in ("VENDAS", "COMPRAS"):
             flash("Tipo de relatório inválido (esperado VENDAS ou COMPRAS).", "danger")
             return redirect(url_for("admin.analise_upload", id_analise=id_analise))
+        if _relatorio_publicado(analise):
+            # SEC-003: os arquivos de uma análise publicada são a base do que o
+            # cliente vê; a troca passa por despublicar primeiro.
+            flash("Esta análise tem devolutiva publicada. Despublique-a antes de substituir os relatórios.", "warning")
+            return redirect(url_for("admin.analise_relatorio", id_analise=id_analise))
         arquivo = request.files.get("arquivo")
         if not arquivo or not arquivo.filename:
             flash("Selecione um arquivo para enviar.", "warning")
@@ -1059,6 +1072,11 @@ def analise_relatorio(id_analise):
     return render_template("admin/relatorio_editor.html", analise=analise)
 
 
+def _relatorio_publicado(analise) -> bool:
+    """A análise tem devolutiva publicada (o cliente vê indicadores e texto)."""
+    return analise.relatorio is not None and bool(analise.relatorio.publicado)
+
+
 @admin_bp.route("/analise/<int:id_analise>/processar", methods=["POST"])
 @admin_required
 @limitar_processamento
@@ -1070,6 +1088,13 @@ def processar_analise(id_analise):
             db.session.rollback()
             flash("Análise não encontrada.", "danger")
             return redirect(url_for("admin.dashboard"))
+        if _relatorio_publicado(analise):
+            # SEC-003: reprocessar trocaria os indicadores que o cliente já vê
+            # como publicados. O fluxo explícito é despublicar → processar → publicar.
+            # Verificado antes dos uploads: vale mesmo se um relatório foi removido.
+            db.session.rollback()
+            flash("Esta análise tem devolutiva publicada. Despublique-a antes de reprocessar os relatórios.", "warning")
+            return redirect(url_for("admin.analise_relatorio", id_analise=id_analise))
         upload_vendas = _buscar_upload(id_analise, "VENDAS")
         upload_compras = _buscar_upload(id_analise, "COMPRAS")
         if not upload_vendas or not upload_compras:
@@ -1314,20 +1339,29 @@ def ticket_detalhe(id_chamado):
             # Uma leitura do relógio: atualização e fechamento no mesmo instante.
             instante = agora_utc()
             chamado.data_atualizacao = instante
-            if novo == "RESOLVIDO":
+            resolvido = novo == "RESOLVIDO"
+            if resolvido:
                 chamado.data_fechamento = instante
                 notificar_clientes_empresa(
                     chamado.id_empresa,
                     f"Seu chamado “{chamado.assunto}” foi marcado como resolvido.",
                     url_for("cliente.ticket_detalhe", id_chamado=id_chamado),
                 )
+            else:
+                chamado.data_fechamento = None
+            try:
+                db.session.commit()
+            except SQLAlchemyError as erro:
+                db.session.rollback()
+                current_app.logger.warning("Alteração de status do chamado não persistida (%s).", type(erro).__name__)
+                flash("Não foi possível alterar o status do chamado. Tente novamente.", "danger")
+                return redirect(url_for("admin.ticket_detalhe", id_chamado=id_chamado))
+            # O e-mail só sai depois de o status estar confirmado no banco.
+            if resolvido:
                 email_ticket_resolvido(
                     chamado,
                     url_publica("cliente.ticket_detalhe", id_chamado=id_chamado),
                 )
-            else:
-                chamado.data_fechamento = None
-            db.session.commit()
             flash("Status do chamado atualizado.", "success")
         else:
             flash("Ação inválida.", "danger")

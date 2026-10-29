@@ -21,7 +21,6 @@ from extensions import db, socketio
 from models import (
     Analise, ChamadoSuporte, Empresa, MensagemSuporte, Notificacao, Usuario,
 )
-import notifications
 import realtime
 import session_security
 
@@ -52,6 +51,8 @@ class CompanyRestoreSecurityTests(token_cases._TokenCase):
         client = self.admin_client if client is None else client
         identifier = self.company_id if company is None else company
         data = {"csrf_token": self._csrf(client, "/admin/empresas")} if csrf else {}
+        if operation == "excluir-permanente" and csrf:
+            data["senha_confirmacao"] = token_cases.OLD_PASSWORD  # step-up da exclusão irreversível
         return client.post(f"/admin/empresa/{operation}/{identifier}", data=data)
 
     def _trash(self):

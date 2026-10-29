@@ -1,0 +1,27 @@
+{% extends "emails/_base.html" %}
+{% block content %}
+<h1 style="margin:0 0 8px;font-size:20px;color:#ffffff;">Sua senha foi alterada 🔐</h1>
+<p style="margin:0 0 18px;color:#c4c6d2;">
+  Olá{% if usuario and usuario.nome %}, {{ usuario.nome.split(' ')[0] }}{% endif %}! A senha da sua conta NEXO
+  acaba de ser redefinida pelo link de recuperação. Se foi você, não precisa fazer nada.
+</p>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#181824;border-radius:12px;border:1px solid rgba(255,255,255,0.07);border-left:4px solid #ef4444;margin-bottom:18px;">
+  <tr><td style="padding:14px 18px;color:#fecaca;font-size:13px;line-height:1.5;">
+    ⚠️ <strong>Não foi você?</strong> Redefina a senha agora mesmo pelo botão abaixo (as sessões
+    abertas já foram encerradas) e avise o suporte NEXO.
+  </td></tr>
+</table>
+
+<table role="presentation" cellpadding="0" cellspacing="0" style="margin:0 auto 22px;">
+  <tr><td style="border-radius:10px;background:linear-gradient(135deg,#7c3aed 0%,#a855f7 100%);">
+    <a href="{{ link_recuperacao }}" style="display:inline-block;padding:13px 28px;color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;">
+      Redefinir minha senha →
+    </a>
+  </td></tr>
+</table>
+
+<p style="margin:0;color:#9aa0b7;font-size:12px;line-height:1.5;">
+  Este aviso é enviado automaticamente a cada redefinição de senha e não contém sua senha nem links de acesso direto.
+</p>
+{% endblock %}

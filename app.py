@@ -77,6 +77,10 @@ def create_app(config_name: str = None) -> Flask:
         secret_key = app.config.get("SECRET_KEY")
         if not secret_key or not secret_key.strip() or secret_key == "dev-key-trocar-em-producao":
             raise RuntimeError("SECRET_KEY válida é obrigatória em produção.")
+        # Chave curta/previsível assina cookies e tokens: exigir ao menos 32
+        # caracteres (render.yaml gera 64 por generateValue). O valor nunca é logado.
+        if len(secret_key.strip()) < 32:
+            raise RuntimeError("SECRET_KEY em produção deve ter ao menos 32 caracteres aleatórios.")
         # O disco do Render é efêmero: não iniciar silenciosamente com SQLite.
         if not os.environ.get("DATABASE_URL", "").strip():
             raise RuntimeError("DATABASE_URL PostgreSQL é obrigatória em produção.")
@@ -326,6 +330,7 @@ def create_app(config_name: str = None) -> Flask:
     # gratuito acordado E gera atividade no Supabase, cujo plano free pausa o
     # projeto após 7 dias sem consultas. 503 se o banco estiver fora.
     @app.route("/healthz/db")
+    @limiter.limit("30 per minute")  # anônimo e consome conexão: sem abuso
     def healthz_db():
         try:
             db.session.execute(text("SELECT 1"))
@@ -413,6 +418,12 @@ def create_app(config_name: str = None) -> Flask:
     @app.errorhandler(403)
     def _acesso_negado(e):
         return _pagina_erro(403, "Acesso negado", "Você não tem permissão para abrir esta página.")
+
+    @app.errorhandler(405)
+    def _metodo_nao_permitido(e):
+        # Também cobre /api/: JSON, não a página HTML do servidor.
+        return _pagina_erro(405, "Método não permitido",
+                            "Esta ação não pode ser feita por este tipo de requisição.")
 
     @app.errorhandler(500)
     def _erro_interno(e):

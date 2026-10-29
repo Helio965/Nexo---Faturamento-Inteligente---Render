@@ -149,8 +149,8 @@ class NavegadorTests(DeployTestCase):
         pagina.fill("#nexobotInput", "Oi")
         pagina.evaluate("""() => { const f = document.getElementById('nexobotForm');
             f.requestSubmit(); f.requestSubmit(); f.requestSubmit(); }""")
-        pagina.wait_for_function("document.querySelectorAll('.nb-msg.nb-bot:not(.nb-typing)').length >= 2")
-        pagina.wait_for_function("document.getElementById('nexobotForm').getAttribute('aria-busy') === 'false'")
+        pagina.wait_for_function("() => document.querySelectorAll('.nb-msg.nb-bot:not(.nb-typing)').length >= 2")
+        pagina.wait_for_function("() => document.getElementById('nexobotForm').getAttribute('aria-busy') === 'false'")
         self.assertEqual(len(chamadas), 1)
         self.assertEqual(pagina.locator(".nb-msg.nb-user").count(), 1)
 

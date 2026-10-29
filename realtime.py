@@ -25,6 +25,10 @@ from session_security import (
 logger = logging.getLogger(__name__)
 _EXTENSAO = "nexo_realtime"
 
+# Teto de conexões Socket.IO simultâneas por usuário (abas/dispositivos).
+# Alto o bastante para o uso real, baixo o bastante para conter um laço.
+MAX_CONEXOES_POR_USUARIO = 8
+
 
 def inicializar_realtime(app, server=None):
     """Estado por aplicação; TESTING usa varredura explícita, sem thread órfã."""
@@ -180,6 +184,14 @@ def _on_connect(auth=None):
         # Registrar/entrar na sala antes de liberar FOR SHARE evita handshake
         # validado antes do reset, mas admitido na sala depois de sua revogação.
         with estado["lock"]:
+            # Teto de conexões simultâneas por usuário: muitas abas/dispositivos
+            # (ou um cliente em laço) não esgotam as threads do worker. O sininho
+            # precisa de uma conexão por aba, não de dezenas.
+            abertas = sum(1 for dados in estado["sids"].values()
+                          if dados["id_usuario"] == usuario.id_usuario)
+            if abertas >= MAX_CONEXOES_POR_USUARIO:
+                logger.info("Conexão Socket.IO recusada: teto por usuário atingido.")
+                return False
             estado["sids"][request.sid] = {
                 "id_usuario": usuario.id_usuario, "impressao": impressao,
                 "boot_id": session["boot_id"], "hash_sessao": hash_sessao,

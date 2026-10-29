@@ -892,7 +892,8 @@
           el.className = 'nexo-toast';
           el.innerHTML = '<span class="nt-icon"><i class="bi bi-bell-fill"></i></span>' +
                          '<span class="nt-text">' + escapeHtml(texto) + '</span>';
-          if (link) {
+          // Só destino local do portal (defesa em profundidade: o servidor já gera o link).
+          if (link && /^\/(?![\/\\])/.test(String(link))) {
             el.style.cursor = 'pointer';
             el.addEventListener('click', function () { window.location.href = link; });
           }

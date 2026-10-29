@@ -37,6 +37,23 @@ def _nome(caminho: str) -> str:
     return os.path.basename(caminho.replace("\\", "/"))
 
 
+# Imagens do Guia aceitas na migração (a leitura é local, mas um imagem_url
+# adulterado no banco nunca deve fazer o script ler fora de static/).
+_EXT_IMAGEM = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+
+
+def _imagem_contida(pasta_static: str, imagem_url: str):
+    """Caminho absoluto da imagem do Guia SE ficar dentro de static/ e tiver
+    extensão de imagem; caso contrário None (a referência é recusada)."""
+    if os.path.splitext(imagem_url)[1].lower() not in _EXT_IMAGEM:
+        return None
+    base = os.path.realpath(pasta_static)
+    alvo = os.path.realpath(os.path.join(pasta_static, imagem_url))
+    if alvo != base and alvo.startswith(base + os.sep):
+        return alvo
+    return None
+
+
 def main(dry_run: bool = True) -> int:
     app = create_app()
     app.config["SQLALCHEMY_ECHO"] = False
@@ -74,7 +91,11 @@ def main(dry_run: bool = True) -> int:
             if t.imagem_url.startswith(storage.PREFIXO_DB):
                 ignorados += 1
                 continue
-            caminho = os.path.join(pasta_static, t.imagem_url)
+            caminho = _imagem_contida(pasta_static, t.imagem_url)
+            if caminho is None:
+                print(f"❌ guia {t.id}: referência de imagem recusada (fora de static/ ou sem extensão de imagem)")
+                faltando += 1
+                continue
             if not os.path.exists(caminho):
                 print(f"❌ guia {t.id}: imagem não encontrada ({caminho})")
                 faltando += 1

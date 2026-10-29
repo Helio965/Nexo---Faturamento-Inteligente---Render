@@ -155,6 +155,16 @@ class Config:
     # pooler pode fechar conexões ociosas, então validamos a conexão antes de
     # usar (pre_ping) e reciclamos antes do timeout típico. Inócuo para SQLite.
     SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True, "pool_recycle": 280}
+    # Pool do PostgreSQL coerente com o servidor (gunicorn -w 1 --threads 50):
+    # sem teto explícito, 50 threads disputam 15 conexões e esperam 30 s cada
+    # (esgotamento). pool_timeout curto falha rápido; tamanho e overflow são
+    # ajustáveis pelo ambiente conforme o limite do pooler (Supabase).
+    if SQLALCHEMY_DATABASE_URI.startswith("postgresql"):
+        SQLALCHEMY_ENGINE_OPTIONS.update({
+            "pool_size": int(os.environ.get("NEXO_DB_POOL_SIZE", 5)),
+            "max_overflow": int(os.environ.get("NEXO_DB_MAX_OVERFLOW", 10)),
+            "pool_timeout": int(os.environ.get("NEXO_DB_POOL_TIMEOUT", 10)),
+        })
 
     # === Admin Master (seed) ===
     ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@nexo.com.br")
@@ -225,7 +235,9 @@ class Config:
 
 class DevelopmentConfig(Config):
     DEBUG = True
-    SQLALCHEMY_ECHO = True
+    # Echo do SQL só sob demanda: com ele ligado, os parâmetros (inclusive o
+    # hash da senha em INSERT/UPDATE de usuario) vão para o log de desenvolvimento.
+    SQLALCHEMY_ECHO = os.environ.get("NEXO_SQL_ECHO", "0") == "1"
 
 
 class ProductionConfig(Config):
