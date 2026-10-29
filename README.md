@@ -375,6 +375,7 @@ Limitações conhecidas do plano free: 512 MB de RAM e 0,1 CPU (ETL e PDF ficam 
 | `NEXO_SENHAS_VAZADAS` | Não (default `0`) | `1` consulta vazamentos conhecidos ao definir/redefinir senha, por k-anonimato (só 5 caracteres do hash saem do servidor; a senha nunca). Indisponibilidade do serviço não bloqueia a troca (fail-open, registrado em log). |
 | `NEXO_DB_POOL_SIZE` / `NEXO_DB_MAX_OVERFLOW` / `NEXO_DB_POOL_TIMEOUT` | Não (defaults `5` / `10` / `10`) | Pool de conexões do SQLAlchemy; só se aplica a PostgreSQL (ignorado em SQLite). |
 | `NEXO_SQL_ECHO` | Não (default `0`) | `1` ecoa o SQL no log em desenvolvimento; sem efeito em produção. |
+| `NEXO_LIMITE_LOGIN_CONTA` / `NEXO_LIMITE_RECUPERACAO_CONTA` | Não (defaults `200 per 15 minutes` / `10 per hour`) | Limites por **conta alvo** (hash do e-mail) no login e na recuperação de senha, somados aos limites por IP. Mantenha o do login acima de 10/min × janela: um orçamento menor seria esgotável de um único IP e trancaria o e-mail alvo (inclusive o do administrador). Lidos a cada requisição. |
 | `HOST` / `PORT` | Não | Bind do servidor (`python app.py`). |
 
 Template completo em [`.env.example`](.env.example).

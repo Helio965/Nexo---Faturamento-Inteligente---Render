@@ -101,6 +101,12 @@ class Config:
     # aponte RATELIMIT_STORAGE_URI para um Redis compartilhado.
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
     RATELIMIT_HEADERS_ENABLED = True
+    # Limites por CONTA alvo (somados aos limites por IP das rotas). Um orçamento por
+    # conta menor do que o teto por IP × janela seria esgotável de um único IP,
+    # trancando o e-mail alvo (inclusive o do administrador); os padrões exigem
+    # esforço sustentado de vários IPs e ainda limitam a adivinhação on-line.
+    LIMITE_LOGIN_CONTA = os.environ.get("NEXO_LIMITE_LOGIN_CONTA", "200 per 15 minutes")
+    LIMITE_RECUPERACAO_CONTA = os.environ.get("NEXO_LIMITE_RECUPERACAO_CONTA", "10 per hour")
 
     # === Tempo real (Socket.IO) ===
     # Origens permitidas no handshake do WebSocket. NUNCA "*" com cookie de

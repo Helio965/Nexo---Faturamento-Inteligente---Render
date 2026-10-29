@@ -289,8 +289,10 @@ def _validar_nova_senha(nova: str, confirma: str, estado: _CredencialEsperada | 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
 @limiter.limit("10 per minute", methods=["POST"])  # trava brute force de senha
-# Por conta alvo (hash do e-mail), independentemente do IP de origem.
-@limiter.limit("30 per 15 minutes", methods=["POST"], key_func=chave_limite_conta)
+# Por conta alvo (hash do e-mail), independentemente do IP de origem. Orçamento
+# em config (LIMITE_LOGIN_CONTA): acima do teto por IP × janela, para que um só
+# IP não tranque o e-mail alvo; lido a cada requisição (ajustável sem reinício).
+@limiter.limit(lambda: current_app.config["LIMITE_LOGIN_CONTA"], methods=["POST"], key_func=chave_limite_conta)
 def login():
     """Gere o ecrã e a lógica de login do utilizador."""
     # Se já estiver autenticado, vai DIRETO ao dashboard do perfil correto.
@@ -447,8 +449,9 @@ def primeiro_acesso():
 
 @auth_bp.route("/recuperar-senha", methods=["GET", "POST"])
 @limiter.limit("5 per minute", methods=["POST"])  # evita abuso do envio de e-mail
-# Por conta alvo: ninguém inunda a caixa de um e-mail específico a partir de vários IPs.
-@limiter.limit("3 per 15 minutes", methods=["POST"], key_func=chave_limite_conta)
+# Por conta alvo (LIMITE_RECUPERACAO_CONTA): limita o envio de e-mails a um alvo a
+# partir de vários IPs sem permitir que poucos pedidos bloqueiem a autorrecuperação.
+@limiter.limit(lambda: current_app.config["LIMITE_RECUPERACAO_CONTA"], methods=["POST"], key_func=chave_limite_conta)
 def recuperar_senha():
     """
     Solicita recuperação ou reenvio de ativação, conforme o estado da conta.

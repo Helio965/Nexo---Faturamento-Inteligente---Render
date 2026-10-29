@@ -171,17 +171,35 @@ class PasswordPolicyFlowTests(_TokenCase):
 class AccountRateLimitTests(_TokenCase):
     ENABLE_LIMITS = True
 
+    def setUp(self):
+        super().setUp()
+        # Orçamentos pequenos (lidos a cada requisição) para exercitar o mecanismo
+        # sem centenas de hashes de senha; os padrões de produção ficam em config.
+        self.app.config["LIMITE_LOGIN_CONTA"] = "12 per 15 minutes"
+        self.app.config["LIMITE_RECUPERACAO_CONTA"] = "3 per 15 minutes"
+
+    def test_production_defaults_exceed_a_single_source_budget(self):
+        """Um orçamento por conta menor que o teto por IP × janela seria esgotável de
+        um único IP (lockout barato do e-mail alvo). Os padrões exigem vários IPs."""
+        from config import Config
+        import re
+        login = Config.LIMITE_LOGIN_CONTA
+        n_conta, janela = re.match(r"(\d+) per (\d+)? ?(minute|minutes|hour|hours)", login).group(1, 2)
+        minutos = int(janela or 1) * (60 if "hour" in login else 1)
+        self.assertGreater(int(n_conta), 10 * minutos, "orçamento por conta deve superar 10/min por IP × janela")
+        self.assertRegex(Config.LIMITE_RECUPERACAO_CONTA, r"^\d+ per (\d+ )?(hour|hours|minutes?)$")
+
     def _de(self, ip):
         return {"REMOTE_ADDR": ip}
 
     def test_login_is_limited_per_account_across_source_addresses(self):
         csrf = self._csrf()
         codigos = []
-        for tentativa in range(32):           # 8 tentativas por IP (< 10/min por IP), 4 IPs
+        for tentativa in range(14):           # 7 tentativas por IP (< 10/min por IP), 2 IPs
             codigos.append(self.client.post("/auth/login", data={
                 "email": "Active@example.invalid", "senha": "senha-errada-sintetica", "csrf_token": csrf,
-            }, environ_base=self._de(f"10.0.0.{tentativa % 4 + 1}")).status_code)
-        self.assertEqual(codigos, [200] * 30 + [429] * 2)
+            }, environ_base=self._de(f"10.0.0.{tentativa % 2 + 1}")).status_code)
+        self.assertEqual(codigos, [200] * 12 + [429] * 2)  # orçamento de teste: 12
         # Outra conta, de um IP já usado, segue livre: o bloqueio é da conta alvo.
         response = self.client.post("/auth/login", data={
             "email": "other@example.invalid", "senha": "senha-errada-sintetica", "csrf_token": csrf,
