@@ -30,6 +30,8 @@ TITULOS = ("Indicadores do período", "Curva ABC", "Distribuição do faturament
            "Síntese executiva", "Devolutiva do consultor", "Resumo executivo", "Conclusão estratégica")
 TITULOS_DE_SECAO = TITULOS[:5]   # h2: cada bloco indivisível do gerador tem no máximo um, no início
 SUBTITULO_GRAFICO = "Participação dos principais produtos no faturamento do período."
+TITULO_GRAFICO = "Distribuição do faturamento por produto"
+NOTA_GRAFICO = "Participação individual ="     # última linha do bloco do gráfico
 FECHAMENTO = "Documento gerado pelo portal NEXO em"
 MARGEM = 18 * mm
 TOPO = 15 * mm
@@ -176,11 +178,15 @@ def problemas_de_geometria(pagina):
 
 
 def titulo_isolado(pagina):
-    """Título que termina o corpo da página (o conteúdo dele ficou na seguinte)."""
-    corpo = linhas_do_corpo(pagina)
+    """Título que termina o corpo da página (o conteúdo dele ficou na seguinte). O
+    subtítulo do gráfico não é conteúdo: título + subtítulo no pé da página também
+    é título isolado."""
+    corpo = sorted(linhas_do_corpo(pagina), key=lambda l: l["y1"])
+    while len(corpo) > 1 and corpo[-1]["texto"] == SUBTITULO_GRAFICO:
+        corpo.pop()
     if not corpo:
         return None
-    ultima = max(corpo, key=lambda l: l["y1"])
+    ultima = corpo[-1]
     return ultima["texto"] if any(ultima["texto"].startswith(t) for t in TITULOS) else None
 
 
@@ -216,3 +222,34 @@ def lacunas_evitaveis(paginas_do_documento):
         if livre > bloco + FOLGA_LACUNA:
             achados.append((numero, round(livre), round(bloco), depois[0]["texto"][:40]))
     return achados
+
+
+def grafico_partido(paginas_do_documento):
+    """Páginas em que o título do gráfico aparece sem a nota que fecha o bloco
+    (título, subtítulo, pizza, legenda e nota andam juntos). Sem fatias para
+    desenhar o bloco não tem nota, e não há o que conferir."""
+    corpos = [[l["texto"] for l in linhas_do_corpo(p)] for p in paginas_do_documento]
+    if not any(t.startswith(NOTA_GRAFICO) for textos in corpos for t in textos):
+        return []
+    return [numero for numero, textos in enumerate(corpos, start=1)
+            if TITULO_GRAFICO in textos and not any(t.startswith(NOTA_GRAFICO) for t in textos)]
+
+
+def linhas_visuais(documento):
+    """Linhas como aparecem na página, sem depender da ordem de leitura do
+    pdftotext: palavras com o centro vertical a até 2 pt umas das outras, da
+    esquerda para a direita, página a página, de cima para baixo. Serve para
+    conferir linhas de tabela e de legenda (células lado a lado)."""
+    resultado = []
+    for pagina in paginas(documento):
+        palavras = sorted((p for l in pagina["linhas"] for p in l["palavras"]),
+                          key=lambda p: (p["yMin"] + p["yMax"]) / 2)
+        grupos = []
+        for palavra in palavras:
+            centro = (palavra["yMin"] + palavra["yMax"]) / 2
+            if grupos and centro - grupos[-1][0] <= 2:
+                grupos[-1][1].append(palavra)
+            else:
+                grupos.append((centro, [palavra]))
+        resultado += [" ".join(p["texto"] for p in sorted(g, key=lambda p: p["xMin"])) for _, g in grupos]
+    return resultado

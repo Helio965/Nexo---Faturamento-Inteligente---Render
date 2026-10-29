@@ -13,6 +13,7 @@ import unittest
 
 from reportlab.graphics.charts.piecharts import Pie
 from reportlab.graphics.shapes import Drawing
+from reportlab.lib.colors import white
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.units import mm
 from reportlab.platypus import KeepTogether, Paragraph, Table
@@ -26,6 +27,14 @@ LARGURA_UTIL = A4[0] - 2 * apoio.MARGEM
 def _distribuicao_referencia():
     analise = apoio.analise_referencia()
     return pdf_export.calcular_distribuicao(analise.indicador.faturamento_total, analise.curva_abc[:5])
+
+
+def _posicao(linhas, trecho):
+    """Índice da primeira linha visual que contém o trecho (ValueError se nenhuma)."""
+    for i, linha in enumerate(linhas):
+        if trecho in linha:
+            return i
+    raise ValueError(f"{trecho!r} não está em nenhuma linha do documento")
 
 
 @unittest.skipUnless(apoio.pdftotext_disponivel(), "pdftotext indisponível: geometria não verificável")
@@ -73,13 +82,14 @@ class PDFLayoutGeometriaTests(unittest.TestCase):
 
     def test_04_curva_abc_preservada(self):
         documento = apoio.gerar()
-        conteudo = apoio.texto(documento)
-        for esperado in ("Curva ABC · Top 5 produtos (Princípio de Pareto)", "# Produto Classe Faturamento (R$) % acum.",
-                         "1 Fax Térmico Panasonic A 3.200,00 74,2%", "2 Leitor Zip Drive Iomega B 760,00 91,9%",
-                         "3 Mouse Bola Serial C 220,00 97,0%", "4 Pilha AA C 40,00 97,9%", "5 Diskette Maxell C 36,00 98,7%"):
-            self.assertIn(esperado, conteudo)
+        linhas = apoio.linhas_visuais(documento)
+        esperadas = ("Curva ABC · Top 5 produtos (Princípio de Pareto)", "# Produto Classe Faturamento (R$) % acum.",
+                     "1 Fax Térmico Panasonic A 3.200,00 74,2%", "2 Leitor Zip Drive Iomega B 760,00 91,9%",
+                     "3 Mouse Bola Serial C 220,00 97,0%", "4 Pilha AA C 40,00 97,9%", "5 Diskette Maxell C 36,00 98,7%")
+        posicoes = [_posicao(linhas, esperada) for esperada in esperadas]
+        self.assertEqual(posicoes, sorted(posicoes))             # título, cabeçalho e linhas em ordem
         # Só os 5 primeiros na tabela (o 6º e o 7º entram em "Outros produtos").
-        self.assertNotIn("Cabo Paralelo", conteudo)
+        self.assertNotIn("Cabo Paralelo", apoio.texto(documento))
 
     def test_05_nomes_longos_quebram_sem_invadir_a_coluna_da_classe(self):
         analise = apoio.analise_referencia()
@@ -116,19 +126,19 @@ class PDFLayoutGeometriaTests(unittest.TestCase):
         self.assertGreater(verificadas["legenda"], 10)
 
     def test_06_grafico_abaixo_da_tabela_e_antes_da_sintese(self):
-        conteudo = apoio.texto(apoio.gerar())
-        posicoes = [conteudo.index(t) for t in (
+        linhas = apoio.linhas_visuais(apoio.gerar())
+        posicoes = [_posicao(linhas, t) for t in (
             "Curva ABC · Top 5", "Classe A: até 80%", "Distribuição do faturamento por produto",
             "Participação dos principais produtos no faturamento do período.", "Faturamento (R$) Participação",
             "Outros produtos — 55,00 1,28%", "Síntese executiva")]
         self.assertEqual(posicoes, sorted(posicoes))
 
     def test_07_legenda_e_percentuais_no_documento(self):
-        conteudo = apoio.texto(apoio.gerar())
+        linhas = apoio.linhas_visuais(apoio.gerar())
         for esperado in ("Fax Térmico Panasonic A 3.200,00 74,23%", "Leitor Zip Drive Iomega B 760,00 17,63%",
                          "Mouse Bola Serial C 220,00 5,10%", "Pilha AA C 40,00 0,93%", "Diskette Maxell C 36,00 0,84%",
-                         "Outros produtos — 55,00 1,28%", "4.311,00 100,00%", "Faturamento total"):
-            self.assertIn(esperado, conteudo)
+                         "Outros produtos — 55,00 1,28%", "Faturamento total 4.311,00 100,00%"):
+            _posicao(linhas, esperado)
 
     def test_10_sintese_executiva_sem_5w2h_e_com_todos_os_cartoes(self):
         conteudo = apoio.texto(apoio.gerar())
@@ -197,6 +207,7 @@ class PDFLayoutGeometriaTests(unittest.TestCase):
                     with self.subTest(cartoes=n_cartoes, titulo_longo=titulo_longo, resumo=n_resumo,
                                       conclusao=n_conclusao):
                         self.assertEqual(apoio.lacunas_evitaveis(paginas), [])
+                        self.assertEqual(apoio.grafico_partido(paginas), [])
                     casos += 1
         self.assertEqual(casos, 18)
 
@@ -258,9 +269,10 @@ class PDFLayoutGeometriaTests(unittest.TestCase):
             conteudo = apoio.texto(apoio.gerar(analise))
         self.assertIn("Atenção: A soma dos produtos exibidos (R$ 4.256,00) é maior que o faturamento total "
                       "informado (R$ 4.000,00)", conteudo)
-        self.assertNotIn("Outros produtos —", conteudo)          # sem a linha "Outros" na legenda
-        self.assertIn("4.256,00 100,00%", conteudo)
-        self.assertIn("Soma dos produtos exibidos", conteudo)
+        self.assertIn("Soma dos produtos exibidos", conteudo)       # rótulo do total (em duas linhas)
+        linhas = apoio.linhas_visuais(apoio.gerar(analise))
+        self.assertFalse(any("Outros produtos —" in l for l in linhas))   # sem a linha "Outros" na legenda
+        _posicao(linhas, "4.256,00 100,00%")
         # O log identifica a análise e o tipo de inconsistência, sem valores comerciais.
         self.assertEqual(len(registro.output), 1)
         self.assertIn("análise 5", registro.output[0])
@@ -290,6 +302,10 @@ class PDFLayoutGeometriaTests(unittest.TestCase):
                 rodape = " ".join(l["texto"] for l in apoio.linhas_do_rodape(pagina))
                 self.assertIn(f"Página {numero} de {len(paginas)}", rodape)
                 self.assertIn("Referência 06/2026", rodape)
+        # Nada do texto do consultor é cortado (corpo das páginas, sem o rodapé no meio).
+        corpo = " ".join(l["texto"] for p in paginas for l in sorted(apoio.linhas_do_corpo(p), key=lambda l: l["y0"]))
+        self.assertEqual(corpo.count("Texto do consultor."), 1500)
+        self.assertEqual(corpo.count("Conclusão."), 800)
 
     def test_rodape_mantem_a_referencia_com_razao_social_longa(self):
         analise = apoio.analise_referencia()
@@ -324,6 +340,7 @@ class PDFLayoutGeometriaTests(unittest.TestCase):
                     self.assertEqual(apoio.problemas_de_geometria(pagina), [])
             with self.subTest(caso=i):
                 self.assertEqual(apoio.lacunas_evitaveis(paginas), [])
+                self.assertEqual(apoio.grafico_partido(paginas), [])
 
     def test_primeiro_paragrafo_longo_comeca_na_mesma_pagina(self):
         # Um resumo de um só bloco, longo: não deixa meia página em branco antes da devolutiva.
@@ -347,7 +364,11 @@ class PDFLayoutGeometriaTests(unittest.TestCase):
         analise.relatorio.titulo = ("Análise executiva de faturamento, compras e estoque do mês de junho de 2026 com "
                                     "recomendações de reposição, escoamento de itens parados e proteção dos produtos "
                                     "estratégicos da Classe A")
-        for pagina in apoio.paginas(apoio.gerar(analise))[1:]:
+        paginas = apoio.paginas(apoio.gerar(analise))
+        self.assertGreaterEqual(len(paginas), 2)
+        abertura = min(apoio.linhas_do_corpo(paginas[1]), key=lambda l: l["y0"])["texto"]
+        self.assertTrue(any(abertura.startswith(t) for t in apoio.TITULOS_DE_SECAO), abertura)
+        for pagina in paginas[1:]:
             primeira = min(apoio.linhas_do_corpo(pagina), key=lambda l: l["y0"])
             self.assertLess(primeira["y0"], apoio.TOPO + 2.5 * mm, primeira)
 
@@ -400,6 +421,39 @@ class PDFLayoutGeometriaTests(unittest.TestCase):
                 self.assertTrue(corpo[-1].startswith(apoio.FECHAMENTO), corpo)
                 self.assertTrue(any(t.startswith(ultimo_bloco) for t in corpo), corpo)
 
+    def _sem_titulo_isolado(self, documentos):
+        for nome, analise, cartoes in documentos:
+            paginas = apoio.paginas(apoio.gerar(analise, semaforos=cartoes))
+            with self.subTest(caso=nome):
+                for pagina in paginas:
+                    self.assertIsNone(apoio.titulo_isolado(pagina))
+                    self.assertIsNone(apoio.pagina_sem_conteudo(pagina))
+                self.assertEqual(apoio.grafico_partido(paginas), [])
+                self.assertEqual(apoio.lacunas_evitaveis(paginas), [])
+
+    def test_titulos_da_devolutiva_nunca_isolados_em_qualquer_altura(self):
+        # Varredura fina: o texto antes de cada título cresce aos poucos e leva o título
+        # por todas as alturas da página, inclusive o pé.
+        documentos = []
+        for n in range(0, 140, 4):            # último cartão: "Devolutiva do consultor" e "Resumo executivo"
+            cartoes = apoio.semaforos_referencia()
+            cartoes[-1]["por_que"] += " Detalhe adicional do diagnóstico." * n
+            documentos.append((f"cartão+{n}", apoio.analise_referencia(), cartoes))
+        frase = "Giro do estoque e prazo dos fornecedores. "
+        for n in range(1, 60, 2):             # resumo: "Conclusão estratégica"
+            documentos.append((f"resumo×{n}", apoio.analise_referencia(resumo=frase * n), None))
+        self._sem_titulo_isolado(documentos)
+
+    def test_secoes_do_inicio_nunca_isoladas_no_pe_da_primeira_pagina(self):
+        # O título do relatório cresce e empurra "Indicadores do período", "Curva ABC" e o
+        # gráfico por todas as alturas da primeira página.
+        documentos = []
+        for n in range(1, 300, 4):
+            analise = apoio.analise_referencia()
+            analise.relatorio.titulo = ("Título " * n).strip()
+            documentos.append((f"título×{n}", analise, None))
+        self._sem_titulo_isolado(documentos)
+
 
 class PDFLayoutEstruturaTests(unittest.TestCase):
     """Sem pdftotext: estrutura dos flowables e cálculo do gráfico."""
@@ -417,6 +471,9 @@ class PDFLayoutEstruturaTests(unittest.TestCase):
         self.assertAlmostEqual(sum(kpis._colWidths), LARGURA_UTIL, places=3)
         self.assertEqual(len(abc._cellvalues), 6)                # cabeçalho + Top 5
         self.assertEqual(abc._cellvalues[1][2], "A")             # classe como texto literal
+        # Cabeçalho da Curva ABC preservado: fundo roxo NEXO e texto branco.
+        self.assertIn(("BACKGROUND", (0, 0), (-1, 0), pdf_export.ROXO), abc._bkgrndcmds)
+        self.assertEqual({c.color.hexval() for c in abc._cellStyles[0]}, {white.hexval()})
 
     def test_08_percentuais_individuais_da_referencia(self):
         distribuicao = _distribuicao_referencia()
@@ -439,6 +496,8 @@ class PDFLayoutEstruturaTests(unittest.TestCase):
         self.assertLess(abs(sum(f.percentual for f in sem_outros.fatias) - 100), Decimal("1e-20"))
 
     def test_inconsistencias_tratadas_explicitamente(self):
+        apoio.reativar_logger_do_gerador(self)           # sem isto o assertNoLogs do fim não falharia nunca
+
         def top5():
             return apoio.analise_referencia().curva_abc[:5]
 
@@ -514,19 +573,57 @@ class PDFLayoutEstruturaTests(unittest.TestCase):
         self.assertLess(altura, pdf_export.ALTURA_UTIL)        # o bloco sempre cabe numa página
 
     def test_06_grafico_de_pizza_vetorial_com_os_mesmos_dados_da_tabela(self):
-        distribuicao = _distribuicao_referencia()
-        desenho = pdf_export._grafico_pizza(distribuicao, 54 * mm)
+        # O gráfico e a legenda que o documento realmente desenha, não montados aqui.
+        from unittest.mock import patch
+        feitos = {}
+        originais = {nome: getattr(pdf_export, nome) for nome in ("_grafico_pizza", "_legenda_flowable")}
+
+        def registrar(nome):
+            def chamar(distribuicao, *args, **kwargs):
+                feitos[nome] = (distribuicao, originais[nome](distribuicao, *args, **kwargs))
+                return feitos[nome][1]
+            return chamar
+
+        with patch.object(pdf_export, "_grafico_pizza", registrar("_grafico_pizza")), \
+                patch.object(pdf_export, "_legenda_flowable", registrar("_legenda_flowable")):
+            apoio.gerar()
+        distribuicao, desenho = feitos["_grafico_pizza"]
+        da_legenda, tabela = feitos["_legenda_flowable"]
+        self.assertIs(da_legenda, distribuicao)
+        produtos = apoio.analise_referencia().curva_abc[:5]
+        self.assertEqual([f.nome for f in distribuicao.fatias],
+                         [p.produto_nome for p in produtos] + ["Outros produtos"])   # ordem da tabela ABC
         self.assertIsInstance(desenho, Drawing)
         pizza = [c for c in desenho.contents if isinstance(c, Pie)]
         self.assertEqual(len(pizza), 1)
         pizza = pizza[0]
-        produtos = apoio.analise_referencia().curva_abc[:5]
+        self.assertIs(type(pizza), Pie)                          # 2D: Pie3d é subclasse de Pie e não serve
         self.assertEqual(pizza.data, [float(p.faturamento) for p in produtos] + [55.0])
         self.assertEqual(pizza.startAngle, 90)
         self.assertEqual(pizza.direction, "clockwise")
         # Percentual só dentro das fatias grandes; as pequenas ficam na legenda.
         self.assertEqual(pizza.labels, ["74,23%", "17,63%", "", "", "", ""])
-        self.assertEqual(len(set(str(pizza.slices[i].fillColor) for i in range(6))), 6)
+        # Cores: rampa roxa na ordem da tabela, cinza em "Outros" e as mesmas amostras da legenda.
+        cores = [pizza.slices[i].fillColor.hexval() for i in range(6)]
+        self.assertEqual(cores, [c.hexval() for c in pdf_export.RAMPA_PIZZA] + [pdf_export.COR_OUTROS.hexval()])
+        amostras = [linha[0][0] if isinstance(linha[0], tuple) else linha[0] for linha in tabela._cellvalues[1:7]]
+        self.assertEqual([amostra.contents[0].fillColor.hexval() for amostra in amostras], cores)
+
+    def test_paleta_do_grafico_na_identidade_nexo(self):
+        import colorsys
+
+        def hls(cor):
+            return colorsys.rgb_to_hls(cor.red, cor.green, cor.blue)
+
+        matiz_nexo = hls(pdf_export.ROXO)[0]
+        luminosidades = []
+        for cor in pdf_export.RAMPA_PIZZA:
+            matiz, luz, saturacao = hls(cor)
+            self.assertLess(abs(matiz - matiz_nexo) * 360, 15, cor.hexval())   # família do roxo NEXO
+            self.assertGreater(saturacao, 0.4, cor.hexval())
+            luminosidades.append(luz)
+        self.assertEqual(luminosidades, sorted(set(luminosidades)))          # do mais escuro ao mais claro
+        self.assertLess(hls(pdf_export.COR_OUTROS)[2], 0.25)                 # "Outros": cinza neutro
 
     def test_fatia_unica_mostra_100_por_cento_no_centro(self):
         produto = apoio.curva_referencia((("Tinta Construção", "1250.90"),))
@@ -550,20 +647,24 @@ class PDFLayoutEstruturaTests(unittest.TestCase):
             self.assertEqual(faturamento, pdf_export._brl(fatia.faturamento))
             self.assertEqual(percentual, pdf_export._pct(fatia.percentual))
         self.assertEqual(linhas[-1][3:], ["4.311,00", "100,00%"])
-        for i in range(1, 7):
-            self.assertGreaterEqual(min(s.fontSize for s in (linhas[i][1].style,)), 8)
+        # Sem letra miúda: nome (Paragraph) e classe, faturamento e participação (células de texto).
+        for i in range(1, len(linhas)):
+            self.assertGreaterEqual(linhas[i][1].style.fontSize, 8)
+            for coluna in (2, 3, 4):
+                self.assertGreaterEqual(legenda._cellStyles[i][coluna].fontsize, 8, (i, coluna))
+        for coluna in (2, 3, 4):
+            self.assertGreaterEqual(legenda._cellStyles[0][coluna].fontsize, 8)
 
     def test_11_titulo_da_sintese_sem_5w2h(self):
         textos = []
-        original = pdf_export.Paragraph
 
-        def capturar(*args, **kwargs):
-            paragrafo = original(*args, **kwargs)
-            textos.append(paragrafo.getPlainText())
-            return paragrafo
+        class ParagrafoRegistrado(Paragraph):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                textos.append(self.getPlainText())
 
         from unittest.mock import patch
-        with patch.object(pdf_export, "Paragraph", side_effect=capturar):
+        with patch.object(pdf_export, "Paragraph", ParagrafoRegistrado):
             apoio.gerar()
         self.assertIn("Síntese executiva", textos)
         self.assertFalse(any("5W2H" in t for t in textos), [t for t in textos if "5W2H" in t])
@@ -575,8 +676,14 @@ class PDFLayoutEstruturaTests(unittest.TestCase):
         self.assertEqual(conteudo[0].getPlainText(), "Distribuição do faturamento por produto")
         self.assertEqual(conteudo[1].getPlainText(), "Participação dos principais produtos no faturamento do período.")
         corpo = [c for c in conteudo if isinstance(c, Table)][0]
-        self.assertIsInstance(corpo._cellvalues[0][0], Drawing)  # gráfico à esquerda
-        self.assertIsInstance(corpo._cellvalues[0][1], Table)    # legenda à direita
+        grafico, legenda = corpo._cellvalues[0]
+        self.assertIsInstance(grafico, Drawing)                  # gráfico à esquerda
+        self.assertIsInstance(legenda, Table)                    # legenda à direita
+        # O que o gráfico desenha fica dentro do próprio desenho e da coluna dele.
+        x0, y0, x1, y1 = grafico.getBounds()
+        self.assertGreaterEqual(min(x0, y0), 0)
+        self.assertLessEqual(x1, min(grafico.width, corpo._colWidths[0]))
+        self.assertLessEqual(y1, grafico.height)
 
     def test_20_integridade_dos_dados_de_entrada_e_dos_valores(self):
         analise = apoio.analise_referencia()

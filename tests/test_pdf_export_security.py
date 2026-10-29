@@ -142,15 +142,14 @@ class PDFExportSecurityTests(_PDFChecks, unittest.TestCase):
                         "semaforo_titulo": "titulo", "acao": "o_que_fazer",
                         "justificativa": "por_que", "nivel": "nivel",
                     }[field]] = payload
-                original = pdf_export.Paragraph
                 textos = []
 
-                def paragraph(*args, **kwargs):
-                    result = original(*args, **kwargs)
-                    textos.append(result.getPlainText())
-                    return result
+                class ParagraphGravado(pdf_export.Paragraph):
+                    def __init__(self, *args, **kwargs):
+                        super().__init__(*args, **kwargs)
+                        textos.append(self.getPlainText())
 
-                with patch.object(pdf_export, "Paragraph", side_effect=paragraph):
+                with patch.object(pdf_export, "Paragraph", ParagraphGravado):
                     self._gerar(dados)
                 if field == "classe":
                     # Células str da Table usam canvas literal, sem parser XML.

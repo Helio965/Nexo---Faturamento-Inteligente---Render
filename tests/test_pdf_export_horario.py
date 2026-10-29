@@ -99,6 +99,15 @@ class InstanteDeGeracaoTests(unittest.TestCase):
                 self.assertEqual(real.tzinfo.key, "America/Sao_Paulo")
                 self.assertTrue(antes <= real <= depois, (antes, real, depois))
 
+    @unittest.skipUnless(COM_TZSET, "time.tzset indisponível nesta plataforma")
+    def test_geracao_nao_altera_o_fuso_do_processo(self):
+        # Brasília vem do ZoneInfo: gerar o PDF não troca o fuso do servidor (nem o
+        # que os próximos processos e o próximo tzset() herdariam).
+        with fuso_do_processo("Asia/Tokyo"):
+            antes = (os.environ.get("TZ"), time.tzname, time.timezone, time.altzone)
+            apoio.gerar(gerado_em=None)                          # relógio real
+            self.assertEqual((os.environ.get("TZ"), time.tzname, time.timezone, time.altzone), antes)
+
     def test_04_cada_exportacao_le_o_relogio_de_novo(self):
         instantes = (datetime(2026, 10, 29, 15, 2, tzinfo=UTC), datetime(2026, 10, 29, 15, 7, 30, tzinfo=UTC),
                      datetime(2026, 10, 29, 18, 59, 59, tzinfo=UTC))
@@ -144,6 +153,9 @@ class InstanteDeGeracaoTests(unittest.TestCase):
                      if ast.unparse(c.func).rsplit(".", 1)[-1] in proibidas
                      or "tzinfo" in {k.arg for k in c.keywords}]
         self.assertEqual(violacoes, [])
+        # Nem mudança no fuso do processo: o gerador não toca em os.environ nem em os.putenv.
+        self.assertEqual([ast.unparse(n) for n in ast.walk(arvore)
+                          if isinstance(n, ast.Attribute) and n.attr in ("environ", "putenv")], [])
         # Uma única leitura do relógio, e com fuso explícito.
         self.assertEqual([ast.unparse(c) for c in chamadas if ast.unparse(c.func).endswith(".now")],
                          ["datetime.now(timezone.utc)"])
