@@ -134,6 +134,7 @@
                             <span class="bell-head-title"><i class="bi bi-bell-fill"></i> Notificações</span>
                         </div>
                         <div class="bell-list" id="bellList">
+                            {% from "_macros.html" import horario %}
                             {% for n in notif_recentes %}
                             {% set _b = badge_notif(n.texto) %}
                             <a class="bell-item {{ 'is-unread' if not n.lida }}" href="{{ url_for('notificacoes.abrir', id_notificacao=n.id_notificacao) }}">
@@ -141,7 +142,7 @@
                                 <span class="bell-text">
                                     <span class="nbadge nb-{{ _b.tipo }}">{{ _b.rotulo }}</span>
                                     <span class="bell-msg">{{ n.texto }}</span>
-                                    <small>{{ n.data_criacao.strftime('%d/%m %H:%M') }}</small>
+                                    <small>{{ horario(n.data_criacao, 'curto') }}</small>
                                 </span>
                             </a>
                             {% endfor %}
@@ -912,7 +913,19 @@
             a.innerHTML = '<span class="bell-dot"></span><span class="bell-text">' +
                           '<span class="nbadge nb-' + escapeHtml(tipo) + '">' + escapeHtml(rotulo) + '</span>' +
                           '<span class="bell-msg">' + escapeHtml(n.texto) + '</span>' +
-                          '<small>' + escapeHtml(n.hora || '') + '</small></span>';
+                          '<small></small></span>';
+            // Horário já formatado em Brasília pelo servidor (o mesmo texto da
+            // página recarregada); o navegador não converte nada.
+            var hora = a.querySelector('small');
+            if (n.instante) {
+              var quando = document.createElement('time');
+              quando.setAttribute('datetime', n.instante);
+              if (n.hora_completa) quando.title = n.hora_completa;
+              quando.textContent = n.hora || '';
+              hora.appendChild(quando);
+            } else {
+              hora.textContent = n.hora || '';
+            }
             var first = list.querySelector('.bell-item');
             if (first) { list.insertBefore(a, first); } else { list.insertBefore(a, list.firstChild); }
             // mantém no máximo 5 itens visíveis

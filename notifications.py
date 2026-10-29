@@ -13,13 +13,13 @@ Gatilhos atuais:
 """
 
 import logging
-from datetime import datetime
 
 from flask import has_app_context
 from sqlalchemy import event, select
 from sqlalchemy.orm import Session
 
 from extensions import db, socketio
+from horario import horario_brasilia, iso_utc
 from models import Empresa, Notificacao, Usuario
 from session_security import condicoes_empresa_acessivel, impressao_sessao, usuario_pode_acessar
 from realtime import sala_do_usuario
@@ -46,12 +46,20 @@ def classificar_notificacao(texto: str) -> dict:
 
 
 def _emitir_tempo_real(id_usuario: int, n: Notificacao) -> None:
-    """Enfileira payload sem ORM; só o COMMIT externo autoriza sua entrega."""
+    """Enfileira payload sem ORM; só o COMMIT externo autoriza sua entrega.
+
+    O horário é o data_criacao gravado (preenchido no flush), formatado no
+    horário de Brasília pela mesma função do template: o item em tempo real
+    e o da página recarregada mostram o mesmo texto. "instante" leva o ISO
+    8601 com fuso; o navegador não converte horários.
+    """
     badge = classificar_notificacao(n.texto)
     payload = {
         "id": n.id_notificacao, "texto": n.texto,
         "link": n.link_destino or "",
-        "hora": datetime.now().strftime("%d/%m %H:%M"),
+        "hora": horario_brasilia(n.data_criacao, "curto"),
+        "hora_completa": horario_brasilia(n.data_criacao, rotulo=True),
+        "instante": iso_utc(n.data_criacao),
         "badge": badge["tipo"], "badge_rotulo": badge["rotulo"],
     }
     db.session.info.setdefault("nexo_notificacoes_pendentes", []).append((id_usuario, payload))
