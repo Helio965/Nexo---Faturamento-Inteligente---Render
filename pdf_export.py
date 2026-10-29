@@ -47,7 +47,6 @@ from reportlab.platypus import (
     BaseDocTemplate, CondPageBreak, Flowable, Frame, KeepTogether, PageTemplate, Paragraph,
     Spacer, Table, TableStyle,
 )
-from reportlab.platypus.paragraph import Paragraph as _ClasseParagraph   # isinstance (testes trocam Paragraph)
 
 log = logging.getLogger(__name__)
 
@@ -800,7 +799,7 @@ def _fechar_documento(elems, fechamento, largura):
         # página mesmo com espaço sobrando: a frase final entra no mesmo bloco.
         elems.append(KeepTogether(list(ultimo._content) + [fechamento]))
         return
-    if isinstance(ultimo, _ClasseParagraph):
+    if isinstance(ultimo, Paragraph):
         ultimo.wrap(largura, ALTURA_UTIL)
         linhas = len(getattr(ultimo.blPara, "lines", ()))
         if linhas > 3:
