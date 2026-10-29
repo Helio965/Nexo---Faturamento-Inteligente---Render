@@ -23,9 +23,25 @@ from urllib.parse import urlsplit
 
 from flask import g, request, session
 
-CDN_SCRIPTS = ("https://cdn.jsdelivr.net", "https://cdn.socket.io")
-CDN_ESTILOS = ("https://cdn.jsdelivr.net", "https://fonts.googleapis.com")
-CDN_FONTES = ("https://fonts.gstatic.com", "https://cdn.jsdelivr.net")
+# Fontes de CDN fixadas por CAMINHO exato, não por origem: liberar "https://cdn.jsdelivr.net"
+# inteiro deixaria qualquer pacote publicado nesse CDN executar sob a política,
+# contornando o nonce. Os cinco recursos são os mesmos fixados por SRI nos templates
+# (atualizar a versão exige atualizar aqui, no SRI e na suíte de navegador).
+_JSDELIVR = "https://cdn.jsdelivr.net/npm/"
+CDN_SCRIPTS = (
+    _JSDELIVR + "bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js",
+    _JSDELIVR + "plotly.js-dist-min@2.35.2/plotly.min.js",
+    "https://cdn.socket.io/4.7.5/socket.io.min.js",
+)
+CDN_ESTILOS = (
+    _JSDELIVR + "bootstrap@5.3.3/dist/css/bootstrap.min.css",
+    _JSDELIVR + "bootstrap-icons@1.11.3/font/bootstrap-icons.min.css",
+    "https://fonts.googleapis.com",  # URLs dinâmicas (famílias/pesos): origem
+)
+CDN_FONTES = (
+    "https://fonts.gstatic.com",  # arquivos dinâmicos do Google Fonts: origem
+    _JSDELIVR + "bootstrap-icons@1.11.3/font/fonts/",  # prefixo (a CSS acrescenta ?hash)
+)
 ROTAS_SEM_CACHE = ("/auth/", "/api/", "/notificacoes/", "/midia/")
 
 

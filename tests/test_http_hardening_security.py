@@ -102,6 +102,23 @@ class SecurityHeaderTests(DeployTestCase):
                 self.assertEqual(cabecalhos["Cross-Origin-Opener-Policy"], "same-origin")
                 self.assertNotIn("Strict-Transport-Security", cabecalhos, "HSTS só em produção/HTTPS")
 
+    def test_csp_pins_cdn_sources_to_exact_paths_not_whole_origins(self):
+        """Liberar a origem inteira do CDN deixaria qualquer pacote nele publicado
+        executar sob a política (contornando o nonce). Cada fonte externa de
+        script/estilo é exatamente um recurso do inventário SRI; o prefixo das
+        fontes de ícone é o único caminho de diretório, e só em font-src."""
+        csp = self._csp(self.client.get("/auth/login"))
+        diretivas = {d.split(" ", 1)[0]: d.split(" ", 1)[1].split() for d in csp.split("; ") if " " in d}
+        scripts = [s for s in diretivas["script-src"] if s.startswith("https://")]
+        self.assertEqual(sorted(scripts), sorted(u for u in SRI if u.endswith(".js")))
+        estilos = [s for s in diretivas["style-src"] if s.startswith("https://")]
+        self.assertEqual(sorted(u for u in estilos if "jsdelivr" in u), sorted(u for u in SRI if u.endswith(".css")))
+        for diretiva in ("script-src", "style-src", "font-src"):
+            for fonte in diretivas[diretiva]:
+                self.assertNotIn(fonte, ("https://cdn.jsdelivr.net", "https://cdn.jsdelivr.net/", "https://cdn.socket.io"),
+                                 f"{diretiva} libera a origem inteira {fonte}")
+        self.assertIn("https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/fonts/", diretivas["font-src"])
+
     def test_inline_scripts_use_the_request_nonce_and_nonces_rotate(self):
         paginas = []
         for _ in range(2):
