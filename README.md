@@ -371,6 +371,10 @@ Limitações conhecidas do plano free: 512 MB de RAM e 0,1 CPU (ETL e PDF ficam 
 | `RENDER_EXTERNAL_URL` | Automática no Render | URL pública do serviço; é adicionada às origens permitidas do WebSocket e, sem `NEXO_PUBLIC_URL`, é a origem canônica dos links sensíveis. |
 | `NEXO_PUBLIC_URL` | Sim em produção (ou `RENDER_EXTERNAL_URL`) | Origem pública canônica (`https://dominio`) usada para montar os links de ativação, recuperação de senha, chamados e publicação — nunca o cabeçalho `Host` da requisição. Em produção precisa ser `https`. |
 | `NEXO_TRUSTED_HOSTS` | Não | Hosts adicionais aceitos nas requisições (CSV; `.dominio` aceita subdomínios). Em produção, o host da origem pública e o da plataforma são aceitos sempre; qualquer outro `Host` recebe 400. |
+| `NEXO_CSP_REPORT_ONLY` | Não (default `0`) | `1` envia a Content-Security-Policy em modo somente-relatório (observar violações sem bloquear) — útil num primeiro rollout; `0` impõe a política. |
+| `NEXO_SENHAS_VAZADAS` | Não (default `0`) | `1` consulta vazamentos conhecidos ao definir/redefinir senha, por k-anonimato (só 5 caracteres do hash saem do servidor; a senha nunca). Indisponibilidade do serviço não bloqueia a troca (fail-open, registrado em log). |
+| `NEXO_DB_POOL_SIZE` / `NEXO_DB_MAX_OVERFLOW` / `NEXO_DB_POOL_TIMEOUT` | Não (defaults `5` / `10` / `10`) | Pool de conexões do SQLAlchemy; só se aplica a PostgreSQL (ignorado em SQLite). |
+| `NEXO_SQL_ECHO` | Não (default `0`) | `1` ecoa o SQL no log em desenvolvimento; sem efeito em produção. |
 | `HOST` / `PORT` | Não | Bind do servidor (`python app.py`). |
 
 Template completo em [`.env.example`](.env.example).
