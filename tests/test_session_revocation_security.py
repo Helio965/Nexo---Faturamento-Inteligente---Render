@@ -121,10 +121,13 @@ class SessionRevocationCases:
         self._change(senha_hash=generate_password_hash("Synthetic-external-password-789!"))
         self._assert_private_denied(client)
 
-    def test_same_password_with_new_salt_revokes_previous_session(self):
+    def test_password_reset_revokes_previous_session(self):
+        # A política de senha (FASE 6) recusa reusar a senha atual, então o reset
+        # usa uma senha nova e válida; a sessão HTTP anterior cai de qualquer modo
+        # (SEC-001: a troca de credencial revoga todas as sessões registradas).
         client = self._login_client()
         token = self._token()
-        self._assert_success(self._post(token, password=token_cases.OLD_PASSWORD,
+        self._assert_success(self._post(token, password=token_cases.NEW_PASSWORD,
                                        client=self.app.test_client()))
         self._assert_private_denied(client)
 

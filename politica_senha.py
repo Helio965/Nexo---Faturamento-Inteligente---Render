@@ -85,12 +85,14 @@ def senha_vazada(senha: str, *, timeout: float = 3.0):
     verificação não pôde ser feita (desligada, sem rede ou erro)."""
     if os.environ.get("NEXO_SENHAS_VAZADAS", "0") != "1":
         return None
-    resumo = hashlib.sha1(senha.encode("utf-8")).hexdigest().upper()
+    # SHA-1 é exigência do protocolo k-anonimato do serviço (não é hash de
+    # segurança da senha): só os 5 primeiros hex do resumo saem do servidor.
+    resumo = hashlib.sha1(senha.encode("utf-8"), usedforsecurity=False).hexdigest().upper()
     prefixo, sufixo = resumo[:5], resumo[5:]
     try:
         requisicao = Request(f"https://api.pwnedpasswords.com/range/{prefixo}",
                              headers={"User-Agent": "NEXO-politica-senha", "Add-Padding": "true"})
-        with urlopen(requisicao, timeout=timeout) as resposta:  # noqa: S310 (https fixo)
+        with urlopen(requisicao, timeout=timeout) as resposta:  # noqa: S310  # nosec B310: URL https fixa
             corpo = resposta.read(1_000_000).decode("ascii", "replace")
     except (URLError, OSError, ValueError) as erro:
         logger.warning("Verificação de senha vazada indisponível (%s).", type(erro).__name__)
