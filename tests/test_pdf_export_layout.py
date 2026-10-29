@@ -8,6 +8,7 @@ são ignorados e os testes estruturais continuam valendo.
 
 import copy
 from decimal import Decimal
+from types import SimpleNamespace
 import unittest
 
 from reportlab.graphics.charts.piecharts import Pie
@@ -229,13 +230,107 @@ class PDFLayoutGeometriaTests(unittest.TestCase):
         apoio.reativar_logger_do_gerador(self)
         analise = apoio.analise_referencia()
         analise.indicador.faturamento_total = Decimal("4000.00")
-        with self.assertLogs("pdf_export", level="WARNING"):
+        with self.assertLogs("pdf_export", level="WARNING") as registro:
             conteudo = apoio.texto(apoio.gerar(analise))
         self.assertIn("Atenção: A soma dos produtos exibidos (R$ 4.256,00) é maior que o faturamento total "
                       "informado (R$ 4.000,00)", conteudo)
         self.assertNotIn("Outros produtos —", conteudo)          # sem a linha "Outros" na legenda
         self.assertIn("4.256,00 100,00%", conteudo)
         self.assertIn("Soma dos produtos exibidos", conteudo)
+        # O log identifica a análise e o tipo de inconsistência, sem valores comerciais.
+        self.assertEqual(len(registro.output), 1)
+        self.assertIn("análise 5", registro.output[0])
+        self.assertIn("soma_maior_que_total", registro.output[0])
+        for valor in ("4256", "4.256", "4000", "4.000"):
+            self.assertNotIn(valor, registro.output[0])
+
+    def test_textos_gigantes_nao_impedem_a_exportacao(self):
+        # Nomes e textos sem limite de tamanho no banco: o PDF sai sempre, sem nada fora do lugar.
+        longo = ("Produto com descrição técnica muito detalhada vinda do ERP " * 200).strip()
+        analise = apoio.analise_referencia(resumo="Texto do consultor. " * 1500, conclusao="Conclusão. " * 800)
+        for p in analise.curva_abc:
+            p.produto_nome = longo
+        analise.curva_abc[1].produto_nome = "W" * 3000            # palavra única, sem espaço
+        analise.empresa.nome_fantasia = "Empresa " * 1500
+        analise.relatorio.titulo = "Título " * 400
+        cartoes = apoio.semaforos_referencia()
+        cartoes[1]["o_que_fazer"] = f"Criar ação de escoamento para “{longo}”."
+        documento = apoio.gerar(analise, semaforos=cartoes)
+        paginas = apoio.paginas(documento)
+        self.assertGreater(len(paginas), 5)
+        for numero, pagina in enumerate(paginas, start=1):
+            with self.subTest(pagina=numero):
+                self.assertEqual(apoio.problemas_de_geometria(pagina), [])
+                self.assertIsNone(apoio.titulo_isolado(pagina))
+                self.assertIsNone(apoio.pagina_sem_conteudo(pagina))
+                rodape = " ".join(l["texto"] for l in apoio.linhas_do_rodape(pagina))
+                self.assertIn(f"Página {numero} de {len(paginas)}", rodape)
+                self.assertIn("Referência 06/2026", rodape)
+
+    def test_rodape_mantem_a_referencia_com_razao_social_longa(self):
+        analise = apoio.analise_referencia()
+        analise.empresa.nome_fantasia = None
+        analise.empresa.razao_social = ("COMÉRCIO DE MATERIAIS DE CONSTRUÇÃO E FERRAGENS IRMÃOS OLIVEIRA "
+                                        "DA SILVA LTDA - EPP")
+        for pagina in apoio.paginas(apoio.gerar(analise)):
+            rodape = " ".join(l["texto"] for l in apoio.linhas_do_rodape(pagina))
+            self.assertIn("NEXO · COMÉRCIO DE MATERIAIS", rodape)
+            self.assertIn("· Referência 06/2026", rodape)
+            self.assertIn("Gerado em 29/10/2026 às 12:02 (horário de Brasília)", rodape)
+            self.assertEqual(apoio.problemas_de_geometria(pagina), [])
+
+    def test_frase_final_e_titulos_nunca_ficam_sozinhos_numa_pagina(self):
+        frase = "A recomendação considera o giro do estoque, o prazo dos fornecedores e o ritmo das vendas. "
+        nome = "Produto com descricao muito longa "
+        casos = []
+        for n_resumo in (4, 8, 12):
+            for n_conclusao in range(10, 26, 2):
+                casos.append(apoio.analise_referencia(resumo=frase * n_resumo, conclusao=frase * n_conclusao))
+        for tamanho in (262, 300, 320, 600, 2000):              # legenda com nomes longos
+            analise = apoio.analise_referencia()
+            for p in analise.curva_abc:
+                p.produto_nome = (nome * 80)[:tamanho]
+            casos.append(analise)
+        for i, analise in enumerate(casos):
+            for numero, pagina in enumerate(apoio.paginas(apoio.gerar(analise)), start=1):
+                with self.subTest(caso=i, pagina=numero):
+                    self.assertIsNone(apoio.pagina_sem_conteudo(pagina))
+                    self.assertIsNone(apoio.titulo_isolado(pagina))
+                    self.assertEqual(apoio.problemas_de_geometria(pagina), [])
+
+    def test_primeiro_paragrafo_longo_comeca_na_mesma_pagina(self):
+        # Um resumo de um só bloco, longo: não deixa meia página em branco antes da devolutiva.
+        frase = "O consultor recomenda revisar o mix, o giro do estoque e o prazo dos fornecedores antes de novas compras. "
+        documento = apoio.gerar(apoio.analise_referencia(resumo=frase * 60))
+        for pagina in apoio.paginas(documento):
+            textos = [l["texto"] for l in apoio.linhas_do_corpo(pagina)]
+            if any(t.startswith("Eles concentram") for t in textos):      # último cartão da síntese
+                self.assertIn("Devolutiva do consultor", textos)
+                self.assertIn("Resumo executivo", textos)
+                break
+        else:
+            self.fail("último cartão da síntese não encontrado")
+        # Todo o texto continua lá (corpo das páginas, sem o rodapé entre uma página e outra).
+        corpo = " ".join(l["texto"] for p in apoio.paginas(documento)
+                         for l in sorted(apoio.linhas_do_corpo(p), key=lambda l: l["y0"]))
+        self.assertEqual(corpo.count("O consultor recomenda revisar o mix"), 60)
+
+    def test_espaco_entre_secoes_some_no_topo_da_pagina(self):
+        analise = apoio.analise_referencia()
+        analise.relatorio.titulo = ("Análise executiva de faturamento, compras e estoque do mês de junho de 2026 com "
+                                    "recomendações de reposição, escoamento de itens parados e proteção dos produtos "
+                                    "estratégicos da Classe A")
+        for pagina in apoio.paginas(apoio.gerar(analise))[1:]:
+            primeira = min(apoio.linhas_do_corpo(pagina), key=lambda l: l["y0"])
+            self.assertLess(primeira["y0"], apoio.TOPO + 2.5 * mm, primeira)
+
+    def test_secao_sem_faturamento_positivo_explica_o_motivo(self):
+        analise = apoio.analise_referencia()
+        for p in analise.curva_abc:
+            p.faturamento = -p.faturamento
+        conteudo = apoio.texto(apoio.gerar(analise))
+        self.assertIn("Distribuição do faturamento por produto", conteudo)
+        self.assertIn("Atenção: Nenhum produto da tabela tem faturamento positivo", conteudo)
 
 
 class PDFLayoutEstruturaTests(unittest.TestCase):
@@ -276,26 +371,79 @@ class PDFLayoutEstruturaTests(unittest.TestCase):
         self.assertLess(abs(sum(f.percentual for f in sem_outros.fatias) - 100), Decimal("1e-20"))
 
     def test_inconsistencias_tratadas_explicitamente(self):
-        apoio.reativar_logger_do_gerador(self)
-        produtos = apoio.analise_referencia().curva_abc[:5]
-        with self.assertLogs("pdf_export", level="WARNING"):
-            maior = pdf_export.calcular_distribuicao(Decimal("4000"), produtos)
+        def top5():
+            return apoio.analise_referencia().curva_abc[:5]
+
+        maior = pdf_export.calcular_distribuicao(Decimal("4000"), top5())
         self.assertFalse(maior.base_e_faturamento_total)
         self.assertEqual(maior.base, Decimal("4256.00"))
         self.assertFalse(any(f.outros for f in maior.fatias))
-        self.assertTrue(maior.avisos)
-        sem_total = pdf_export.calcular_distribuicao(None, produtos)
+        self.assertEqual(maior.inconsistencias, ("soma_maior_que_total",))
+        sem_total = pdf_export.calcular_distribuicao(None, top5())
         self.assertEqual(sem_total.base, Decimal("4256.00"))
-        self.assertTrue(sem_total.avisos)
-        produtos[4].faturamento = Decimal("-3")
-        negativo = pdf_export.calcular_distribuicao(Decimal("4311"), produtos)
-        self.assertEqual(len([f for f in negativo.fatias if not f.outros]), 4)
-        self.assertTrue(any("zero ou negativo" in a for a in negativo.avisos))
+        self.assertEqual(sem_total.inconsistencias, ("total_ausente",))
+        self.assertIn("não informado", sem_total.avisos[0])
+        negativo_total = pdf_export.calcular_distribuicao(Decimal("-500"), top5())
+        self.assertEqual(negativo_total.inconsistencias, ("total_nao_positivo",))
+        self.assertIn("não é positivo (R$ -500,00)", negativo_total.avisos[0])
+        # Produto da tabela sem valor válido: fora do gráfico, e o valor dele não vira "Outros".
+        for invalido in (Decimal("-3"), None, Decimal("NaN"), "abc"):
+            produtos = top5()
+            produtos[4].faturamento = invalido
+            d = pdf_export.calcular_distribuicao(Decimal("4311"), produtos)
+            with self.subTest(invalido=invalido):
+                self.assertEqual(len(d.fatias), 4)
+                self.assertFalse(any(f.outros for f in d.fatias))
+                self.assertFalse(d.base_e_faturamento_total)
+                self.assertEqual(d.base, Decimal("4220.00"))
+                self.assertIn("produto_sem_faturamento_positivo", d.inconsistencias)
+                self.assertTrue(any("zero, negativo ou inválido" in a for a in d.avisos))
+        nenhum = top5()
+        for p in nenhum:
+            p.faturamento = Decimal("-1")
+        vazio = pdf_export.calcular_distribuicao(Decimal("4311"), nenhum)
+        self.assertEqual(vazio.fatias, ())
+        self.assertEqual(vazio.inconsistencias, ("sem_faturamento_positivo",))
+        self.assertEqual(len(vazio.avisos), 1)
         self.assertIsNone(pdf_export.calcular_distribuicao(Decimal("10"), []))
-        # Meio centavo de diferença é arredondamento, não inconsistência nem "Outros".
-        arredondado = pdf_export.calcular_distribuicao(Decimal("4256.004"), apoio.analise_referencia().curva_abc[:5])
+        # Diferença menor que um centavo (invisível no documento) não é inconsistência nem "Outros".
+        arredondado = pdf_export.calcular_distribuicao(Decimal("4256.004"), top5())
         self.assertFalse(any(f.outros for f in arredondado.fatias))
         self.assertTrue(arredondado.base_e_faturamento_total)
+        # calcular_distribuicao é pura: o registro em log fica com gerar_pdf_analise.
+        with self.assertNoLogs("pdf_export", level="WARNING"):
+            pdf_export.calcular_distribuicao(Decimal("4000"), top5())
+
+    def test_devolucoes_fora_da_tabela_sao_explicitadas(self):
+        # Como o ETL grava: faturamento total = soma de todos os produtos (inclusive um com
+        # devolução maior que a venda), Curva ABC = só os positivos, com 2 casas.
+        produtos = apoio.analise_referencia().curva_abc[:5]
+        for p in produtos:
+            p.percentual_individual = (p.faturamento / Decimal("4311") * 100).quantize(Decimal("0.01"))
+        d = pdf_export.calcular_distribuicao(Decimal("4281.00"), produtos)    # 4.311 − 30 de devolução
+        self.assertTrue(d.base_e_faturamento_total)
+        self.assertEqual(d.inconsistencias, ("base_abc_divergente",))
+        self.assertIn("diferem do percentual individual da Curva ABC", d.avisos[0])
+        self.assertEqual([f.faturamento for f in d.fatias if f.outros], [Decimal("25.00")])
+        # Sem devolução, a participação calculada coincide com a gravada: nenhum aviso.
+        self.assertEqual(pdf_export.calcular_distribuicao(Decimal("4311.00"), produtos).avisos, ())
+
+    def test_legenda_tem_altura_limitada(self):
+        produtos = apoio.analise_referencia().curva_abc[:5]
+        for p in produtos:
+            p.produto_nome = "Produto com descricao muito longa " * 60
+        produtos[1].produto_nome = "W" * 2000
+        distribuicao = pdf_export.calcular_distribuicao(Decimal("4311"), produtos)
+        est = pdf_export._estilos()
+        legenda = pdf_export._legenda_flowable(distribuicao, LARGURA_UTIL - 62 * mm, est)
+        nome_largura = legenda._colWidths[1] - 7
+        for linha in legenda._cellvalues[1:6]:
+            altura = linha[1].wrap(nome_largura, 10_000)[1]
+            self.assertLessEqual(altura, pdf_export.LINHAS_NOME_LEGENDA * est["leg"].leading + 0.5)
+            self.assertTrue(linha[1].getPlainText().endswith("…"))
+        secao = pdf_export._secao_distribuicao(distribuicao, LARGURA_UTIL, est)
+        altura = sum(c.wrap(LARGURA_UTIL, 10_000)[1] + c.getSpaceAfter() for c in secao._content)
+        self.assertLess(altura, pdf_export.ALTURA_UTIL)        # o bloco sempre cabe numa página
 
     def test_06_grafico_de_pizza_vetorial_com_os_mesmos_dados_da_tabela(self):
         distribuicao = _distribuicao_referencia()
@@ -378,9 +526,32 @@ class PDFLayoutEstruturaTests(unittest.TestCase):
         self.assertEqual(pdf_export._brl(Decimal("4311")), "4.311,00")
         self.assertEqual(pdf_export._brl(1250.90), "1.250,90")
         self.assertEqual(pdf_export._brl(None), "0,00")
-        self.assertEqual(pdf_export._brl(Decimal("1.005")), "1,01")      # meio centavo para cima
+        self.assertEqual(pdf_export._brl(Decimal("-864197532086.42")), "-864.197.532.086,42")
         self.assertEqual(pdf_export._pct(Decimal("74.2287")), "74,23%")
         self.assertEqual(pdf_export._pct(Decimal("91.858"), 1), "91,9%")
+
+    def test_valores_iguais_aos_do_portal(self):
+        """O PDF mostra os mesmos números que a página da análise para os mesmos dados
+        gravados (mesma regra de arredondamento, inclusive nos empates)."""
+        from pathlib import Path
+        from jinja2 import Environment, FileSystemLoader
+        raiz = Path(pdf_export.__file__).resolve().parent
+        env = Environment(loader=FileSystemLoader(str(raiz / "templates")))
+        macros = env.get_template("_macros.html").module
+        # Mesma expressão de templates/cliente/analise.html para "% acumulado".
+        fonte = (raiz / "templates" / "cliente" / "analise.html").read_text(encoding="utf-8")
+        expressao = "('%.1f'|format(p.percentual_acumulado|float))|replace('.', ',')"
+        self.assertIn(expressao, fonte)
+        percentual = env.from_string("{{ " + expressao + " }}%")
+        for valor in (Decimal("12.4750000000"), Decimal("4311.125"), Decimal("0.005"), Decimal("1.005"),
+                      Decimal("3200"), Decimal("987654321098.76"), Decimal("-30.555"), 1250.90, None):
+            with self.subTest(valor=valor):
+                self.assertEqual(pdf_export._brl(valor), str(macros.brl(valor)))
+        for valor in (Decimal("91.85"), Decimal("91.8500000000"), Decimal("74.25"), Decimal("74.2287"),
+                      Decimal("97.95"), Decimal("100")):
+            with self.subTest(valor=valor):
+                self.assertEqual(pdf_export._pct_gravado(valor),
+                                 percentual.render(p=SimpleNamespace(percentual_acumulado=valor)))
 
 
 if __name__ == "__main__":

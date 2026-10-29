@@ -28,6 +28,8 @@ ITENS = (
 )
 TITULOS = ("Indicadores do período", "Curva ABC", "Distribuição do faturamento por produto",
            "Síntese executiva", "Devolutiva do consultor", "Resumo executivo", "Conclusão estratégica")
+SUBTITULO_GRAFICO = "Participação dos principais produtos no faturamento do período."
+FECHAMENTO = "Documento gerado pelo portal NEXO em"
 MARGEM = 18 * mm
 TOPO = 15 * mm
 INICIO_RODAPE = 17 * mm          # régua do rodapé, medida a partir da base da página
@@ -178,3 +180,13 @@ def titulo_isolado(pagina):
         return None
     ultima = max(corpo, key=lambda l: l["y1"])
     return ultima["texto"] if any(ultima["texto"].startswith(t) for t in TITULOS) else None
+
+
+def pagina_sem_conteudo(pagina):
+    """Página cujo corpo só tem títulos, o subtítulo do gráfico e/ou a frase final
+    (o conteúdo foi para outra página): devolve esses textos; None se a página é normal."""
+    corpo = [l["texto"] for l in linhas_do_corpo(pagina)]
+    def vazia(texto):
+        return (any(texto.startswith(t) for t in TITULOS) or texto == SUBTITULO_GRAFICO
+                or texto.startswith(FECHAMENTO))
+    return corpo if corpo and all(vazia(t) for t in corpo) else None
