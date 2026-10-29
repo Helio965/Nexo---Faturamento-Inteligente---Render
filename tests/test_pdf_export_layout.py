@@ -188,12 +188,15 @@ class PDFLayoutGeometriaTests(unittest.TestCase):
                     if titulo_longo:
                         analise.relatorio.titulo = "Análise consolidada com recomendações de reposição e escoamento — " * 3
                     cartoes = (base + [longo] * 3)[:n_cartoes]
-                    documento = apoio.gerar(analise, semaforos=cartoes)
-                    for numero, pagina in enumerate(apoio.paginas(documento), start=1):
+                    paginas = apoio.paginas(apoio.gerar(analise, semaforos=cartoes))
+                    for numero, pagina in enumerate(paginas, start=1):
                         with self.subTest(cartoes=n_cartoes, titulo_longo=titulo_longo, resumo=n_resumo,
                                           conclusao=n_conclusao, pagina=numero):
                             self.assertIsNone(apoio.titulo_isolado(pagina))
                             self.assertEqual(apoio.problemas_de_geometria(pagina), [])
+                    with self.subTest(cartoes=n_cartoes, titulo_longo=titulo_longo, resumo=n_resumo,
+                                      conclusao=n_conclusao):
+                        self.assertEqual(apoio.lacunas_evitaveis(paginas), [])
                     casos += 1
         self.assertEqual(casos, 18)
 
@@ -313,11 +316,14 @@ class PDFLayoutGeometriaTests(unittest.TestCase):
                 p.produto_nome = (nome * 80)[:tamanho]
             casos.append(analise)
         for i, analise in enumerate(casos):
-            for numero, pagina in enumerate(apoio.paginas(apoio.gerar(analise)), start=1):
+            paginas = apoio.paginas(apoio.gerar(analise))
+            for numero, pagina in enumerate(paginas, start=1):
                 with self.subTest(caso=i, pagina=numero):
                     self.assertIsNone(apoio.pagina_sem_conteudo(pagina))
                     self.assertIsNone(apoio.titulo_isolado(pagina))
                     self.assertEqual(apoio.problemas_de_geometria(pagina), [])
+            with self.subTest(caso=i):
+                self.assertEqual(apoio.lacunas_evitaveis(paginas), [])
 
     def test_primeiro_paragrafo_longo_comeca_na_mesma_pagina(self):
         # Um resumo de um só bloco, longo: não deixa meia página em branco antes da devolutiva.
@@ -352,6 +358,47 @@ class PDFLayoutGeometriaTests(unittest.TestCase):
         conteudo = apoio.texto(apoio.gerar(analise))
         self.assertIn("Distribuição do faturamento por produto", conteudo)
         self.assertIn("Atenção: Nenhum produto da tabela tem faturamento positivo", conteudo)
+
+    def test_conclusao_curta_fica_na_pagina_do_resumo(self):
+        # A conclusão típica tem um parágrafo (é o que ai_devolutiva pede à IA e o que o
+        # texto determinístico produz): segue o resumo, sem ir sozinha para uma página nova.
+        import ai_devolutiva
+        contexto = {"referencia": "06/2026", "empresa": "Empresa Demonstração", "faturamento_total": Decimal("4311"),
+                    "total_comprado": Decimal("5120"), "pressao_estoque": Decimal("809"), "abc_classe_a_qtd": 1,
+                    "abc_classe_a_perc": 74.23, "abc_lider_nome": "Fax Térmico Panasonic", "abc_lider_perc": 74.23}
+        deterministico = ai_devolutiva._gerar_fallback(contexto)
+        frase = "Reduzir o ritmo de compras e priorizar o giro do estoque já adquirido no próximo ciclo. "
+        casos = {"texto determinístico": (deterministico["resumo_executivo"], deterministico["conclusao_estrategica"]),
+                 "uma frase": (None, frase), "quatro frases": (None, frase * 4), "nove frases": (None, frase * 9)}
+        for rotulo, (resumo, conclusao) in casos.items():
+            paginas = apoio.paginas(apoio.gerar(apoio.analise_referencia(resumo=resumo, conclusao=conclusao)))
+            with self.subTest(caso=rotulo):
+                self.assertEqual(len(paginas), 2)
+                ultima = [l["texto"] for l in apoio.linhas_do_corpo(paginas[-1])]
+                self.assertIn("Resumo executivo", ultima)
+                self.assertIn("Conclusão estratégica", ultima)
+                self.assertTrue(any(t.startswith(apoio.FECHAMENTO) for t in ultima))
+                self.assertEqual(apoio.lacunas_evitaveis(paginas), [])
+
+    def test_ultimo_bloco_nao_muda_de_pagina_com_espaco_sobrando(self):
+        # A frase final entra no último bloco do documento sem forçar quebra de página,
+        # seja ele um cartão, o gráfico ou a devolutiva sem texto.
+        sem_devolutiva = apoio.analise_referencia()
+        sem_devolutiva.relatorio = None
+        so_grafico = apoio.analise_referencia()
+        so_grafico.relatorio = None
+        casos = (("sem devolutiva", sem_devolutiva, None, 2, "Eles concentram"),
+                 ("sem devolutiva e sem cartões", so_grafico, [], 1, "Participação individual"),
+                 ("devolutiva sem texto", apoio.analise_referencia(resumo="", conclusao=""), None, 2,
+                  "Sem texto registrado pelo consultor."))
+        for rotulo, analise, semaforos, esperadas, ultimo_bloco in casos:
+            paginas = apoio.paginas(apoio.gerar(analise, semaforos=semaforos))
+            with self.subTest(caso=rotulo):
+                self.assertEqual(len(paginas), esperadas)
+                self.assertEqual(apoio.lacunas_evitaveis(paginas), [])
+                corpo = [l["texto"] for l in sorted(apoio.linhas_do_corpo(paginas[-1]), key=lambda l: l["y0"])]
+                self.assertTrue(corpo[-1].startswith(apoio.FECHAMENTO), corpo)
+                self.assertTrue(any(t.startswith(ultimo_bloco) for t in corpo), corpo)
 
 
 class PDFLayoutEstruturaTests(unittest.TestCase):

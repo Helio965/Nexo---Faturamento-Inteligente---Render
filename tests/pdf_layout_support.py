@@ -28,11 +28,13 @@ ITENS = (
 )
 TITULOS = ("Indicadores do período", "Curva ABC", "Distribuição do faturamento por produto",
            "Síntese executiva", "Devolutiva do consultor", "Resumo executivo", "Conclusão estratégica")
+TITULOS_DE_SECAO = TITULOS[:5]   # h2: cada bloco indivisível do gerador tem no máximo um, no início
 SUBTITULO_GRAFICO = "Participação dos principais produtos no faturamento do período."
 FECHAMENTO = "Documento gerado pelo portal NEXO em"
 MARGEM = 18 * mm
 TOPO = 15 * mm
 INICIO_RODAPE = 17 * mm          # régua do rodapé, medida a partir da base da página
+FOLGA_LACUNA = 40                # pt: espaço antes do título (7 mm), respiros internos e medição
 
 
 def curva_referencia(itens=ITENS):
@@ -190,3 +192,27 @@ def pagina_sem_conteudo(pagina):
         return (any(texto.startswith(t) for t in TITULOS) or texto == SUBTITULO_GRAFICO
                 or texto.startswith(FECHAMENTO))
     return corpo if corpo and all(vazia(t) for t in corpo) else None
+
+
+def lacunas_evitaveis(paginas_do_documento):
+    """Quebras de página com espaço sobrando: o começo da página seguinte, até o
+    próximo título de seção, cabia no espaço livre da anterior e mesmo assim foi
+    empurrado. Devolve (página, livre, bloco, primeira linha) de cada caso; o
+    trecho medido contém o bloco que mudou de página (nenhum bloco atravessa um
+    título de seção), então só uma quebra sem motivo aparece aqui."""
+    achados = []
+    for numero, (pagina, seguinte) in enumerate(zip(paginas_do_documento, paginas_do_documento[1:]), start=1):
+        corpo = linhas_do_corpo(pagina)
+        depois = sorted(linhas_do_corpo(seguinte), key=lambda l: l["y0"])
+        if not corpo or not depois:
+            continue
+        livre = pagina["altura"] - pdf_export.MARGEM_BASE - max(l["y1"] for l in corpo)
+        fim = max(l["y1"] for l in depois)
+        for linha in depois[1:]:
+            if any(linha["texto"].startswith(t) for t in TITULOS_DE_SECAO):
+                fim = max(l["y1"] for l in depois if l["y0"] < linha["y0"])
+                break
+        bloco = fim - depois[0]["y0"]
+        if livre > bloco + FOLGA_LACUNA:
+            achados.append((numero, round(livre), round(bloco), depois[0]["texto"][:40]))
+    return achados

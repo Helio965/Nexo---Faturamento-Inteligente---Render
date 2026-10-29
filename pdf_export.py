@@ -795,6 +795,11 @@ def _fechar_documento(elems, fechamento, largura):
     linhas dele a acompanham (o restante segue o fluxo normal), para não empurrar
     o parágrafo inteiro para a página seguinte."""
     ultimo = elems.pop()
+    if isinstance(ultimo, KeepTogether):
+        # Um KeepTogether dentro de outro mede 0xffffff de altura e força quebra de
+        # página mesmo com espaço sobrando: a frase final entra no mesmo bloco.
+        elems.append(KeepTogether(list(ultimo._content) + [fechamento]))
+        return
     if isinstance(ultimo, _ClasseParagraph):
         ultimo.wrap(largura, ALTURA_UTIL)
         linhas = len(getattr(ultimo.blPara, "lines", ()))
