@@ -79,6 +79,7 @@ class PasswordPolicyUnitTests(unittest.TestCase):
             with patch.object(politica_senha, "urlopen", return_value=Resposta(b"ABCDEF0123456789ABCDEF0123456789ABC:3\r\n")):
                 self.assertFalse(politica_senha.senha_vazada(FRASE))
             with patch.object(politica_senha, "urlopen", side_effect=URLError("rede indisponível")), \
+                    patch.object(politica_senha.logger, "disabled", False), \
                     self.assertLogs(politica_senha.logger, level="WARNING") as logs:
                 self.assertIsNone(politica_senha.senha_vazada(FRASE))
                 self.assertIsNone(self._erro(FRASE + " outra"))               # fail-open, só registra

@@ -175,8 +175,11 @@ with contextlib.redirect_stdout(captured_out), contextlib.redirect_stderr(captur
         assert app.config['SQLALCHEMY_DATABASE_URI'] == 'sqlite:///:memory:'
         assert app.testing == (mode == 'testing')
     client = app.test_client()
-    health = client.get('/healthz')
-    login = client.get('/auth/login')
+    # SEC-005: em produção TRUSTED_HOSTS passa a valer, então a requisição chega
+    # com o host canônico (como o Render roteia); em dev não há restrição de host.
+    host_headers = {'Host': 'nexo-sintetico.example.invalid'} if mode == 'production' else {}
+    health = client.get('/healthz', headers=host_headers)
+    login = client.get('/auth/login', headers=host_headers)
     assert health.status_code == login.status_code == 200
     assert b'csrf_token' in login.data
     assert app.config['SECRET_KEY'].encode() not in login.data
@@ -197,6 +200,9 @@ class NexoDotenvConfigurationTests(unittest.TestCase):
             fixture.write_text(
                 f"SECRET_KEY={file_secret}\nDATABASE_URL={database}\n"
                 f"UPLOAD_FOLDER={directory / 'uploads'}\n"
+                # SEC-005: produção exige origem canônica https (no Render vem de
+                # RENDER_EXTERNAL_URL). Valor sintético para a factory validar.
+                "NEXO_PUBLIC_URL=https://nexo-sintetico.example.invalid\n"
                 "SEC006B_FROM_FILE=synthetic-file-loaded\n"
                 "MAX_CONTENT_LENGTH_MB=3\nPROXY_FIX_HOPS=1\n"
                 "RATELIMIT_STORAGE_URI=memory://\n"

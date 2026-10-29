@@ -60,6 +60,9 @@ class DependencyProductionRuntimeTests(unittest.TestCase):
                 "SECRET_KEY": secrets.token_hex(32),
                 "DATABASE_URL": url.render_as_string(hide_password=False),
                 "DIRECT_URL": "", "NEXO_DB_DIRECT": "0",
+                # SEC-005: produção exige origem canônica https (no Render vem de
+                # RENDER_EXTERNAL_URL); valor sintético para a factory validar.
+                "NEXO_PUBLIC_URL": "https://nexo-sintetico.example.invalid",
                 "PGPASSFILE": str(cluster.passfile),
                 "UPLOAD_FOLDER": str(work / "uploads"),
                 "NEXO_SEC006_INSTANCE": str(work / "instance"),
