@@ -20,6 +20,7 @@ Flask-Migrate==4.0.7
 # Engajamento e entregáveis
 Flask-Mail==0.10.0       # SMTP — e-mails HTML (tickets, publicação de análise)
 reportlab==4.2.5         # PDF — exportação da análise executiva (ABC + 5W2H)
+tzdata==2026.5           # Fuso America/Sao_Paulo (zoneinfo) mesmo sem /usr/share/zoneinfo no servidor
 Pillow==13.0.0           # Verificação do conteúdo real das imagens enviadas ao Guia
 
 # Tempo real — sininho de notificações via WebSocket

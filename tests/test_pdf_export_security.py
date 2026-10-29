@@ -142,15 +142,14 @@ class PDFExportSecurityTests(_PDFChecks, unittest.TestCase):
                         "semaforo_titulo": "titulo", "acao": "o_que_fazer",
                         "justificativa": "por_que", "nivel": "nivel",
                     }[field]] = payload
-                original = pdf_export.Paragraph
                 textos = []
 
-                def paragraph(*args, **kwargs):
-                    result = original(*args, **kwargs)
-                    textos.append(result.getPlainText())
-                    return result
+                class ParagraphGravado(pdf_export.Paragraph):
+                    def __init__(self, *args, **kwargs):
+                        super().__init__(*args, **kwargs)
+                        textos.append(self.getPlainText())
 
-                with patch.object(pdf_export, "Paragraph", side_effect=paragraph):
+                with patch.object(pdf_export, "Paragraph", ParagraphGravado):
                     self._gerar(dados)
                 if field == "classe":
                     # Células str da Table usam canvas literal, sem parser XML.
@@ -201,6 +200,38 @@ class PDFExportSecurityTests(_PDFChecks, unittest.TestCase):
                 with self._sem_recursos():
                     table = pdf_export._abc_flowable(dados[2], 440, pdf_export._estilos())
                 self.assertEqual(table._cellvalues[1][1].getPlainText(), texto)
+
+    def test_legenda_do_grafico_preserva_nomes_literais_uma_vez(self):
+        textos = ("Tintas & Cores", "Produto <Premium>", "Literal &amp; e &lt;img&gt;",
+                  "<b>Nome literal</b>", '<img src="https://pdf.invalid/p.png"/>',
+                  '<a href="https://pdf.invalid">link</a>', "<font size=40>grande</font>", "&#60;b&#62;")
+        estilos = pdf_export._estilos()
+        for inicio in range(0, len(textos), 5):
+            lote = textos[inicio:inicio + 5]
+            produtos = [SimpleNamespace(posicao_ranking=i, produto_nome=t, classe_abc="C",
+                                        faturamento=10 + i, percentual_acumulado=0)
+                        for i, t in enumerate(lote, start=1)]
+            with self._sem_recursos():
+                distribuicao = pdf_export.calcular_distribuicao(1000, produtos)
+                legenda = pdf_export._legenda_flowable(distribuicao, 300, estilos)
+            nomes = [linha[1].getPlainText() for linha in legenda._cellvalues[1:1 + len(lote)]]
+            self.assertEqual(nomes, list(lote))
+        # Nome longo cortado na legenda: o corte vem antes do escape (nenhuma entidade partida).
+        longo = "A & B <C> " * 40
+        with self._sem_recursos():
+            nome = pdf_export._nome_em_linhas(longo, estilos["leg"], 120)
+        visivel = nome.getPlainText()
+        self.assertTrue(visivel.endswith("…"))
+        self.assertTrue(" ".join(longo.split()).startswith(visivel[:-1].rstrip()))
+        self.assertNotIn("&amp;", visivel)
+        self.assertNotIn("&lt;", visivel)
+
+    def test_rodape_desenha_o_nome_da_empresa_literal(self):
+        dados = _dados()
+        dados[0].empresa.nome_fantasia = 'Tintas & Cores <b>x</b> &amp; <img src="https://pdf.invalid/p.png"/>'
+        texto = self._texto(self._gerar(dados))
+        self.assertIn('NEXO · Tintas & Cores <b>x</b> &amp; <img src="https://pdf.invalid/p.png"/> · '
+                      'Referência 10/2026', texto)
 
     def test_semaforos_preservam_texto_literal_e_formatacao_fixa(self):
         card = {

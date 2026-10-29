@@ -99,6 +99,15 @@ class InstanteDeGeracaoTests(unittest.TestCase):
                 self.assertEqual(real.tzinfo.key, "America/Sao_Paulo")
                 self.assertTrue(antes <= real <= depois, (antes, real, depois))
 
+    @unittest.skipUnless(COM_TZSET, "time.tzset indisponível nesta plataforma")
+    def test_geracao_nao_altera_o_fuso_do_processo(self):
+        # Brasília vem do ZoneInfo: gerar o PDF não troca o fuso do servidor (nem o
+        # que os próximos processos e o próximo tzset() herdariam).
+        with fuso_do_processo("Asia/Tokyo"):
+            antes = (os.environ.get("TZ"), time.tzname, time.timezone, time.altzone)
+            apoio.gerar(gerado_em=None)                          # relógio real
+            self.assertEqual((os.environ.get("TZ"), time.tzname, time.timezone, time.altzone), antes)
+
     def test_04_cada_exportacao_le_o_relogio_de_novo(self):
         instantes = (datetime(2026, 10, 29, 15, 2, tzinfo=UTC), datetime(2026, 10, 29, 15, 7, 30, tzinfo=UTC),
                      datetime(2026, 10, 29, 18, 59, 59, tzinfo=UTC))
@@ -144,6 +153,9 @@ class InstanteDeGeracaoTests(unittest.TestCase):
                      if ast.unparse(c.func).rsplit(".", 1)[-1] in proibidas
                      or "tzinfo" in {k.arg for k in c.keywords}]
         self.assertEqual(violacoes, [])
+        # Nem mudança no fuso do processo: o gerador não toca em os.environ nem em os.putenv.
+        self.assertEqual([ast.unparse(n) for n in ast.walk(arvore)
+                          if isinstance(n, ast.Attribute) and n.attr in ("environ", "putenv")], [])
         # Uma única leitura do relógio, e com fuso explícito.
         self.assertEqual([ast.unparse(c) for c in chamadas if ast.unparse(c.func).endswith(".now")],
                          ["datetime.now(timezone.utc)"])
@@ -170,9 +182,35 @@ class InstanteDeGeracaoTests(unittest.TestCase):
         local = pdf_export.instante_de_geracao(datetime(2027, 1, 5, 12, 5, tzinfo=UTC))
         self.assertEqual(pdf_export.formatar_data_hora(local), "05/01/2027 às 09:05")
 
-    @unittest.skipUnless(importlib.util.find_spec("tzdata") is not None, "pacote tzdata ausente")
+    def test_formatacao_independe_da_localidade_do_servidor(self):
+        # Localidade ASCII sem modo UTF-8: o "às" não passa pelo strftime.
+        import subprocess
+        import sys
+        from pathlib import Path
+        codigo = ("import sys, datetime as d, pdf_export as p; "
+                  "t = p.formatar_data_hora(p.instante_de_geracao(d.datetime(2026, 10, 29, 15, 2, tzinfo=d.timezone.utc))); "
+                  "sys.stdout.buffer.write(t.encode('utf-8'))")
+        ambiente = {"PATH": os.environ.get("PATH", ""), "LC_ALL": "C", "PYTHONUTF8": "0",
+                    "PYTHONCOERCECLOCALE": "0", "PYTHONDONTWRITEBYTECODE": "1"}
+        resultado = subprocess.run([sys.executable, "-B", "-c", codigo], cwd=Path(pdf_export.__file__).resolve().parent,
+                                   env=ambiente, capture_output=True, timeout=60)
+        self.assertEqual(resultado.returncode, 0, resultado.stderr.decode("utf-8", "replace"))
+        self.assertEqual(resultado.stdout.decode("utf-8"), "29/10/2026 às 12:02")
+
+    def test_metadados_do_arquivo_usam_o_mesmo_instante_do_carimbo(self):
+        fusos = ("UTC", "Asia/Kolkata", "America/New_York") if COM_TZSET else ("UTC",)
+        for nome in fusos:
+            contexto = fuso_do_processo(nome) if COM_TZSET else contextlib.nullcontext()
+            with self.subTest(fuso_do_processo=nome), contexto:
+                documento = apoio.gerar(gerado_em=datetime(2026, 10, 29, 15, 2, tzinfo=UTC))
+                self.assertEqual(re.findall(rb"/(?:CreationDate|ModDate) \(([^)]*)\)", documento),
+                                 [b"D:20261029120200-03'00'"] * 2)
+        verao = apoio.gerar(gerado_em=datetime(2019, 1, 15, 15, 0, tzinfo=UTC))
+        self.assertIn(b"/CreationDate (D:20190115130000-02'00')", verao)
+
     def test_funciona_sem_a_base_de_fusos_do_sistema_operacional(self):
-        """Sem /usr/share/zoneinfo, o zoneinfo usa o pacote tzdata (já instalado como dependência)."""
+        """Sem /usr/share/zoneinfo, o zoneinfo usa o pacote tzdata (dependência declarada)."""
+        self.assertIsNotNone(importlib.util.find_spec("tzdata"), "tzdata é dependência declarada em requirements.txt")
         chave = pdf_export.FUSO_HORARIO_OFICIAL
 
         def recarregar():
@@ -311,9 +349,12 @@ class RotaDeExportacaoHorarioTests(unittest.TestCase):
         pilha.enter_context(patch.object(cliente, "obter_situacao_contratual", side_effect=lambda empresa: situacao))
 
     def test_duas_exportacoes_seguidas_geram_documentos_novos_sem_cache(self):
-        with relogio(datetime(2026, 10, 29, 15, 2, tzinfo=UTC), datetime(2026, 10, 29, 15, 9, tzinfo=UTC)) as leitura:
-            respostas = [self.client.get("/cliente/analise/5/pdf") for _ in range(2)]
-        self.assertEqual(leitura.call_count, 2)
+        # Relógio único da requisição (contract_policy.agora), injetado como nos testes contratuais.
+        leitura = MagicMock(side_effect=[datetime(2026, 10, 29, 15, 2, tzinfo=UTC),
+                                         datetime(2026, 10, 29, 15, 9, tzinfo=UTC)])
+        self.app.config["NEXO_RELOGIO"] = leitura
+        respostas = [self.client.get("/cliente/analise/5/pdf") for _ in range(2)]
+        self.assertEqual(leitura.call_count, 2)                  # uma leitura por exportação
         for resposta in respostas:
             self.assertEqual(resposta.status_code, 200)
             self.assertEqual(resposta.mimetype, "application/pdf")

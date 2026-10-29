@@ -44,8 +44,8 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import (
-    BaseDocTemplate, Flowable, Frame, KeepTogether, PageTemplate, Paragraph, Spacer,
-    Table, TableStyle,
+    BaseDocTemplate, CondPageBreak, Flowable, Frame, KeepTogether, PageTemplate, Paragraph,
+    Spacer, Table, TableStyle,
 )
 
 log = logging.getLogger(__name__)
@@ -83,12 +83,16 @@ RAMPA_PIZZA = tuple(HexColor(c) for c in ("#5a06bb", "#7040ce", "#8765e0", "#9d8
 COR_OUTROS = HexColor("#d5d8e2")
 TOP_N_PDF = 5                      # a tabela e o gráfico mostram os mesmos produtos
 LIMITE_ROTULO_NA_FATIA = Decimal("12")   # % mínima para escrever o percentual dentro da fatia
-TOLERANCIA_CENTAVOS = Decimal("0.005")   # diferenças abaixo de meio centavo são arredondamento
+CENTAVO = Decimal("0.01")
+TOLERANCIA_PERCENTUAL = Decimal("0.01")  # o ETL grava a participação com 2 casas decimais
+LINHAS_NOME_LEGENDA = 3                  # o nome completo fica na tabela da Curva ABC
+LINHAS_PARAGRAFO_JUNTO = 8               # 1º parágrafo até 8 linhas viaja inteiro com o título
 
 # ---- Geometria da página (A4, pontos) ----
 MARGEM_X = 18 * mm
 MARGEM_TOPO = 15 * mm
 MARGEM_BASE = 24 * mm        # área reservada ao rodapé (régua em 17 mm, textos em 12,5 e 8,5 mm)
+ALTURA_UTIL = A4[1] - MARGEM_TOPO - MARGEM_BASE
 AVISO_RODAPE = ("Sinalização gerencial estimada (faturamento e Curva ABC). Não representa "
                 "lucro, margem ou CMV.")
 
@@ -122,8 +126,19 @@ def instante_de_geracao(gerado_em: datetime | None = None) -> datetime:
 
 
 def formatar_data_hora(instante_local: datetime) -> str:
-    """'29/10/2026 às 12:02' (o instante já deve estar no fuso de exibição)."""
-    return instante_local.strftime("%d/%m/%Y às %H:%M")
+    """'29/10/2026 às 12:02' (o instante já deve estar no fuso de exibição).
+    O "às" fica fora do strftime: o formato passado a ele é só ASCII, então
+    nenhuma configuração de localidade do servidor impede a formatação."""
+    return f"{instante_local:%d/%m/%Y} às {instante_local:%H:%M}"
+
+
+def data_pdf(instante_local: datetime) -> str:
+    """Data no formato dos metadados do PDF (CreationDate/ModDate), com o
+    deslocamento do próprio instante: 'D:20261029120200-03'00''."""
+    minutos = int(instante_local.utcoffset().total_seconds() // 60)
+    sinal = "-" if minutos < 0 else "+"
+    horas, resto = divmod(abs(minutos), 60)
+    return f"D:{instante_local:%Y%m%d%H%M%S}{sinal}{horas:02d}'{resto:02d}'"
 
 
 # ---- Formatação ----
@@ -150,17 +165,39 @@ def _decimal(valor) -> Decimal | None:
 
 
 def _brl(valor) -> str:
-    """12345.6 -> '12.345,60' (sem o símbolo), arredondando ao centavo (meio para cima)."""
-    numero = _decimal(valor) or Decimal(0)
-    texto = f"{numero.quantize(Decimal('0.01'), ROUND_HALF_UP):,.2f}"
-    return texto.replace(",", "_").replace(".", ",").replace("_", ".")
+    """12345.6 -> '12.345,60' (sem o símbolo).
+
+    Mesma regra do portal (filtro m.brl: float com 2 casas) e do PDF anterior,
+    para o documento mostrar exatamente os números da tela."""
+    try:
+        v = float(valor or 0)
+    except (TypeError, ValueError):
+        v = 0.0
+    return f"{v:,.2f}".replace(",", "_").replace(".", ",").replace("_", ".")
 
 
 def _pct(valor, casas: int = 2) -> str:
-    """74.22871 -> '74,23%' (vírgula decimal, arredondamento meio para cima)."""
+    """Participação calculada aqui (Decimal exato): 74.22871 -> '74,23%' (vírgula
+    decimal, arredondamento meio para cima)."""
     numero = _decimal(valor) or Decimal(0)
     quantum = Decimal(1).scaleb(-casas)
     return f"{numero.quantize(quantum, ROUND_HALF_UP):.{casas}f}".replace(".", ",") + "%"
+
+
+def _em_centavos(valor: Decimal) -> Decimal:
+    """O valor como _brl o exibe (mesmo arredondamento), para as comparações de
+    totais concordarem com o que o leitor vê."""
+    return Decimal(f"{float(valor):.2f}")
+
+
+def _pct_gravado(valor) -> str:
+    """Percentual gravado pela Curva ABC, com a regra da página da análise
+    ('%.1f' de float) e vírgula: 91.85 -> '91,8%' nos dois lugares."""
+    try:
+        v = float(valor or 0)
+    except (TypeError, ValueError):
+        v = 0.0
+    return f"{v:.1f}".replace(".", ",") + "%"
 
 
 def _num(valor) -> str:
@@ -178,13 +215,19 @@ def _tamanho_que_cabe(texto, fonte, tamanho, largura, minimo=8.0) -> float:
 
 
 def _encurtar(texto, fonte, tamanho, largura) -> str:
-    """Corta com reticências para caber numa linha desenhada no canvas."""
+    """Corta com reticências para caber numa linha desenhada no canvas (busca
+    binária pelo maior prefixo que cabe)."""
     texto = " ".join(str(texto or "").split())
     if stringWidth(texto, fonte, tamanho) <= largura:
         return texto
-    while texto and stringWidth(texto + "…", fonte, tamanho) > largura:
-        texto = texto[:-1]
-    return texto.rstrip() + "…"
+    cabe, nao_cabe = 0, len(texto)
+    while nao_cabe - cabe > 1:
+        meio = (cabe + nao_cabe) // 2
+        if stringWidth(texto[:meio].rstrip() + "…", fonte, tamanho) <= largura:
+            cabe = meio
+        else:
+            nao_cabe = meio
+    return texto[:cabe].rstrip() + "…"
 
 
 def _luminancia(cor) -> float:
@@ -248,8 +291,9 @@ class _BarraTopo(Flowable):
         c.restoreState()
 
 
-def _desenhar_rodape(canvas, pagina, total, identificacao, carimbo):
-    """Rodapé de todas as páginas: aviso, 'Página X de Y', identificação e geração."""
+def _desenhar_rodape(canvas, pagina, total, empresa, referencia, carimbo):
+    """Rodapé de todas as páginas: aviso, 'Página X de Y', identificação e geração.
+    Se faltar espaço, só o nome da empresa é encurtado: a referência fica sempre."""
     x0, x1 = MARGEM_X, A4[0] - MARGEM_X
     canvas.saveState()
     canvas.setStrokeColor(LINHA)
@@ -267,15 +311,21 @@ def _desenhar_rodape(canvas, pagina, total, identificacao, carimbo):
     canvas.setFont("Helvetica", 7)
     canvas.drawRightString(x1, 8.5 * mm, geracao)
     espaco = x1 - x0 - stringWidth(geracao, "Helvetica", 7) - 6 * mm
-    canvas.drawString(x0, 8.5 * mm, _encurtar(identificacao, "Helvetica", 7, espaco))
+    fixo = f"NEXO ·  · Referência {referencia}"
+    nome = _encurtar(empresa, "Helvetica", 7, espaco - stringWidth(fixo, "Helvetica", 7))
+    partes = ["NEXO", nome, f"Referência {referencia}"] if nome else ["NEXO", f"Referência {referencia}"]
+    canvas.drawString(x0, 8.5 * mm, " · ".join(partes))
     canvas.restoreState()
 
 
-def _canvas_com_rodape(identificacao, carimbo):
-    """Canvas que adia o rodapé até o fim do documento para conhecer o total de páginas."""
+def _canvas_com_rodape(empresa, referencia, carimbo, metadados_data):
+    """Canvas que adia o rodapé até o fim do documento para conhecer o total de
+    páginas. Os metadados de criação/modificação do arquivo usam o mesmo instante
+    do carimbo (em vez do relógio local do servidor, que o ReportLab usaria)."""
     class _CanvasNexo(Canvas):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
+            self.setDateFormatter(lambda *_: metadados_data)
             self._paginas_pendentes = []
 
         def showPage(self):
@@ -286,7 +336,7 @@ def _canvas_com_rodape(identificacao, carimbo):
             total = len(self._paginas_pendentes)
             for estado in self._paginas_pendentes:
                 self.__dict__.update(estado)
-                _desenhar_rodape(self, self._pageNumber, total, identificacao, carimbo)
+                _desenhar_rodape(self, self._pageNumber, total, empresa, referencia, carimbo)
                 super().showPage()
             super().save()
 
@@ -302,14 +352,19 @@ def _estilos():
     estilos = {
         "titulo": ParagraphStyle("titulo", parent=base, fontName="Helvetica-Bold", fontSize=16,
                                  leading=20, textColor=TINTA, spaceAfter=4),
+        # Espaço entre seções como spaceBefore (o quadro o ignora no topo da página).
         "h2": ParagraphStyle("h2", parent=base, fontName="Helvetica-Bold",
-                             fontSize=12.5, leading=15, textColor=ROXO, spaceBefore=0, spaceAfter=6),
+                             fontSize=12.5, leading=15, textColor=ROXO, spaceBefore=7 * mm, spaceAfter=6),
         "h3": ParagraphStyle("h3", parent=base, fontName="Helvetica-Bold",
                              fontSize=10.5, leading=13, textColor=TINTA, spaceBefore=2, spaceAfter=3),
+        "h3_seguinte": ParagraphStyle("h3s", parent=base, fontName="Helvetica-Bold", fontSize=10.5,
+                                      leading=13, textColor=TINTA, spaceBefore=2 + 2 * mm, spaceAfter=3),
         "sub": ParagraphStyle("sub", parent=base, fontSize=8.5, leading=11.5, textColor=CINZA, spaceAfter=0),
         "p": ParagraphStyle("p", parent=base, fontSize=9.5, leading=14, textColor=TINTA, spaceAfter=5,
                             allowWidows=0),
         "small": ParagraphStyle("small", parent=base, fontSize=8, leading=11, textColor=CINZA),
+        "fechamento": ParagraphStyle("fech", parent=base, fontSize=8, leading=11, textColor=CINZA,
+                                     spaceBefore=6 * mm),
         "aviso": ParagraphStyle("aviso", parent=base, fontSize=8, leading=11, textColor=TINTA),
         "kpi_label": ParagraphStyle("kl", parent=base, fontSize=7.5, leading=9, textColor=CINZA),
         "kpi_value": ParagraphStyle("kv", parent=base, fontName="Helvetica-Bold",
@@ -394,7 +449,7 @@ def _abc_flowable(abc_top, largura, est):
             Paragraph(_texto_pdf(p.produto_nome), est["cell"]),
             p.classe_abc,
             valor,
-            _pct(p.percentual_acumulado, 1),
+            _pct_gravado(p.percentual_acumulado),
         ])
         corpo = _tamanho_que_cabe(valor, "Helvetica", 9, util_valor, minimo=6.5)
         if corpo != 9:
@@ -405,7 +460,9 @@ def _abc_flowable(abc_top, largura, est):
         estilo.append(("FONTNAME", (2, i), (2, i), "Helvetica-Bold"))
         if i % 2 == 0:
             estilo.append(("BACKGROUND", (0, i), (-1, i), FUNDO_SUAVE))
-    t = Table(linhas, colWidths=larguras, repeatRows=1)
+    # splitInRow: um nome excepcionalmente longo quebra entre páginas em vez de
+    # impedir a geração (o bloco continua inteiro em todos os casos normais).
+    t = Table(linhas, colWidths=larguras, repeatRows=1, splitInRow=1)
     t.setStyle(TableStyle(estilo))
     return t
 
@@ -425,61 +482,89 @@ class Distribuicao:
     fatias: tuple
     base: Decimal                # denominador das participações
     base_e_faturamento_total: bool
-    avisos: tuple
+    avisos: tuple                # texto exibido no PDF ("Atenção: ...")
+    inconsistencias: tuple = ()  # códigos para o log, sem valores comerciais
 
 
 def calcular_distribuicao(faturamento_total, produtos) -> Distribuicao | None:
     """Participação individual de cada produto exibido na tabela Curva ABC.
 
     participação = faturamento do produto ÷ faturamento total do período × 100;
-    "Outros produtos" = faturamento total − soma dos produtos exibidos (quando
-    positivo). Os dados não são ajustados para a soma dos percentuais
-    arredondados dar 100%. Inconsistências viram aviso explícito no PDF:
-      - soma dos produtos maior que o faturamento total: a base passa a ser a
-        soma dos produtos e não há fatia "Outros";
-      - faturamento total ausente ou não positivo: idem;
-      - produto com faturamento zero ou negativo: fica fora do gráfico.
-    Devolve None quando não há faturamento positivo para distribuir.
+    "Outros produtos" = faturamento total − soma dos produtos exibidos (quando a
+    diferença aparece em centavos). Os dados não são ajustados para a soma dos percentuais
+    arredondados dar 100%. Inconsistências viram aviso explícito no PDF e código
+    em `inconsistencias` (para o log), sem alterar os dados:
+      - produto da tabela com faturamento zero, negativo ou inválido: fica fora
+        do gráfico e a base passa a ser a soma dos exibidos (o valor dele não é
+        confundido com "Outros");
+      - faturamento total ausente ou não positivo, ou menor que a soma dos
+        produtos exibidos: a base é a soma dos produtos, sem "Outros";
+      - participação gravada pela Curva ABC diferente da calculada sobre o
+        faturamento total (há valores negativos fora da tabela, p. ex. devoluções).
+    Devolve None só quando não há produtos; sem nenhum faturamento positivo,
+    devolve uma distribuição sem fatias, com o aviso.
     """
-    avisos = []
-    exibidos = []
-    ignorados = 0
-    for p in produtos[:TOP_N_PDF]:
-        valor = _decimal(p.faturamento)
-        if valor is None or valor <= 0:
-            ignorados += 1
-            continue
-        exibidos.append((p, valor))
-    soma = sum((valor for _, valor in exibidos), Decimal(0))
-    if soma <= 0:
+    produtos = list(produtos or [])[:TOP_N_PDF]
+    if not produtos:
         return None
+    avisos, codigos = [], []
+    exibidos = []
+    for p in produtos:
+        valor = _decimal(p.faturamento)
+        if valor is not None and valor > 0:
+            exibidos.append((p, valor))
+    ignorados = len(produtos) - len(exibidos)
+    if not exibidos:
+        return Distribuicao(fatias=(), base=Decimal(0), base_e_faturamento_total=False,
+                            avisos=("Nenhum produto da tabela tem faturamento positivo: não há distribuição "
+                                    "para exibir.",),
+                            inconsistencias=("sem_faturamento_positivo",))
+    if ignorados:
+        codigos.append("produto_sem_faturamento_positivo")
+        avisos.append(f"{ignorados} produto(s) da tabela com faturamento zero, negativo ou inválido "
+                      "não entram no gráfico.")
+    soma = sum((valor for _, valor in exibidos), Decimal(0))
     total = _decimal(faturamento_total)
-    if total is None or total <= 0:
-        base, usa_total = soma, False
-        avisos.append("Faturamento total do período indisponível: as participações foram "
-                      "calculadas sobre a soma dos produtos exibidos.")
-    elif soma - total > TOLERANCIA_CENTAVOS:
-        base, usa_total = soma, False
+    usa_total = False
+    if total is None:
+        codigos.append("total_ausente")
+        avisos.append("Faturamento total do período não informado: as participações foram calculadas "
+                      "sobre a soma dos produtos exibidos.")
+    elif total <= 0:
+        codigos.append("total_nao_positivo")
+        avisos.append(f"Faturamento total do período não é positivo (R$ {_brl(total)}): as participações "
+                      "foram calculadas sobre a soma dos produtos exibidos.")
+    elif _em_centavos(soma) > _em_centavos(total):
+        codigos.append("soma_maior_que_total")
         avisos.append(f"A soma dos produtos exibidos (R$ {_brl(soma)}) é maior que o faturamento total "
                       f"informado (R$ {_brl(total)}); as participações foram calculadas sobre a soma "
                       "dos produtos, sem a fatia Outros produtos.")
-        log.warning("PDF: soma da Curva ABC exibida (%s) maior que o faturamento total (%s).", soma, total)
+    elif ignorados:
+        avisos.append("Com produto da tabela fora do gráfico, as participações foram calculadas sobre a "
+                      "soma dos produtos exibidos, sem a fatia Outros produtos.")
     else:
-        base, usa_total = total, True
-    if ignorados:
-        avisos.append(f"{ignorados} produto(s) da tabela com faturamento zero ou negativo não entram no gráfico.")
+        usa_total = True
+    base = total if usa_total else soma
     fatias = [
         Fatia(nome=str(p.produto_nome or ""), classe=p.classe_abc, faturamento=valor,
               percentual=valor / base * 100, cor=RAMPA_PIZZA[min(i, len(RAMPA_PIZZA) - 1)])
         for i, (p, valor) in enumerate(exibidos)
     ]
     if usa_total:
-        restante = total - soma
-        if restante > TOLERANCIA_CENTAVOS:
+        if _em_centavos(total) - _em_centavos(soma) >= CENTAVO:       # diferença visível
+            restante = total - soma
             fatias.append(Fatia(nome="Outros produtos", classe=None, faturamento=restante,
                                 percentual=restante / base * 100, cor=COR_OUTROS, outros=True))
+        gravadas = [(fatia.percentual, _decimal(getattr(p, "percentual_individual", None)))
+                    for fatia, (p, _) in zip(fatias, exibidos)]
+        if any(g is not None and abs(calc - g) > TOLERANCIA_PERCENTUAL for calc, g in gravadas):
+            codigos.append("base_abc_divergente")
+            avisos.append(f"As participações acima usam o faturamento total do período (R$ {_brl(total)}) e "
+                          "diferem do percentual individual da Curva ABC, que considera só os produtos com "
+                          "faturamento positivo: o período tem valores negativos fora da tabela (por "
+                          "exemplo, devoluções).")
     return Distribuicao(fatias=tuple(fatias), base=base, base_e_faturamento_total=usa_total,
-                        avisos=tuple(avisos))
+                        avisos=tuple(avisos), inconsistencias=tuple(codigos))
 
 
 def _grafico_pizza(distribuicao, diametro):
@@ -524,8 +609,32 @@ def _amostra(cor):
     return desenho
 
 
+def _nome_em_linhas(nome, estilo, largura, linhas=LINHAS_NOME_LEGENDA):
+    """Nome do produto em no máximo `linhas` linhas da coluna, com reticências
+    quando precisa cortar: a legenda tem altura limitada e cabe sempre ao lado
+    do gráfico. O nome completo continua na tabela da Curva ABC."""
+    texto = " ".join(str(nome or "").split())
+    limite = linhas * estilo.leading + 0.5
+
+    def cabe(t):
+        return Paragraph(_texto_pdf(t), estilo).wrap(largura, ALTURA_UTIL)[1] <= limite
+
+    if cabe(texto):
+        return Paragraph(_texto_pdf(texto), estilo)
+    cabe_ate, nao_cabe = 0, len(texto)
+    while nao_cabe - cabe_ate > 1:
+        meio = (cabe_ate + nao_cabe) // 2
+        if cabe(texto[:meio].rstrip() + "…"):
+            cabe_ate = meio
+        else:
+            nao_cabe = meio
+    return Paragraph(_texto_pdf(texto[:cabe_ate].rstrip() + "…"), estilo)
+
+
 def _legenda_flowable(distribuicao, largura, est):
     larguras = [7 * mm, largura - 70 * mm, 14 * mm, 28 * mm, 21 * mm]
+    util_nome = larguras[1] - 7                 # recuos da célula: 3 + 4 pt
+    util_valor = larguras[3] - 7
     cab = ParagraphStyle("legh", parent=est["leg"], fontName="Helvetica-Bold", fontSize=8, leading=10)
     linhas = [["", Paragraph("Produto", cab), "Classe", "Faturamento (R$)", "Participação"]]
     estilo = [
@@ -544,20 +653,28 @@ def _legenda_flowable(distribuicao, largura, est):
         ("FONTNAME", (4, 1), (4, -1), "Helvetica-Bold"),
     ]
     for i, fatia in enumerate(distribuicao.fatias, start=1):
-        nome = Paragraph(_texto_pdf(fatia.nome), est["leg"])
+        nome = _nome_em_linhas(fatia.nome, est["leg"], util_nome)
+        valor = _brl(fatia.faturamento)
+        corpo = _tamanho_que_cabe(valor, "Helvetica", 8.5, util_valor, minimo=6.5)
+        if corpo != 8.5:
+            estilo.append(("FONTSIZE", (3, i), (3, i), corpo))
         if fatia.outros:
             classe = "—"
         else:
             classe = fatia.classe
             estilo.append(("TEXTCOLOR", (2, i), (2, i), CLASSE_COR.get(fatia.classe, CINZA)))
             estilo.append(("FONTNAME", (2, i), (2, i), "Helvetica-Bold"))
-        linhas.append([_amostra(fatia.cor), nome, classe, _brl(fatia.faturamento), _pct(fatia.percentual)])
+        linhas.append([_amostra(fatia.cor), nome, classe, valor, _pct(fatia.percentual)])
     rotulo_total = "Faturamento total" if distribuicao.base_e_faturamento_total else "Soma dos produtos exibidos"
-    linhas.append(["", Paragraph(f"<b>{rotulo_total}</b>", est["leg"]), "", _brl(distribuicao.base), "100,00%"])
+    total = _brl(distribuicao.base)
+    linhas.append(["", Paragraph(f"<b>{rotulo_total}</b>", est["leg"]), "", total, "100,00%"])
     estilo += [
         ("FONTNAME", (3, -1), (4, -1), "Helvetica-Bold"),
         ("LINEABOVE", (0, -1), (-1, -1), 0.6, CONTORNO),
     ]
+    corpo = _tamanho_que_cabe(total, "Helvetica-Bold", 8.5, util_valor, minimo=6.5)
+    if corpo != 8.5:
+        estilo.append(("FONTSIZE", (3, -1), (3, -1), corpo))
     t = Table(linhas, colWidths=larguras)
     t.setStyle(TableStyle(estilo))
     return t
@@ -567,6 +684,15 @@ def _secao_distribuicao(distribuicao, largura, est):
     """Título, subtítulo, gráfico (à esquerda) + legenda (à direita) e nota, num
     bloco que não se parte: se não couber depois da tabela, vai inteiro para a
     página seguinte."""
+    cabeca = [
+        Paragraph("Distribuição do faturamento por produto", est["h2"]),
+        Paragraph("Participação dos principais produtos no faturamento do período.", est["sub"]),
+    ]
+    avisos = []
+    for aviso in distribuicao.avisos:
+        avisos += [Spacer(1, 1.5 * mm), Paragraph(f"<b>Atenção:</b> {_texto_pdf(aviso)}", est["aviso"])]
+    if not distribuicao.fatias:              # nada a desenhar: título, subtítulo e o motivo
+        return KeepTogether(cabeca + avisos)
     largura_grafico = 62 * mm
     grafico = _grafico_pizza(distribuicao, diametro=54 * mm)
     legenda = _legenda_flowable(distribuicao, largura - largura_grafico, est)
@@ -587,17 +713,12 @@ def _secao_distribuicao(distribuicao, largura, est):
     if soma_arredondada != Decimal("100.00"):
         nota += (" Percentuais arredondados para duas casas decimais: a soma exibida pode diferir "
                  "de 100% por arredondamento.")
-    bloco = [
-        Paragraph("Distribuição do faturamento por produto", est["h2"]),
-        Paragraph("Participação dos principais produtos no faturamento do período.", est["sub"]),
+    return KeepTogether(cabeca + [
         Spacer(1, 3 * mm),
         corpo,
         Spacer(1, 2.5 * mm),
         Paragraph(_texto_pdf(nota), est["small"]),
-    ]
-    for aviso in distribuicao.avisos:
-        bloco += [Spacer(1, 1.5 * mm), Paragraph(f"<b>Atenção:</b> {_texto_pdf(aviso)}", est["aviso"])]
-    return KeepTogether(bloco)
+    ] + avisos)
 
 
 def _semaforo_flowable(card, largura, est):
@@ -627,7 +748,71 @@ def _semaforo_flowable(card, largura, est):
     return wrap
 
 
-def _devolutiva(rel, est):
+def _semaforo_divisivel(card, largura, est):
+    """Mesmo cartão numa tabela de uma coluna que pode se dividir entre páginas.
+    Só é usado quando o cartão normal não cabe numa página inteira (texto
+    excepcionalmente longo); assim a exportação nunca falha por tamanho."""
+    original = _semaforo_flowable(card, largura, est)._cellvalues[0][0]
+    linhas = [[linha[0]] for linha in original._cellvalues]
+    t = Table(linhas, colWidths=[largura], splitInRow=1)
+    t.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), SEMAFORO_FUNDO.get(card["nivel"], FUNDO_SUAVE)),
+        ("LINEBEFORE", (0, 0), (0, -1), 3, SEMAFORO_COR.get(card["nivel"], CINZA)),
+        ("BOX", (0, 0), (-1, -1), 0.4, LINHA),
+        ("LEFTPADDING", (0, 0), (-1, -1), 10), ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+        ("TOPPADDING", (0, 0), (-1, -1), 1), ("BOTTOMPADDING", (0, 0), (-1, -1), 1),
+        ("TOPPADDING", (0, 0), (0, 0), 9), ("TOPPADDING", (0, 1), (0, 1), 5),
+        ("BOTTOMPADDING", (0, -1), (0, -1), 9),
+    ]))
+    return t
+
+
+def _cartao(card, largura, est):
+    """Cartão inteiro (não se parte); se nem uma página inteira o comporta, a
+    versão divisível."""
+    cartao = _semaforo_flowable(card, largura, est)
+    if cartao.wrap(largura, ALTURA_UTIL)[1] > ALTURA_UTIL:
+        return _semaforo_divisivel(card, largura, est)
+    return cartao
+
+
+def _com_titulos(titulos, paragrafo, largura, est):
+    """Títulos + primeiro parágrafo, sem título isolado e sem buraco na página:
+    um parágrafo curto viaja inteiro com os títulos; um longo começa logo abaixo
+    deles (com espaço garantido para os títulos e três linhas) e quebra entre
+    páginas normalmente (estilo sem linhas viúvas ou órfãs)."""
+    altura = paragrafo.wrap(largura, ALTURA_UTIL)[1]
+    if altura <= LINHAS_PARAGRAFO_JUNTO * paragrafo.style.leading + 0.5:
+        return [KeepTogether(titulos + [paragrafo])]
+    reserva = sum(t.wrap(largura, ALTURA_UTIL)[1] + t.getSpaceBefore() + t.getSpaceAfter() for t in titulos)
+    return [CondPageBreak(reserva + 3 * paragrafo.style.leading)] + titulos + [paragrafo]
+
+
+def _fechar_documento(elems, fechamento, largura):
+    """A frase final viaja com o fim do último bloco e nunca fica sozinha numa
+    página nova. Se o último bloco é um parágrafo longo, só as duas últimas
+    linhas dele a acompanham (o restante segue o fluxo normal), para não empurrar
+    o parágrafo inteiro para a página seguinte."""
+    ultimo = elems.pop()
+    if isinstance(ultimo, KeepTogether):
+        # Um KeepTogether dentro de outro mede 0xffffff de altura e força quebra de
+        # página mesmo com espaço sobrando: a frase final entra no mesmo bloco.
+        elems.append(KeepTogether(list(ultimo._content) + [fechamento]))
+        return
+    if isinstance(ultimo, Paragraph):
+        ultimo.wrap(largura, ALTURA_UTIL)
+        linhas = len(getattr(ultimo.blPara, "lines", ()))
+        if linhas > 3:
+            partes = ultimo.split(largura, (linhas - 2) * ultimo.style.leading + 0.1)
+            if len(partes) == 2:
+                inicio, fim = partes
+                inicio.style = ParagraphStyle(f"{inicio.style.name}_cont", parent=inicio.style, spaceAfter=0)
+                elems.extend([inicio, KeepTogether([fim, fechamento])])
+                return
+    elems.append(KeepTogether([ultimo, fechamento]))
+
+
+def _devolutiva(rel, est, largura):
     """Título da seção, subtítulos e textos do consultor, sem títulos isolados:
     'Devolutiva do consultor' + 'Resumo executivo' + o 1º parágrafo andam
     juntos, assim como 'Conclusão estratégica' + o seu 1º parágrafo."""
@@ -642,10 +827,8 @@ def _devolutiva(rel, est):
         return [KeepTogether([titulo, Paragraph("Sem texto registrado pelo consultor.", est["small"])])]
     elems = []
     for i, (subtitulo, paragrafos) in enumerate(secoes):
-        cabeca = ([titulo] if i == 0 else []) + [Paragraph(subtitulo, est["h3"]), paragrafos[0]]
-        if i:
-            elems.append(Spacer(1, 2 * mm))
-        elems.append(KeepTogether(cabeca))
+        titulos = ([titulo] if i == 0 else []) + [Paragraph(subtitulo, est["h3"] if i == 0 else est["h3_seguinte"])]
+        elems.extend(_com_titulos(titulos, paragrafos[0], largura, est))
         elems.extend(paragrafos[1:])
     return elems
 
@@ -656,7 +839,8 @@ def gerar_pdf_analise(analise, semaforos, abc_top, *, gerado_em=None) -> bytes:
     `gerado_em` (opcional, com fuso) fixa o instante da geração; sem ele, o
     relógio é lido agora — cada chamada recebe o horário da própria exportação.
     """
-    geracao = formatar_data_hora(instante_de_geracao(gerado_em))
+    instante = instante_de_geracao(gerado_em)
+    geracao = formatar_data_hora(instante)
     buf = BytesIO()
     doc = BaseDocTemplate(
         buf, pagesize=A4,
@@ -686,13 +870,11 @@ def gerar_pdf_analise(analise, semaforos, abc_top, *, gerado_em=None) -> bytes:
     elems.append(Paragraph(
         f"{_texto_pdf(nome_empresa)} &nbsp;·&nbsp; CNPJ {_texto_pdf(emp.cnpj)} &nbsp;·&nbsp; Período {_texto_pdf(periodo)}",
         est["small"]))
-    elems.append(Spacer(1, 7 * mm))
 
     # Indicadores
     if ind:
         elems.append(KeepTogether([Paragraph("Indicadores do período", est["h2"]),
                                    _kpis_flowable(ind, largura, est)]))
-        elems.append(Spacer(1, 7 * mm))
 
     # Curva ABC: título, tabela e explicação juntos; depois, o gráfico de pizza.
     if produtos:
@@ -704,29 +886,29 @@ def gerar_pdf_analise(analise, semaforos, abc_top, *, gerado_em=None) -> bytes:
             Paragraph("Classe A: até 80% do faturamento acumulado (estratégicos) · "
                       "B: 80–95% (táticos) · C: ~5% restantes (operacionais).", est["small"]),
         ]))
-        elems.append(Spacer(1, 7 * mm))
         distribuicao = calcular_distribuicao(ind.faturamento_total if ind else None, produtos)
         if distribuicao is not None:
+            if distribuicao.inconsistencias:
+                # Só códigos e o identificador: valores comerciais não vão para o log.
+                log.warning("PDF da análise %s: dados do gráfico com inconsistência (%s).",
+                            analise.id_analise, ", ".join(distribuicao.inconsistencias))
             elems.append(_secao_distribuicao(distribuicao, largura, est))
-            elems.append(Spacer(1, 7 * mm))
 
     # Síntese executiva (semáforos): o título viaja com o primeiro cartão.
     if semaforos:
-        cartoes = [_semaforo_flowable(card, largura, est) for card in semaforos]
+        cartoes = [_cartao(card, largura, est) for card in semaforos]
         elems.append(KeepTogether([Paragraph("Síntese executiva", est["h2"]), cartoes[0]]))
         for cartao in cartoes[1:]:
-            elems.append(Spacer(1, 3 * mm))
-            elems.append(cartao)
-        elems.append(Spacer(1, 7 * mm))
+            cartao.spaceBefore = 3 * mm          # ignorado no topo da página
+            elems.append(KeepTogether([cartao]))
 
     # Devolutiva
     if rel:
-        elems.extend(_devolutiva(rel, est))
+        elems.extend(_devolutiva(rel, est, largura))
 
-    elems.append(Spacer(1, 6 * mm))
-    elems.append(Paragraph(
-        f"Documento gerado pelo portal NEXO em {geracao} (horário de Brasília).", est["small"]))
+    fechamento = Paragraph(
+        f"Documento gerado pelo portal NEXO em {geracao} (horário de Brasília).", est["fechamento"])
+    _fechar_documento(elems, fechamento, largura)
 
-    identificacao = f"NEXO · {nome_empresa or ''} · Referência {ref}"
-    doc.build(elems, canvasmaker=_canvas_com_rodape(identificacao, geracao))
+    doc.build(elems, canvasmaker=_canvas_com_rodape(nome_empresa or "", ref, geracao, data_pdf(instante)))
     return buf.getvalue()
