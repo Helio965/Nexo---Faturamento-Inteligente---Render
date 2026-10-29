@@ -63,6 +63,9 @@ class DependencyProductionRuntimeTests(unittest.TestCase):
                 # SEC-005: produção exige origem canônica https (no Render vem de
                 # RENDER_EXTERNAL_URL); valor sintético para a factory validar.
                 "NEXO_PUBLIC_URL": "https://nexo-sintetico.example.invalid",
+                # O único cliente deste ensaio é o loopback: host extra confiável,
+                # como um operador configuraria (TRUSTED_HOSTS ignora a porta).
+                "NEXO_TRUSTED_HOSTS": "127.0.0.1",
                 "PGPASSFILE": str(cluster.passfile),
                 "UPLOAD_FOLDER": str(work / "uploads"),
                 "NEXO_SEC006_INSTANCE": str(work / "instance"),

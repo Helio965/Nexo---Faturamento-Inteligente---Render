@@ -96,6 +96,9 @@ REVISAO_CONTRATUAL = "81287c74387a"
 TABELAS_CONTRATUAIS = (
     "regime_contratual", "contrato", "cobertura_paga", "evento_contratual", "historico_preco_plano",
 )
+# Tabelas NÃO contratuais que a cadeia de migrações cria depois de 81287c74387a
+# (a migração até "head" também as traz; nascem vazias como as contratuais).
+TABELAS_POSTERIORES = ("sessao_autenticada",)
 TABELAS_POR_EMPRESA = ("regime_contratual", "contrato", "cobertura_paga", "evento_contratual")
 UTC = timezone.utc
 SAO_PAULO = ZoneInfo("America/Sao_Paulo")
@@ -366,6 +369,37 @@ class _PrivateCluster:
         with self.app.app_context():
             return set(inspect(self.db.engine).get_table_names()) - {"alembic_version"}
 
+    # Esquema POSTERIOR à migração contratual (SEC-001: sessao_autenticada; SEC-003:
+    # colunas da cópia publicada), ortogonal ao regime contratual. O downgrade até
+    # e4c004a26b01 o remove; o código atual precisa dele para logar (fail-closed) e
+    # para ler relatórios. É restaurado só no estágio legado e removido antes do novo
+    # upgrade, que o recria (create_table/add_column estritos). Nomes constantes.
+    _COLUNAS_POSTERIORES = (
+        ("titulo_publicado", "VARCHAR"), ("resumo_executivo_publicado", "TEXT"),
+        ("conclusao_estrategica_publicada", "TEXT"), ("gerado_por_ia_publicado", "BOOLEAN"),
+        ("versao_rascunho", "INTEGER NOT NULL DEFAULT 1"),
+    )
+
+    def _restaurar_esquema_posterior(self):
+        from sqlalchemy import text
+        from models import SessaoAutenticada
+        with self.app.app_context():
+            SessaoAutenticada.__table__.create(self.db.engine, checkfirst=True)
+            with self.db.engine.begin() as conexao:
+                for coluna, tipo in self._COLUNAS_POSTERIORES:
+                    conexao.execute(text(f"ALTER TABLE relatorio_analise ADD COLUMN IF NOT EXISTS {coluna} {tipo}"))
+        self._limpar_cache_esquema()
+
+    def _remover_esquema_posterior(self):
+        from sqlalchemy import text
+        from models import SessaoAutenticada
+        with self.app.app_context():
+            with self.db.engine.begin() as conexao:
+                for coluna, _tipo in reversed(self._COLUNAS_POSTERIORES):
+                    conexao.execute(text(f"ALTER TABLE relatorio_analise DROP COLUMN IF EXISTS {coluna}"))
+            SessaoAutenticada.__table__.drop(self.db.engine, checkfirst=True)
+        self._limpar_cache_esquema()
+
     def _contagens(self):
         from sqlalchemy import text
         tabelas = sorted(self._tabelas())
@@ -440,7 +474,8 @@ class _PrivateCluster:
         return self.ids[nome][0]
 
     def _nova_analise(self, nome, inicio, fim, *, publicada=False):
-        from models import Analise, IndicadorAnalise, RelatorioAnalise
+        from sqlalchemy import text
+        from models import Analise, IndicadorAnalise
         with self._sessao() as sessao:
             analise = Analise(
                 id_empresa=self.ids[nome][0], id_plano_referencia=self.plano_id,
@@ -454,11 +489,20 @@ class _PrivateCluster:
                     faturamento_total=Decimal("18500"), total_comprado=Decimal("14200"),
                     saldo_estimado_compras_vendas=Decimal("-4300"),
                 )
-                analise.relatorio = RelatorioAnalise(
-                    titulo=f"Análise fictícia {nome}", conclusao_estrategica="Conclusão fictícia",
-                    resumo_executivo="Resumo fictício", publicado=True, data_publicacao=datetime(2026, 2, 5, 12),
-                )
             sessao.add(analise)
+            sessao.flush()
+            if publicada:
+                # Linha LEGADA de relatório: este estágio roda no esquema anterior à
+                # cópia publicada (SEC-003, migração b6935e8de9d4), em que as colunas
+                # *_publicado/versao_rascunho ainda não existem. O ORM/Core emitiria
+                # o default de versao_rascunho, então a linha é inserida como era.
+                sessao.execute(text(
+                    "INSERT INTO relatorio_analise (id_analise, titulo, resumo_executivo, "
+                    "conclusao_estrategica, publicado, data_publicacao, gerado_por_ia) "
+                    "VALUES (:id, :titulo, :resumo, :conclusao, TRUE, :quando, FALSE)"
+                ), {"id": analise.id_analise, "titulo": f"Análise fictícia {nome}",
+                    "resumo": "Resumo fictício", "conclusao": "Conclusão fictícia",
+                    "quando": datetime(2026, 2, 5, 12)})
             sessao.commit()
 
     def _dados(self, **valores):
@@ -609,13 +653,13 @@ class _PrivateCluster:
                    f"revisão={self._revisao()} head={head}")
         depois = self._contagens()
         self.check("migration_preserves_legacy_counts",
-                   set(depois) == set(antes) | set(TABELAS_CONTRATUAIS)
+                   set(depois) == set(antes) | set(TABELAS_CONTRATUAIS) | set(TABELAS_POSTERIORES)
                    and all(depois[tabela] == quantidade for tabela, quantidade in antes.items())
                    and antes["empresa"] == 4 and antes["analise"] == 5,
                    f"antes={antes} depois={depois}")
         self.check("migration_creates_no_contract_data",
-                   all(depois[tabela] == 0 for tabela in TABELAS_CONTRATUAIS),
-                   str({tabela: depois[tabela] for tabela in TABELAS_CONTRATUAIS}))
+                   all(depois[tabela] == 0 for tabela in TABELAS_CONTRATUAIS + TABELAS_POSTERIORES),
+                   str({tabela: depois[tabela] for tabela in TABELAS_CONTRATUAIS + TABELAS_POSTERIORES}))
         esperados = {"E1": "ATIVA", "E2": "SUSPENSA", "E3": "CANCELADA", "E4": "EXCLUIDA"}
         with self._sessao() as sessao:
             situacoes = {nome: obter_situacao_contratual(sessao.get(Empresa, self.ids[nome][0]), instante=T0,
@@ -1195,13 +1239,17 @@ class _PrivateCluster:
                                 "UPDATE contrato SET id_contrato_anterior = NULL", "DELETE FROM contrato",
                                 "DELETE FROM regime_contratual", "DELETE FROM historico_preco_plano"):
                     conexao.execute(text(comando))
-        legado = {tabela: n for tabela, n in self._contagens().items() if tabela not in TABELAS_CONTRATUAIS}
+        # O downgrade até e4c004a26b01 remove as tabelas contratuais E as posteriores
+        # (sessao_autenticada é descendente da migração contratual na cadeia).
+        removidas = set(TABELAS_CONTRATUAIS) | set(TABELAS_POSTERIORES)
+        legado = {tabela: n for tabela, n in self._contagens().items() if tabela not in removidas}
         self._migrar(downgrade, REVISAO_ANTERIOR)
         self._limpar_cache_esquema()
         self.check("downgrade_with_empty_tables",
-                   self._revisao() == REVISAO_ANTERIOR and not self._tabelas() & set(TABELAS_CONTRATUAIS)
+                   self._revisao() == REVISAO_ANTERIOR and not self._tabelas() & removidas
                    and self._contagens() == legado, f"revisão={self._revisao()}")
 
+        self._restaurar_esquema_posterior()  # ver _COLUNAS_POSTERIORES
         self.stage = "portal legado sem o esquema contratual"
         with self._sessao() as sessao:
             sem_esquema = esquema_contratual_disponivel(sessao) is False
@@ -1214,6 +1262,7 @@ class _PrivateCluster:
                    f"login={resposta.status_code} painel={painel}")
 
         self.stage = "novo upgrade até o head"
+        self._remover_esquema_posterior()  # as migrações o recriam; sessões legadas caem
         self._migrar(upgrade, "head")
         self._limpar_cache_esquema()
         contagens = self._contagens()
@@ -1223,8 +1272,8 @@ class _PrivateCluster:
         cliente, resposta = self._login("cliente-e1@example.invalid")
         self.check("upgrade_again_after_downgrade",
                    self._revisao() == self.head and com_esquema and diferencas == []
-                   and all(contagens[tabela] == 0 for tabela in TABELAS_CONTRATUAIS)
-                   and {t: n for t, n in contagens.items() if t not in TABELAS_CONTRATUAIS} == legado
+                   and all(contagens[tabela] == 0 for tabela in TABELAS_CONTRATUAIS + TABELAS_POSTERIORES)
+                   and {t: n for t, n in contagens.items() if t not in removidas} == legado
                    and resposta.status_code == 302 and self._acesso("E1", T0) is True,
                    f"revisão={self._revisao()} diferencas={repr(diferencas)[:300]} login={resposta.status_code}")
 
