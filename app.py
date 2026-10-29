@@ -247,6 +247,10 @@ def create_app(config_name: str = None) -> Flask:
     # navegador) e comandos `flask contratos` / `flask planos` (simulação padrão).
     from contract_policy import formatar_instante
     app.jinja_env.filters["instante_local"] = formatar_instante
+    # Suporte e sininho: horário de Brasília e ISO 8601 do instante (horario.py).
+    from horario import horario_brasilia, iso_utc
+    app.jinja_env.filters["horario_brasilia"] = horario_brasilia
+    app.jinja_env.filters["iso_utc"] = iso_utc
     from cli_contratos import registrar_comandos
     registrar_comandos(app)
 

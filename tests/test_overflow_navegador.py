@@ -39,7 +39,7 @@ import hashlib
 import os
 import threading
 import unittest
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from unittest.mock import patch
@@ -306,12 +306,14 @@ class NavegadorCase(ContratosCase):
                 ("Dúvida sobre o indicador de pressão de estoque do último período", "RESOLVIDO")]):
             chamado = ChamadoSuporte(id_empresa=self.empresa_id, id_usuario_cliente=self.cliente_id, assunto=assunto,
                                      categoria="ERRO_INTEGRACAO" if i == 0 else "DUVIDA_TECNICA", status_chamado=status,
-                                     prioridade="MEDIA", data_abertura=datetime(2026, 2, 10 + i, 14, 20),
-                                     data_atualizacao=datetime(2026, 2, 11 + i, 9, 5))
+                                     prioridade="MEDIA",
+                                     data_abertura=datetime(2026, 2, 10 + i, 14, 20, tzinfo=timezone.utc),
+                                     data_atualizacao=datetime(2026, 2, 11 + i, 9, 5, tzinfo=timezone.utc))
             s.add(chamado)
             s.flush()
             s.add(MensagemSuporte(id_chamado=chamado.id_chamado, id_usuario_remetente=self.cliente_id,
-                                  mensagem="Mensagem fictícia.", data_envio=datetime(2026, 2, 10 + i, 14, 20)))
+                                  mensagem="Mensagem fictícia.",
+                                  data_envio=datetime(2026, 2, 10 + i, 14, 20, tzinfo=timezone.utc)))
         s.commit()
         self.empresa_longa_id = longa.id_empresa
 
