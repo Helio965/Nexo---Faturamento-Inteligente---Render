@@ -127,8 +127,19 @@ def instante_de_geracao(gerado_em: datetime | None = None) -> datetime:
 
 
 def formatar_data_hora(instante_local: datetime) -> str:
-    """'29/10/2026 às 12:02' (o instante já deve estar no fuso de exibição)."""
-    return instante_local.strftime("%d/%m/%Y às %H:%M")
+    """'29/10/2026 às 12:02' (o instante já deve estar no fuso de exibição).
+    O "às" fica fora do strftime: o formato passado a ele é só ASCII, então
+    nenhuma configuração de localidade do servidor impede a formatação."""
+    return f"{instante_local:%d/%m/%Y} às {instante_local:%H:%M}"
+
+
+def data_pdf(instante_local: datetime) -> str:
+    """Data no formato dos metadados do PDF (CreationDate/ModDate), com o
+    deslocamento do próprio instante: 'D:20261029120200-03'00''."""
+    minutos = int(instante_local.utcoffset().total_seconds() // 60)
+    sinal = "-" if minutos < 0 else "+"
+    horas, resto = divmod(abs(minutos), 60)
+    return f"D:{instante_local:%Y%m%d%H%M%S}{sinal}{horas:02d}'{resto:02d}'"
 
 
 # ---- Formatação ----
@@ -308,11 +319,14 @@ def _desenhar_rodape(canvas, pagina, total, empresa, referencia, carimbo):
     canvas.restoreState()
 
 
-def _canvas_com_rodape(empresa, referencia, carimbo):
-    """Canvas que adia o rodapé até o fim do documento para conhecer o total de páginas."""
+def _canvas_com_rodape(empresa, referencia, carimbo, metadados_data):
+    """Canvas que adia o rodapé até o fim do documento para conhecer o total de
+    páginas. Os metadados de criação/modificação do arquivo usam o mesmo instante
+    do carimbo (em vez do relógio local do servidor, que o ReportLab usaria)."""
     class _CanvasNexo(Canvas):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
+            self.setDateFormatter(lambda *_: metadados_data)
             self._paginas_pendentes = []
 
         def showPage(self):
@@ -821,7 +835,8 @@ def gerar_pdf_analise(analise, semaforos, abc_top, *, gerado_em=None) -> bytes:
     `gerado_em` (opcional, com fuso) fixa o instante da geração; sem ele, o
     relógio é lido agora — cada chamada recebe o horário da própria exportação.
     """
-    geracao = formatar_data_hora(instante_de_geracao(gerado_em))
+    instante = instante_de_geracao(gerado_em)
+    geracao = formatar_data_hora(instante)
     buf = BytesIO()
     doc = BaseDocTemplate(
         buf, pagesize=A4,
@@ -891,5 +906,5 @@ def gerar_pdf_analise(analise, semaforos, abc_top, *, gerado_em=None) -> bytes:
         f"Documento gerado pelo portal NEXO em {geracao} (horário de Brasília).", est["fechamento"])
     _fechar_documento(elems, fechamento, largura)
 
-    doc.build(elems, canvasmaker=_canvas_com_rodape(nome_empresa or "", ref, geracao))
+    doc.build(elems, canvasmaker=_canvas_com_rodape(nome_empresa or "", ref, geracao, data_pdf(instante)))
     return buf.getvalue()

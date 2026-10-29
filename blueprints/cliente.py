@@ -46,7 +46,7 @@ from models import (
     ChamadoSuporte, MensagemSuporte, GuiaTopico,
 )
 from contract_policy import (
-    filtrar_analises_consultaveis, obter_situacao_contratual, pode_consultar_analise,
+    agora, filtrar_analises_consultaveis, obter_situacao_contratual, pode_consultar_analise,
     pode_enviar_relatorio, pode_exportar_pdf,
 )
 from insights import gerar_semaforos
@@ -335,7 +335,9 @@ def analise_pdf(id_analise):
         return _acesso_restrito("Exportação encerrada", MENSAGEM_PDF_ENCERRADO)
 
     semaforos = gerar_semaforos(analise.indicador, analise.curva_abc) if analise.indicador else []
-    pdf_bytes = gerar_pdf_analise(analise, semaforos, analise.curva_abc)
+    # Relógio único da requisição (o mesmo instante que autorizou a exportação):
+    # cada pedido é uma nova leitura, convertida para Brasília no gerador.
+    pdf_bytes = gerar_pdf_analise(analise, semaforos, analise.curva_abc, gerado_em=agora())
     nome = f"analise_nexo_{analise.ano_referencia}{analise.mes_referencia:02d}_{analise.id_analise}.pdf"
     return Response(
         pdf_bytes, mimetype="application/pdf",
