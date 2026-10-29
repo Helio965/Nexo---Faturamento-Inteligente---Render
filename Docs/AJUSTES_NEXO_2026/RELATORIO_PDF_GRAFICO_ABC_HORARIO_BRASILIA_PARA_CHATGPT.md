@@ -66,6 +66,7 @@ Todas em `pdf_export.py`. Nenhuma usa margem artificial para esconder o defeito:
    - **(#36)** Na devolutiva, um primeiro parágrafo de até 8 linhas viaja inteiro com "Devolutiva do consultor" e "Resumo executivo" (ou com "Conclusão estratégica"). Um parágrafo mais longo começa logo abaixo dos títulos: um `CondPageBreak` garante espaço para os títulos e três linhas, e o resto quebra entre páginas sem linhas viúvas ou órfãs. Antes, ele deixava até 59% de uma página em branco.
    - **(#36)** O espaço entre seções virou `spaceBefore` dos títulos, que o quadro ignora no topo de uma página. Antes, um espaçador de 7 mm descia o conteúdo da página seguinte.
    - **(#36)** A frase final "Documento gerado pelo portal NEXO…" viaja com as duas últimas linhas do último parágrafo. Antes, ficava sozinha numa página nova em cerca de 3% das combinações.
+   - **(#36, `2774819`)** Quando o último bloco já é indivisível, a frase final entra **no mesmo** bloco, sem aninhar um `KeepTogether` dentro de outro. Isso vale para a conclusão de um parágrafo de até 8 linhas (o formato que a IA produz), para o último cartão (sem devolutiva), para o gráfico e para "Sem texto registrado". No ReportLab, um `KeepTogether` interno mede 0xffffff de altura, então o externo sempre forçava uma quebra de página. O fim do documento ia sozinho para uma página nova e a anterior ficava com metade ou mais em branco (documento de referência com conclusão de um parágrafo: 3 páginas em vez de 2). Esse defeito foi introduzido no próprio #36 (`9ed1711`), nunca chegou à `main` e foi apontado pela frente de requisitos (seção G.7).
    - Nada força o documento a caber em uma ou duas páginas.
 5. **Título do documento.** Estilo próprio (16/20 pt) com 4 pt de espaço antes da linha da empresa, o que acaba com a sobreposição.
 6. **Indicadores (`_kpis_flowable`).** Três colunas iguais. O valor reduz o corpo (de 13 pt até no mínimo 8 pt) para caber inteiro numa linha da célula.
@@ -207,9 +208,9 @@ Revisão independente desta parte: 200.204 instantes de 1985 a 2035, incluindo �
 
 **6. Validação.**
 
-- **Testes:** os 18 do item 10.
+- **Testes:** os 19 do item 10.
 - **Ensaio:** o do item 1.
-- **PDF final:** gerado com o relógio real e o processo em UTC (`horario/horario_da_geracao_final.txt`). Com o relógio em 14:09:50 UTC, o PDF traz "Gerado em 29/10/2026 às 11:09 (horário de Brasília)" no rodapé das 2 páginas e na frase final. Os metadados são `CreationDate`/`ModDate` = `D:20261029110950-03'00'`.
+- **PDF final:** gerado pelo código final (`dbacfa3`) com o relógio real e o processo em UTC (`horario/horario_da_geracao_final.txt`). Com o relógio em 15:23:45 UTC, o PDF traz "Gerado em 29/10/2026 às 12:23 (horário de Brasília)" no rodapé das 2 páginas e na frase final. Os metadados são `CreationDate`/`ModDate` = `D:20261029122345-03'00'`.
 
 **7. Novo carimbo a cada exportação.** O instante é lido dentro de cada pedido: nada é calculado na importação do módulo nem guardado entre pedidos. O PDF continua sendo gerado em memória a cada pedido, sem cache no servidor.
 
@@ -231,7 +232,7 @@ Teste `test_05_periodo_financeiro_e_valores_nao_mudam_com_o_horario`:
 - O documento mantém "Período 01/06/2026 – 30/06/2026" e "Referência 06/2026".
 - Fora o carimbo, o texto é idêntico ao de outra exportação, e os objetos de entrada não mudam.
 
-**10. Testes de horário (`tests/test_pdf_export_horario.py`, 18).**
+**10. Testes de horário (`tests/test_pdf_export_horario.py`, 19).**
 
 | Pedido | Teste |
 |---|---|
@@ -242,7 +243,7 @@ Teste `test_05_periodo_financeiro_e_valores_nao_mudam_com_o_horario`:
 | Período financeiro inalterado | `HorarioNoDocumentoTests.test_05…` |
 | Horário no texto do PDF | `…test_06…` (rodapé de cada página num documento com 3+ páginas, com uma única leitura do relógio) |
 | Datas históricas e horário de verão | `…test_07…`: 15/01/2019 15:00 UTC → 13:00 (UTC−2); início do verão (04/11/2018 02:59 → 03/11 23:59 e 03:00 → 04/11 01:00); fim do verão (17/02/2019 01:59 → 16/02 23:59 e 02:00 → 16/02 23:00, hora repetida); verão abolido (03/11/2019 03:00 → 00:00); 2019 e 2026 → UTC−3 |
-| Extras | Instante sem fuso recusado; instantes em outros fusos convertidos; zeros à esquerda; base de fusos do pacote `tzdata`; nenhum deslocamento fixo no código-fonte; **(#36)** metadados do arquivo com o mesmo instante, em três fusos de processo e numa data de horário de verão; formatação numa localidade ASCII (subprocesso); rota com o relógio da requisição injetado via `NEXO_RELOGIO` |
+| Extras | Instante sem fuso recusado; instantes em outros fusos convertidos; zeros à esquerda; base de fusos do pacote `tzdata`; nenhum deslocamento fixo no código-fonte; **(#36)** metadados do arquivo com o mesmo instante, em três fusos de processo e numa data de horário de verão; formatação numa localidade ASCII (subprocesso); rota com o relógio da requisição injetado via `NEXO_RELOGIO`; gerar o PDF não altera `TZ`, `time.tzname`, `time.timezone` nem `time.altzone` do processo, e o gerador não toca em `os.environ` nem em `os.putenv` (o pedido proíbe alterar o relógio do servidor) |
 
 ## G. Testes
 
@@ -252,11 +253,20 @@ Todos os testes rodaram em cópias descartáveis do código, com o mesmo ambient
 
 | Módulo | Testes | Situação |
 |---|---|---|
-| `tests/test_pdf_export_layout.py` (novo) | 38 | Geometria lida do PDF real com `pdftotext -bbox-layout`, estrutura dos flowables, cálculo do gráfico. |
-| `tests/test_pdf_export_horario.py` (novo) | 18 | Seção F, item 10. |
+| `tests/test_pdf_export_layout.py` (novo) | 44 | Geometria lida do PDF real com `pdftotext -bbox-layout`, estrutura dos flowables, cálculo do gráfico, varreduras finas de paginação. |
+| `tests/test_pdf_export_horario.py` (novo) | 19 | Seção F, item 10. |
 | `tests/test_pdf_export_security.py` (existente, 20 → 22) | 22 | Os 20 testes originais continuam e entraram 2 novos (escape na legenda e no rodapé). |
 
-`python -B -m unittest tests.test_pdf_export_layout tests.test_pdf_export_horario tests.test_pdf_export_security -v` → **`Ran 78 tests … OK`**, sem nenhum teste ignorado (o `pdftotext` está instalado aqui e no CI).
+`python -B -m unittest tests.test_pdf_export_layout tests.test_pdf_export_horario tests.test_pdf_export_security -v` → **`Ran 85 tests … OK`**, sem nenhum teste ignorado (o `pdftotext` está instalado aqui e no CI; log em `testes/14_modulos_pdf_85_testes_em_dbacfa3.log`).
+
+Auxiliares de `tests/pdf_layout_support.py` usados pelas verificações de página:
+
+- `titulo_isolado`: título no fim do corpo da página. O subtítulo do gráfico não conta como conteúdo.
+- `pagina_sem_conteudo`: página só com títulos, o subtítulo do gráfico e/ou a frase final.
+- `lacunas_evitaveis`: o começo da página seguinte, até o próximo título de seção, cabia no espaço livre da anterior e mesmo assim foi empurrado.
+- `grafico_partido`: o título do gráfico numa página sem a nota que fecha o bloco.
+- `linhas_visuais`: linhas de tabela e de legenda reconstruídas pela posição das palavras na página, sem depender da ordem de leitura do `pdftotext`.
+- `problemas_de_geometria`: texto fora das margens ou da página e sobreposição.
 
 **Os 20 itens pedidos para `tests/test_pdf_export_layout.py`:**
 
@@ -265,18 +275,18 @@ Todos os testes rodaram em cópias descartáveis do código, com o mesmo ambient
 | 1 | Cabeçalho completo | `test_01_cabecalho_completo_dentro_da_pagina`, `test_barra_topo_declara_o_proprio_tamanho` |
 | 2 | Indicadores financeiros | `test_02_indicadores_financeiros` |
 | 3 | Valores grandes | `test_03_valores_grandes_cabem_inteiros_nas_celulas` |
-| 4 | Curva ABC | `test_04_curva_abc_preservada`, `test_tabela_abc_e_quadro_de_indicadores_ocupam_a_largura_util` |
+| 4 | Curva ABC | `test_04_curva_abc_preservada` (linhas na ordem, pela posição na página), `test_tabela_abc_e_quadro_de_indicadores_ocupam_a_largura_util` (inclui o cabeçalho roxo com texto branco) |
 | 5 | Nomes longos | `test_05_nomes_longos_quebram_sem_invadir_a_coluna_da_classe`, `test_textos_gigantes_nao_impedem_a_exportacao`, `test_legenda_tem_altura_limitada` |
-| 6 | Gráfico de pizza | `test_06_grafico_abaixo_da_tabela_e_antes_da_sintese`, `test_06_grafico_de_pizza_vetorial_com_os_mesmos_dados_da_tabela`, `test_fatia_unica_mostra_100_por_cento_no_centro`, `test_secao_do_grafico_nao_se_parte_e_titulo_viaja_com_o_grafico` |
-| 7 | Legenda | `test_07_legenda_e_percentuais_no_documento`, `test_07_legenda_com_cor_nome_classe_faturamento_e_percentual` |
+| 6 | Gráfico de pizza | `test_06_grafico_abaixo_da_tabela_e_antes_da_sintese`, `test_06_grafico_de_pizza_vetorial_com_os_mesmos_dados_da_tabela` (o gráfico que o documento desenha: 2D, cores da rampa na ordem da tabela e iguais às da legenda), `test_paleta_do_grafico_na_identidade_nexo`, `test_fatia_unica_mostra_100_por_cento_no_centro`, `test_secao_do_grafico_nao_se_parte_e_titulo_viaja_com_o_grafico` (inclui o desenho dentro da própria coluna) |
+| 7 | Legenda | `test_07_legenda_e_percentuais_no_documento`, `test_07_legenda_com_cor_nome_classe_faturamento_e_percentual` (corpo mínimo de 8 pt em todas as células) |
 | 8 | Percentuais individuais | `test_08_percentuais_individuais_da_referencia` |
-| 9 | Outros produtos | `test_09_outros_produtos_so_quando_ha_faturamento_fora_do_top5`, `test_devolucoes_fora_da_tabela_sao_explicitadas`, `test_inconsistencias_tratadas_explicitamente`, `test_inconsistencia_soma_maior_que_o_total_e_explicita`, `test_secao_sem_faturamento_positivo_explica_o_motivo` |
+| 9 | Outros produtos | `test_09_outros_produtos_so_quando_ha_faturamento_fora_do_top5`, `test_notas_do_grafico_so_quando_se_aplicam` (explicação de "Outros produtos" e do arredondamento só quando se aplicam), `test_devolucoes_fora_da_tabela_sao_explicitadas`, `test_inconsistencias_tratadas_explicitamente`, `test_inconsistencia_soma_maior_que_o_total_e_explicita`, `test_secao_sem_faturamento_positivo_explica_o_motivo` |
 | 10 | Síntese executiva | `test_10_sintese_executiva_sem_5w2h_e_com_todos_os_cartoes` |
 | 11 | Ausência de "(5W2H)" | `test_11_titulo_da_sintese_sem_5w2h` (e `test_10`) |
-| 12 | Devolutiva | `test_12_devolutiva_titulos_juntos_dos_textos_e_estrutura_preservada`, `test_primeiro_paragrafo_longo_comeca_na_mesma_pagina` |
+| 12 | Devolutiva | `test_12_devolutiva_titulos_juntos_dos_textos_e_estrutura_preservada`, `test_primeiro_paragrafo_longo_comeca_na_mesma_pagina`, `test_conclusao_curta_fica_na_pagina_do_resumo` (texto determinístico de `ai_devolutiva` e conclusões de 1, 4 e 9 frases), `test_titulos_da_devolutiva_nunca_isolados_em_qualquer_altura` (65 documentos) |
 | 13 | Rodapé | `test_13_rodape_em_todas_as_paginas`, `test_rodape_mantem_a_referencia_com_razao_social_longa` |
-| 14 | Paginação | `test_14_paginacao_sem_titulo_isolado_em_varias_combinacoes` (18 combinações), `test_frase_final_e_titulos_nunca_ficam_sozinhos_numa_pagina` (29 casos), `test_espaco_entre_secoes_some_no_topo_da_pagina` |
-| 15 | Documentos longos | `test_15_documento_longo_preserva_todo_o_texto_em_ordem` |
+| 14 | Paginação | `test_14_paginacao_sem_titulo_isolado_em_varias_combinacoes` (18 combinações), `test_frase_final_e_titulos_nunca_ficam_sozinhos_numa_pagina` (29 casos), `test_espaco_entre_secoes_some_no_topo_da_pagina`, `test_ultimo_bloco_nao_muda_de_pagina_com_espaco_sobrando`, `test_secoes_do_inicio_nunca_isoladas_no_pe_da_primeira_pagina` (75 documentos). Todos conferem título isolado, página sem conteúdo, lacuna evitável e gráfico partido. |
+| 15 | Documentos longos | `test_15_documento_longo_preserva_todo_o_texto_em_ordem`, `test_textos_gigantes_nao_impedem_a_exportacao` (30 mil caracteres de resumo e 8,8 mil de conclusão chegam inteiros) |
 | 16 | Caracteres especiais | `test_16_caracteres_especiais_preservados` |
 | 17 | Data de geração | `test_17_data_de_geracao_no_fim_do_documento` |
 | 18 | Horário de Brasília | `test_18_horario_de_brasilia_no_rodape_e_na_frase_final` (detalhes de fuso em `test_pdf_export_horario.py`) |
@@ -289,6 +299,7 @@ Todos os testes rodaram em cópias descartáveis do código, com o mesmo ambient
 - "Resumo executivo." e "Conclusão estratégica." perderam o ponto final, porque agora são subtítulos e não prefixos do parágrafo.
 - "Página 1" passou a "Página 1 de " (mais forte).
 - Entrou "Distribuição do faturamento por produto" na lista de componentes obrigatórios.
+- **(#36)** O teste de escape por campo registrava os textos trocando `pdf_export.Paragraph` por um `MagicMock`. Agora usa uma subclasse de `Paragraph` que registra os mesmos textos, com as mesmas verificações. Com isso saiu do gerador o apelido `_ClasseParagraph`, que só existia para o `isinstance` funcionar sob o `MagicMock`.
 
 Nenhum teste existente foi removido, ignorado ou enfraquecido.
 
@@ -311,6 +322,22 @@ Naquela execução, o teste de formatação também apontava "R$ 1,005 → 1,00"
 
 Na revisão independente, cada mutação dos testes de escape (escape duplo na legenda, escape no canvas do rodapé) foi pega exatamente pelo teste correspondente.
 
+**(#36) Correção da frase final.** Os testes novos e as verificações ampliadas rodaram contra o gerador `4356a4a`, anterior à correção `2774819`: **11 falhas** (`testes/08_testes_novos_contra_4356a4a_11_falhas.log`). Com a correção: 0.
+
+**(#36) Teste de mutação.** A frente de qualidade dos testes montou 58 mutações do gerador e da rota. Entre elas:
+
+- tirar a fatia "Outros" ou as notas do gráfico;
+- trocar títulos;
+- pizza 3D, cores trocadas, paleta fora da identidade, pizza maior que a coluna;
+- tirar `KeepTogether`;
+- relógio ingênuo, −3 h fixo, carimbo em cache, metadados no relógio local;
+- rota sem checagem de empresa, rota sem `pode_exportar_pdf`, PDF reaproveitado.
+
+Cada mutação foi aplicada sozinha sobre o código final, numa cópia descartável, e os três módulos do PDF rodaram contra o mutante.
+
+- **Resultado: 58 de 58 mutantes falham em pelo menos um teste** (`testes/12_mutacao_58_mutantes.txt`).
+- Antes das mudanças desta etapa, 18 passavam pela suíte: os 16 apontados pela revisão e as duas notas do gráfico (explicação de "Outros produtos" e de arredondamento), que a revisão não listou. Cada um ganhou um teste.
+
 ### G.3 Estados intermediários dos commits
 
 Cada commit do #35 foi conferido isoladamente: o arquivo compila e o PDF de referência sai sem nenhum problema de geometria.
@@ -323,7 +350,7 @@ Cada commit do #35 foi conferido isoladamente: o arquivo compila e o PDF de refe
 | `bd80d8b` | 20/20 OK | — |
 | `3fad8d3`, `3b0bdfd` | 20/20 OK | código final do #35: módulos do PDF 63/63 OK; suíte completa na seção G.4 |
 
-No #36, o estado entre os dois commits de correção (`9ed1711`) foi testado com os módulos do PDF, `test_deploy` e `test_contratos_portal`: 138 testes, OK.
+No #36, o estado entre os dois commits de correção (`9ed1711`) foi testado com os módulos do PDF, `test_deploy` e `test_contratos_portal`: 138 testes, OK. Depois, cada commit novo foi conferido isoladamente com os módulos do PDF: `2774819`, 80 testes, OK; `ede054f`, 84 testes, OK, ainda com o apelido de `Paragraph` no gerador; `dbacfa3`, 85 testes, OK.
 
 ### G.4 Suíte oficial completa
 
@@ -332,7 +359,8 @@ No #36, o estado entre os dois commits de correção (`9ed1711`) foi testado com
 | Estado | Resultado |
 |---|---|
 | `3b0bdfd` (cabeça do #35) | **882 testes, 2 falhas**: os dois testes de aviso, por causa do logger desativado pelo `fileConfig()` do Alembic (seção I). Corrigido em `4aa3316`. |
-| `811f2e5` (#36) | Em execução no momento deste commit (mais de 460 testes concluídos, nenhuma falha). O resultado final é registrado no PR #36 e no pacote. |
+| `4356a4a` (#36, antes da correção da frase final) | **895 testes, OK**, em 1.485,8 s (`testes/11_suite_completa_4356a4a_895_testes.log`). |
+| `dbacfa3` (#36, código final) | **904 testes, OK**, em 1.401,1 s (`testes/15_suite_completa_dbacfa3_904_testes.log`). Inclui o teste do Pareto, que passou nesta execução. |
 
 Além disso:
 
@@ -341,11 +369,26 @@ Além disso:
 
 ### G.5 Homologação visual (PyMuPDF e `pdftotext`)
 
-Inspeção automática de cada página: texto fora da página ou na borda superior, sobreposição entre linhas, título no fim da página, página só com títulos e/ou a frase final, desenho fora da página. Os resultados:
+A inspeção automática de cada página (PyMuPDF) verifica:
 
-| Varredura | Gerador antigo (`7bd383b`) | Gerador do #35 (`c6f1299`) | Gerador final (`811f2e5`) |
-|---|---|---|---|
-| 13 variantes extremas + 72 de títulos isolados + 180 de paginação = 265 documentos | **265/265 com problema**: 530 textos fora da página, 530 na borda superior, 537 sobreposições, 97 títulos isolados, 265 desenhos fora da página | 0/265 | **0/265**, já com o detector ampliado (página sem conteúdo) |
+- texto fora da página ou na borda superior;
+- sobreposição entre linhas;
+- título no fim da página (título e subtítulo do gráfico também contam);
+- página só com títulos e/ou a frase final;
+- **(#36)** bloco do gráfico partido;
+- **(#36)** lacuna evitável: o começo da página seguinte cabia no espaço livre da anterior e foi empurrado;
+- desenho fora da página.
+
+A mesma varredura de 265 documentos (13 variantes extremas, 72 de títulos isolados e 180 de paginação), **com o detector final**, nas quatro versões do gerador:
+
+| Versão do gerador | Documentos com problema | Problemas encontrados |
+|---|---|---|
+| `main` antes do #35 (`7bd383b`) | **265/265** | 530 textos fora da página, 530 na borda superior, 537 sobreposições, 97 títulos isolados, 265 desenhos fora da página, 5 páginas sem conteúdo |
+| #35, hoje na `main` (`c6f1299`) | **15/265** | 15 páginas só com título e/ou a frase final |
+| cabeça anterior do #36 (`4356a4a`) | **106/265** | 106 lacunas evitáveis: a conclusão curta ou o último bloco empurrado para uma página nova (seção C, item 4) |
+| **final do #36 (`dbacfa3`)** | **0/265** | — |
+
+As rodadas anteriores usavam detectores sem as verificações de lacuna evitável e de gráfico partido; a rodada do #35 também não verificava página sem conteúdo. Por isso, a versão anterior deste relatório mostrava 0/265 para o #35 e para o `811f2e5`. Os resumos estão em `inspecao/varredura_final_4_versoes/`.
 
 As 13 variantes extremas são: referência, valores grandes, nomes longos, devolutiva longa, caracteres especiais, soma maior que o total, um produto, sem "Outros", sem indicador, sem relatório, sem curva, produto zerado e muitos cartões.
 
@@ -359,7 +402,23 @@ Além da varredura, as páginas foram renderizadas e **olhadas** (não só gerad
 | 108 (PR #35, pronto) | `3b0bdfd` | `security-postgresql` ok; `security-sqlite-browser` **falhou**: os 2 testes de aviso (seção I). |
 | 109 (push na `main`) | `c6f1299` | O mesmo: 2 falhas. |
 | 110 (PR #36) | `4aa3316` | Os 2 testes de aviso passaram. A única falha foi `test_overflow_navegador…test_pareto_acompanha_o_redimensionamento` ("360px: Pareto não desenhado"), um teste de navegador do gráfico de Pareto do dashboard. A diferença do PR não toca o dashboard, e o mesmo teste passou nas execuções 108 e 109 e na suíte local completa. |
-| 111 (PR #36) | `811f2e5` | `security-postgresql` ok. O job de navegador estava em execução quando o commit deste relatório chegou, e a execução seguinte, sobre esse commit, o substitui. |
+| 111 (PR #36) | `811f2e5` | Cancelada pelo workflow quando chegou o commit seguinte. |
+| 112 (PR #36) | `4356a4a` | **Sucesso nos dois jobs**, inclusive o teste do Pareto. |
+| 113 (PR #36) | `09fc3ca` | `security-postgresql` ok. `security-sqlite-browser`: 903 testes, 1 falha, de novo o teste do Pareto ("360px: Pareto não desenhado"). Todos os testes do PDF passaram. A causa foi reproduzida (abaixo). |
+| 114 (PR #36) | `dbacfa3` (código final) | **Sucesso nos dois jobs**: `security-sqlite-browser` com 904 testes, OK, e os ensaios PostgreSQL; `security-postgresql` ok. |
+
+**Causa do teste instável do Pareto (fora do PDF, anterior a este trabalho).**
+
+1. Os dados dos testes de navegador publicam todas as análises com a mesma `data_conclusao` (05/02/2026 12:00, em `tests/contratos_support.py`).
+2. O dashboard escolhe a análise "mais recente" por `data_conclusao` e desempata por `data_criacao`. Essa coluna vem do `CURRENT_TIMESTAMP` do SQLite, com resolução de 1 segundo.
+3. Quando a preparação do teste cruza a virada de um segundo entre a criação da análise principal (a única com Curva ABC) e a das demais, uma análise sem Curva ABC passa a ser a "mais recente". O dashboard então não tem gráfico de Pareto algum.
+
+Reprodução determinística (`testes/13_reproducao_pareto.log`):
+
+- no mesmo segundo, o Pareto aparece;
+- com a virada de um segundo forçada, ele não aparece.
+
+A correção proposta tem quatro linhas, só nos dados do teste (`tests/test_overflow_navegador.py`): a análise principal recebe a `data_conclusao` mais recente. Com ela, o Pareto aparece nos dois casos. Ela não foi aplicada neste PR, por estar fora do escopo do PDF; está descrita no comentário do PR #36.
 
 ### G.7 Revisão independente (seis frentes)
 
@@ -390,8 +449,23 @@ Cada achado aplicável foi **reproduzido** antes da correção e ganhou um teste
 | Fuso | `notifications.py` (sino em tempo real) e a data de publicação no histórico ainda usam horário do servidor (UTC) | detalhe, anterior a este trabalho | **Não alterado** (fora do fluxo do PDF); registrado na seção J. |
 | Segurança | O escape único nos dois lugares novos (legenda, rodapé) não estava fixado por teste | menor | Corrigido: 2 testes novos, validados por mutação. |
 | Segurança | `_brl` com `Decimal` levantava erro para valores ≥ 10²⁶ | detalhe | Corrigido (formatação igual à do portal). |
+| Requisitos | A frase final aninhava um `KeepTogether` em outro quando o último bloco já era indivisível. Conclusão de um parágrafo (o formato da IA), último cartão, gráfico ou "Sem texto registrado" iam sozinhos para uma página nova e a anterior ficava com metade ou mais em branco. Regressão do próprio #36 (`9ed1711`), nunca integrada à `main`. | bloqueante | Corrigido (`2774819`): a frase final entra no mesmo bloco (seção C, item 4). Na varredura de 265 documentos: 106 com o defeito no `4356a4a`, 0 depois. Testes novos: 11 falhas contra o código anterior, 0 depois (seção G.2). |
+| Requisitos | Emoji no texto do consultor saem como ■ (fonte Helvetica padrão do PDF) | detalhe, anterior a este trabalho (o gerador de `7bd383b` faz o mesmo) | **Não alterado**: exige embutir uma fonte TTF. Registrado na seção J. |
+| Qualidade dos testes | 16 mutantes do gerador passavam pela suíte: bloco do gráfico partido (título e subtítulo no pé da página), pizza 3D, cores da pizza diferentes das da legenda, paleta fora da identidade, gráfico em outra ordem, cabeçalho da ABC sem roxo, `KeepTogether` removido da ABC, dos indicadores ou da devolutiva, texto do consultor cortado em 20 mil caracteres, legenda em 6 ou 7 pt, fuso global do processo alterado, pizza maior que a coluna ou deslocada sobre a legenda | maior (4), menor (3), detalhe (1) | Corrigido (`ede054f`): um teste para cada caso (seção G.1, itens 4 a 7, 12, 14, 15 e 18). A verificação por mutação está na seção G.2. |
+| Qualidade dos testes | Linhas de tabela e de legenda conferidas na ordem de leitura do `pdftotext`, que muda com o layout | menor | Corrigido: `linhas_visuais` reconstrói as linhas pela posição das palavras. |
+| Qualidade dos testes | `assertNoLogs` que não podia falhar na suíte completa (logger desativado pelo Alembic) | menor | Corrigido: o teste reativa o logger. |
+| Qualidade dos testes | Testes trocavam `Paragraph` por `MagicMock`, o que obrigou um apelido no código de produção | detalhe | Corrigido: subclasse que registra os textos; apelido removido (`09fc3ca`). |
+| Qualidade dos testes | O teste do espaço entre seções passaria sem verificar nada se o documento tivesse uma página só | detalhe | Corrigido: exige uma segunda página aberta por título de seção. |
 
-As frentes de qualidade dos testes e de requisitos ainda estavam em andamento quando este relatório foi versionado; os achados delas ficam no pacote (`revisao_independente/`) e, se exigirem mudança, num commit seguinte do PR #36.
+**Verificação adversarial.** As seis frentes somaram 39 achados: 1 bloqueante, 5 maiores, 15 menores e 18 detalhes. Cada achado foi reexaminado por um verificador independente, instruído a tentar refutá-lo e a dizer se a correção já estava no código atual. Resultado:
+
+- **38 confirmados e 1 refutado.** O refutado é o erro de localidade com o "às" no `strftime`: o verificador não o reproduziu. A mudança feita para ele é inofensiva e foi mantida.
+- Os verificadores conferiram cada correção no código da cabeça do PR. Nos 12 achados de qualidade dos testes e no bloqueante de requisitos, confirmaram que a correção está em `ede054f` e `2774819`.
+- Restaram só observações sem efeito prático:
+  - com devoluções, "Outros produtos" continua com o valor líquido, o que o aviso explica;
+  - valores abaixo de um centavo podem dar participação acima de 100% (seção J, item 9).
+
+Os textos completos dos revisores e dos verificadores estão em `revisao_independente/achados_brutos.md`.
 
 Sem achado em: autorização e ordem das verificações na rota; escape de todos os demais textos; ausência de links, imagens e recursos externos; cache (`no-store` é suficiente: sem Flask-Caching, sem *service worker*, sem `ETag`); conversão de fuso em 200.204 instantes; integridade das entradas (cópia profunda antes e depois).
 
@@ -405,17 +479,17 @@ Estrutura:
 |---|---|
 | `RELATORIO_PDF_GRAFICO_ABC_HORARIO_BRASILIA_PARA_CHATGPT.md` | Este relatório. |
 | `LEIA-ME.md` | Índice do pacote e como reproduzir. |
-| `pdf/analise_nexo_202606_5_CORRIGIDA_COMPLETA.pdf` | PDF final, gerado pelo código do #36 com o relógio real e o processo em UTC. **Dados sintéticos** (empresa "Empresa Demonstração — DADOS SINTÉTICOS", título "(dados sintéticos)"). |
+| `pdf/analise_nexo_202606_5_CORRIGIDA_COMPLETA.pdf` | PDF final, gerado pelo código final do #36 (`dbacfa3`) com o relógio real e o processo em UTC. **Dados sintéticos** (empresa "Empresa Demonstração — DADOS SINTÉTICOS", título "(dados sintéticos)"). |
 | `pdf/analise_nexo_202606_5_ANTES_reproducao.pdf` | O mesmo conteúdo gerado pelo código da `main` `7bd383b` (reprodução dos defeitos). |
 | `capturas/01_*` a `06_*` | Cabeçalho e indicadores (antes e depois), tabela da Curva ABC, gráfico de pizza com legenda, síntese executiva, devolutiva, data de geração (frase final e rodapé). |
 | `capturas/07_*`, `08_*` | Páginas completas depois e antes. |
 | `capturas/09_*` | Comparativo lado a lado, antes × depois, por página. |
-| `capturas/casos/` | Casos de borda (PDF e páginas renderizadas): nomes longos, devoluções fora da tabela, sem faturamento positivo, razão social longa, conclusão longa, soma maior que o total. |
+| `capturas/casos/` | Casos de borda (PDF e páginas renderizadas): nomes longos, devoluções fora da tabela, sem faturamento positivo, razão social longa, conclusão longa, soma maior que o total e conclusão de um parágrafo (caso 7: antes, com `4356a4a`, 3 páginas e a conclusão sozinha; depois, 2 páginas). |
 | `horario/` | Ensaio antes × depois em 5 fusos de processo; horário real da geração do PDF final; script do ensaio. |
-| `inspecao/` | Inspeções antes e depois e resumos das varreduras de 265 documentos (antigo, #35, final). |
-| `testes/` | Logs: módulos do PDF, validade contra o gerador antigo, estados intermediários, suítes completas, subconjunto de rota e contratos. |
+| `inspecao/` | Inspeções antes e depois. `varredura_final_4_versoes/`: resumos da varredura de 265 documentos com o detector final, em quatro versões do gerador. As rodadas anteriores, com o detector da época, ficam em `varredura_final/` e `varredura_pos_merge_35/`. |
+| `testes/` | Logs: módulos do PDF, validade contra o gerador antigo e contra `4356a4a`, estados intermediários, suítes completas, subconjunto de rota e contratos, teste de mutação (58 mutantes) e reprodução do teste instável do Pareto. |
 | `alteracoes/` | Lista de commits, estatística, diff completo desde `7bd383b` e arquivos alterados. |
-| `revisao_independente/` | Achados das seis frentes, com reprodução e destino. |
+| `revisao_independente/` | Achados das seis frentes, com reprodução, e os vereditos da verificação adversarial de cada achado. O destino de cada um está na seção G.7. |
 | `scripts/` | Geração dos dados sintéticos, do PDF final, das capturas, das variantes, da inspeção e dos estados intermediários dos commits. |
 
 ## I. GitHub
@@ -424,7 +498,7 @@ Estrutura:
 |---|---|
 | Branch | `claude/awesome-pascal-0ho42m` (sem force push; todos os pushes foram *fast-forward*) |
 | PR #35 | [Helio965/Nexo---Faturamento-Inteligente---Render#35](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/35). Seis commits, na ordem sugerida: `94af8e9 fix(pdf): corrigir cabecalho e paginacao`, `06784f7 feat(pdf): adicionar grafico de pizza da Curva ABC`, `80ec8c5 fix(pdf): melhorar legenda e apresentacao dos produtos`, `bd80d8b refactor(pdf): remover 5W2H do titulo da sintese`, `3fad8d3 fix(pdf): padronizar horario de geracao para Brasilia`, `3b0bdfd test(pdf): validar fuso horario e integridade dos documentos`. Aberto como rascunho; marcado como pronto e integrado pelo proprietário (`c6f1299`, 13:37 UTC). |
-| PR #36 | [Helio965/Nexo---Faturamento-Inteligente---Render#36](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/36) (rascunho): `4aa3316 test(pdf): reativar o logger do gerador nos testes de aviso`, `9ed1711 fix(pdf): correcoes da revisao independente (paginacao, legenda, valores e avisos)`, `811f2e5 fix(pdf): metadados, localidade e relogio unico no horario de geracao` e o commit `docs(pdf): registrar auditoria e evidencias` com este relatório. |
+| PR #36 | [Helio965/Nexo---Faturamento-Inteligente---Render#36](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/36) (rascunho), na ordem: `4aa3316 test(pdf): reativar o logger do gerador nos testes de aviso`, `9ed1711 fix(pdf): correcoes da revisao independente (paginacao, legenda, valores e avisos)`, `811f2e5 fix(pdf): metadados, localidade e relogio unico no horario de geracao`, `c7ef8c4 test(pdf): itens 18 e 19 explicitos no teste de layout`, `4356a4a docs(pdf): registrar auditoria e evidencias`, `2774819 fix(pdf): frase final sem KeepTogether aninhado`, `ede054f test(pdf): fortalecer os testes do PDF (revisao da qualidade dos testes)`, `09fc3ca refactor(pdf): remover o apelido de Paragraph criado para os testes`, `dbacfa3 test(pdf): notas do grafico so quando se aplicam` e o commit `docs(pdf): …` com esta versão do relatório. |
 | Por que a `main` ficou vermelha depois do #35 | Na suíte completa, os testes que aplicam as migrations passam por `migrations/env.py`. Ali, `fileConfig()` do Alembic desativa os loggers já criados (`disable_existing_loggers=True`), entre eles o `pdf_export`. Daí em diante, os dois testes que conferem o aviso com `assertLogs` falham. Isolados, passavam. O gerador não muda: o processo web (`gunicorn wsgi:app`) não executa migrations. A correção, em `4aa3316`, reativa o logger durante esses testes, como `tests/test_nexobot_saber.py` já fazia. Reprodução mínima e correção estão registradas no PR #36. |
 | Merge, deploy | **Nenhum merge feito por mim, nenhum deploy, nenhuma alteração no Render ou no Supabase.** |
 
@@ -433,15 +507,37 @@ Estrutura:
 1. **Documento de referência.** `analise_nexo_202606_5 (3).pdf` não estava disponível; a reprodução usou dados sintéticos com os mesmos valores. Depois do deploy, exportar a análise 06/2026 #5 de novo e conferir com o original.
 2. **Deploy.** O código precisa ser publicado no Render para valer em produção. O `render.yaml` versionado desliga o deploy automático (`autoDeployTrigger: 'off'`); o estado efetivo só se confirma no painel. Na publicação, o `pip install -r requirements.txt` instala o `tzdata` 2026.5, que já é a versão em uso hoje.
 3. **"Duas horas de diferença".** Com o código antigo, a diferença reproduzida é de exatamente 3 horas, com o servidor em UTC. As 2 horas relatadas não foram reproduzidas; as hipóteses estão na seção B. Depois do deploy, o horário independe do servidor.
-4. **CI.** O teste de navegador do gráfico de Pareto do dashboard (`test_pareto_acompanha_o_redimensionamento`) falhou uma vez, na execução 110 (`4aa3316`). Ele não tem relação com o PDF e passou em todas as outras execuções. Se voltar a falhar, é um teste instável do dashboard, a tratar à parte.
+4. **CI: teste do Pareto do dashboard.** `test_pareto_acompanha_o_redimensionamento` falhou nas execuções 110 (`4aa3316`) e 113 (`09fc3ca`) e passou nas demais.
+   - A causa está nos dados do teste e foi reproduzida (seção G.6): análises publicadas com a mesma `data_conclusao` e desempate por um carimbo de 1 segundo.
+   - Não tem relação com o PDF e não é defeito do produto: em produção, a `data_conclusao` de cada publicação tem o instante real.
+   - A correção proposta tem quatro linhas no módulo de testes de navegador. Até ser aplicada, o job de navegador pode falhar de forma intermitente neste e noutros PRs.
 5. **Fora do fluxo do PDF (não alterado, por escopo).**
    - O payload em tempo real das notificações (`notifications.py`, `datetime.now()` ingênuo) mostra no sino um horário 3 h à frente de Brasília.
    - A data de publicação no histórico (`templates/cliente/historico.html`) usa o valor UTC gravado, então publicações entre 21:00 e 23:59 de Brasília aparecem com o dia seguinte.
    - `contract_policy.formatar_instante` também põe "às" dentro do `strftime`.
    - O subtítulo da página web da análise ainda cita "(5W2H)" (`templates/cliente/analise.html`).
+   - O texto determinístico da devolutiva (`ai_devolutiva._gerar_fallback`, usado quando a IA não responde) escreve o percentual do produto líder com ponto decimal ("74.23% do total"). O PDF reproduz o texto exatamente como foi gravado e não o corrige.
 
-   Tudo isso pode ser corrigido na exibição, sem mexer nos dados gravados. Fica como sugestão de tarefa separada.
+   Tudo isso pode ser corrigido na exibição ou na geração do texto, sem mexer nos dados gravados. Fica como sugestão de tarefa separada.
 6. **Metadados.** "Creator" e "Subject" do PDF continuam "(unspecified)", padrão do ReportLab e igual à versão anterior. É só cosmético.
 7. **`tzdata` fixado em 2026.5.** Acompanhar as versões novas, como os demais pacotes fixados. Quando o servidor tem `/usr/share/zoneinfo`, o `zoneinfo` usa primeiro a base do sistema.
+8. **Emoji no texto do consultor.** O PDF usa a Helvetica padrão do ReportLab. Caracteres fora da codificação dela, como emoji, saem como "■"; acentos, "≥", "✓", "−", "€", "™" e "½" saem corretos. O gerador anterior (`7bd383b`) fazia o mesmo. Resolver exige embutir uma fonte TTF de cobertura ampla, mudança que vale como tarefa separada.
+9. **Casos extremos de cálculo sem efeito prático.** Com valores abaixo de um centavo (por exemplo, total de R$ 0,01 e produto de R$ 0,014), a participação pode passar de 100%. O ETL grava os valores com duas casas, então isso não ocorre com dados reais; por isso não foi alterado.
 
-**Parecer.** As correções pedidas estão implementadas e foram verificadas por teste, por inspeção automática da geometria e por inspeção visual das páginas: cabeçalho, margens, paginação, gráfico de pizza com legenda e "Outros produtos", "Síntese executiva" sem "(5W2H)", devolutiva preservada e horário de Brasília independente do servidor. O #35 já está na `main`, mas a `main` só fica com o CI verde e com as correções da revisão independente depois do #36, que deve ser integrado antes do deploy. Nada foi publicado no Render nem alterado no Supabase.
+**Parecer.** As correções pedidas estão implementadas e foram verificadas por teste, por inspeção automática da geometria e por inspeção visual das páginas:
+
+- cabeçalho, margens e paginação;
+- gráfico de pizza com legenda e "Outros produtos";
+- "Síntese executiva" sem "(5W2H)";
+- devolutiva preservada;
+- horário de Brasília independente do servidor.
+
+A revisão independente achou uma regressão do próprio #36: a conclusão curta ia sozinha para uma página nova. Ela foi corrigida em `2774819`, antes de qualquer integração. A revisão achou também doze lacunas nos testes, que foram fechadas e conferidas por mutação (58 de 58 mutantes pegos).
+
+No código final (`dbacfa3`):
+
+- a varredura de 265 documentos não aponta nenhum problema;
+- os 85 testes dos módulos do PDF passam;
+- o CI passou nos dois jobs (execução 114).
+
+O #35 já está na `main`; o #36 deve ser integrado antes do deploy. O teste instável do Pareto do dashboard não tem relação com o PDF: a causa foi reproduzida e há uma correção proposta no PR. Nada foi publicado no Render nem alterado no Supabase.
