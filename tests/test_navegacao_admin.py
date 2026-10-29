@@ -54,7 +54,13 @@ class _Sidebar:
         itens = [l for l in _links(nav.group(1)) if "nav-item" in l[1]]
         self.rotulos = [texto for _, _, texto in itens]
         self.ativos = [texto for _, classes, texto in itens if "active" in classes]
+        # SEC-002: "Sair" é um <button> de formulário POST, não mais um <a>.
         self.sair = [l for l in self.links_aside if "nav-logout" in l[1]]
+        for atributos, conteudo in re.findall(r"<button\b([^>]*)>(.*?)</button>", self.aside, re.S):
+            attrs = dict(_ATRIBUTO.findall(atributos))
+            classes = set((attrs.get("class") or "").split())
+            if "nav-logout" in classes:
+                self.sair.append(("", classes, _texto(conteudo)))
 
 
 class NavegacaoAdminSemBaseDeConhecimentoTests(DeployTestCase):

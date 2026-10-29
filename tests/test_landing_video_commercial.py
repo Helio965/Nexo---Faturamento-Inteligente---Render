@@ -79,20 +79,20 @@ class LandingVideoCommercialTests(unittest.TestCase):
 
     def center_video(self, page):
         page.locator("#nexo-demo-video").evaluate("video => video.scrollIntoView({block:'center',behavior:'instant'})")
-        page.wait_for_function("document.querySelector('#nexo-demo-frame').dataset.visibility === 'full'")
+        page.wait_for_function("() => document.querySelector('#nexo-demo-frame').dataset.visibility === 'full'")
 
     def start_by_gesture(self, page):
         self.center_video(page)
         page.locator("#nexo-demo-sound-enable").click()
-        page.wait_for_function("document.querySelector('#nexo-demo-frame').dataset.playback === 'playing'")
-        page.wait_for_function("document.querySelector('#nexo-demo-video').readyState >= 2")
+        page.wait_for_function("() => document.querySelector('#nexo-demo-frame').dataset.playback === 'playing'")
+        page.wait_for_function("() => document.querySelector('#nexo-demo-video').readyState >= 2")
 
     def allow_sound_by_gesture(self, page):
         self.start_by_gesture(page)
-        page.wait_for_function("['allowed','needs-gesture'].includes(document.querySelector('#nexo-demo-frame').dataset.audio)")
+        page.wait_for_function("() => ['allowed','needs-gesture'].includes(document.querySelector('#nexo-demo-frame').dataset.audio)")
         if page.locator("#nexo-demo-sound-enable").is_visible():
             page.locator("#nexo-demo-sound-enable").click()
-        page.wait_for_function("!document.querySelector('#nexo-demo-video').muted")
+        page.wait_for_function("() => !document.querySelector('#nexo-demo-video').muted")
         self.assertEqual(page.locator("#nexo-demo-frame").get_attribute("data-audio"), "allowed")
 
     def test_reduced_motion_waits_for_explicit_play_and_loads_actual_mp4(self):
@@ -111,9 +111,9 @@ class LandingVideoCommercialTests(unittest.TestCase):
     def test_default_motion_starts_when_near_viewport_and_keeps_playing_muted_offscreen(self):
         page = self.page(reduced_motion="no-preference")
         self.center_video(page)
-        page.wait_for_function("document.querySelector('#nexo-demo-frame').dataset.playback === 'playing'")
+        page.wait_for_function("() => document.querySelector('#nexo-demo-frame').dataset.playback === 'playing'")
         page.evaluate("window.scrollTo({top:0,behavior:'instant'})")
-        page.wait_for_function("document.querySelector('#nexo-demo-frame').dataset.visibility === 'partial'")
+        page.wait_for_function("() => document.querySelector('#nexo-demo-frame').dataset.visibility === 'partial'")
         self.assertTrue(page.locator("#nexo-demo-video").evaluate("video => video.muted && !video.paused"))
 
     def test_explicit_pause_survives_scroll_pageshow_and_visibility_events_until_keyboard_resume(self):
@@ -133,7 +133,7 @@ class LandingVideoCommercialTests(unittest.TestCase):
         self.assertEqual(pause.get_attribute("aria-label"), "Retomar demonstração")
         pause.focus()
         page.keyboard.press("Enter")
-        page.wait_for_function("!document.querySelector('#nexo-demo-video').paused")
+        page.wait_for_function("() => !document.querySelector('#nexo-demo-video').paused")
         self.assertEqual(page.locator("#nexo-demo-frame").get_attribute("data-user-paused"), "false")
 
     def test_sound_requires_full_visibility_and_explicit_mute_persists_after_scroll(self):
@@ -145,51 +145,51 @@ class LandingVideoCommercialTests(unittest.TestCase):
             const header=document.querySelector('.nexo-header').getBoundingClientRect();
             window.scrollBy({top:video.top-header.bottom+1,behavior:'instant'});
         }""")
-        page.wait_for_function("document.querySelector('#nexo-demo-frame').dataset.visibility === 'partial'")
+        page.wait_for_function("() => document.querySelector('#nexo-demo-frame').dataset.visibility === 'partial'")
         self.assertTrue(page.locator("#nexo-demo-video").evaluate("video => video.muted"))
         page.evaluate("window.scrollTo({top:0,behavior:'instant'})")
-        page.wait_for_function("document.querySelector('#nexo-demo-video').muted")
+        page.wait_for_function("() => document.querySelector('#nexo-demo-video').muted")
         self.center_video(page)
-        page.wait_for_function("!document.querySelector('#nexo-demo-video').muted")
+        page.wait_for_function("() => !document.querySelector('#nexo-demo-video').muted")
         page.locator("#nexo-demo-mute").click()
         self.assertEqual(page.locator("#nexo-demo-frame").get_attribute("data-user-muted"), "true")
         page.evaluate("window.scrollTo({top:0,behavior:'instant'})")
         self.center_video(page)
         self.assertTrue(page.locator("#nexo-demo-video").evaluate("video => video.muted && !video.paused"))
         page.locator("#nexo-demo-mute").click()
-        page.wait_for_function("!document.querySelector('#nexo-demo-video').muted")
+        page.wait_for_function("() => !document.querySelector('#nexo-demo-video').muted")
         self.assertEqual(page.locator("#nexo-demo-frame").get_attribute("data-user-muted"), "false")
 
     def test_loop_restarts_actual_media_without_ending_playback(self):
         page = self.page()
         self.start_by_gesture(page)
         page.locator("#nexo-demo-video").evaluate("video => { video.currentTime = video.duration - 0.25; }")
-        page.wait_for_function("document.querySelector('#nexo-demo-video').currentTime < 2")
+        page.wait_for_function("() => document.querySelector('#nexo-demo-video').currentTime < 2")
         self.assertFalse(page.locator("#nexo-demo-video").evaluate("video => video.paused"))
 
     def test_fullscreen_button_enters_and_exits_actual_element_fullscreen(self):
         page = self.page()
         self.start_by_gesture(page)
         page.locator("#nexo-demo-fullscreen").click()
-        page.wait_for_function("document.fullscreenElement && document.fullscreenElement.id === 'nexo-demo-frame'")
-        page.wait_for_function("document.querySelector('#nexo-demo-frame').dataset.fullscreen === 'true'")
+        page.wait_for_function("() => document.fullscreenElement && document.fullscreenElement.id === 'nexo-demo-frame'")
+        page.wait_for_function("() => document.querySelector('#nexo-demo-frame').dataset.fullscreen === 'true'")
         self.assertEqual(page.locator("#nexo-demo-frame").get_attribute("data-fullscreen"), "true")
         self.assertEqual(page.locator("#nexo-demo-fullscreen").get_attribute("aria-label"), "Sair da tela cheia")
         page.locator("#nexo-demo-fullscreen").click()
-        page.wait_for_function("!document.fullscreenElement")
-        page.wait_for_function("document.querySelector('#nexo-demo-frame').dataset.fullscreen === 'false'")
+        page.wait_for_function("() => !document.fullscreenElement")
+        page.wait_for_function("() => document.querySelector('#nexo-demo-frame').dataset.fullscreen === 'false'")
         self.assertEqual(page.locator("#nexo-demo-frame").get_attribute("data-fullscreen"), "false")
 
     def test_media_error_is_visible_and_retry_recovers_real_video(self):
         page = self.page(fail_media=True)
         self.center_video(page)
         page.locator("#nexo-demo-sound-enable").click()
-        page.wait_for_function("document.querySelector('#nexo-demo-frame').dataset.playback === 'error'")
+        page.wait_for_function("() => document.querySelector('#nexo-demo-frame').dataset.playback === 'error'")
         self.assertTrue(page.locator("#nexo-demo-error").is_visible())
         self.assertTrue(page.locator("#nexo-demo-video").evaluate("video => video.muted"))
         page.route("**/static/video/nexo_demo_motion.mp4", lambda request: request.continue_())
         page.locator("#nexo-demo-retry").click()
-        page.wait_for_function("document.querySelector('#nexo-demo-frame').dataset.playback === 'playing'")
+        page.wait_for_function("() => document.querySelector('#nexo-demo-frame').dataset.playback === 'playing'")
         self.assertFalse(page.locator("#nexo-demo-error").is_visible())
         self.assertEqual(page.locator("#nexo-demo-video").evaluate("video => video.videoWidth"), 1920)
 

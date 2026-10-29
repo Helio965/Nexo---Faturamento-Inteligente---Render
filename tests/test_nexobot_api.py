@@ -190,7 +190,7 @@ class ContratoEComportamentoTests(NexoBotApiBase):
         destinos = re.search(r'data-destinos="([^"]+)"', pagina).group(1)
         import html
         self.assertEqual(json.loads(html.unescape(destinos)), self.urls)
-        self.client.get("/auth/logout")
+        self.logout()
         self.assertNotIn('id="nexobot"', self.client.get("/auth/login").get_data(as_text=True))
         self.login("admin-test@example.invalid")
         self.assertNotIn('id="nexobot"', self.client.get("/admin/dashboard").get_data(as_text=True))
@@ -316,9 +316,11 @@ class EntradaESegurancaTests(NexoBotApiBase):
                 responder.assert_not_called()
 
     def test_anonimo_e_admin_sem_acesso(self):
-        self.client.get("/auth/logout")
+        self.logout()
         with patch("blueprints.api.responder") as responder:
-            r = self.post("Abra o upload.")
+            # O logout descarta a sessão inteira (SEC-001), inclusive o token
+            # CSRF: a sessão anônima nova recebe outro token.
+            r = self.post("Abra o upload.", token=self.csrf_token())
             self.assertEqual(r.status_code, 302)
             self.assertIn("/auth/login", r.headers["Location"])
             self.login("admin-test@example.invalid")

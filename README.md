@@ -304,10 +304,10 @@ python tools/auditar_guia.py          # tabela legível
 python tools/auditar_guia.py --json   # para anexar a um chamado
 ```
 
-*(Opcional)* para criar um cliente de demonstração com o fluxo de primeiro acesso já armado:
+*(Opcional)* para criar um cliente de demonstração com o fluxo de primeiro acesso já armado — somente em ambiente local (o utilitário recusa `FLASK_ENV=production` e qualquer banco que não seja SQLite ou PostgreSQL em `localhost`); a senha temporária vem do ambiente e nunca é impressa:
 
 ```bash
-python criar_cliente_demo.py
+NEXO_AMBIENTE_DEMO=1 NEXO_DEMO_SENHA='uma-senha-temporaria-longa' python criar_cliente_demo.py
 ```
 
 ### 8. (Opcional) Homologar o motor de ETL isoladamente
@@ -368,7 +368,14 @@ Limitações conhecidas do plano free: 512 MB de RAM e 0,1 CPU (ETL e PDF ficam 
 | `HF_API_TOKEN` / `HF_MODEL` | Não (fail-safe) | Redação opcional das respostas do NexoBot via roteador da Hugging Face (uso cobrado pela HF). Sem token, o NexoBot funciona 100% local. |
 | `BREVO_API_KEY` / `BREVO_API_URL` | Não (fail-safe) | Envio de e-mail pela API HTTPS do Brevo. Com a chave definida, substitui o SMTP (necessário no Render Free, que bloqueia SMTP). |
 | `PROXY_FIX_HOPS` | Não (default `0`) | Nº de proxies reversos confiáveis à frente da app (Render = `1`): IP real do cliente no rate limit e links `https://` nos e-mails. |
-| `RENDER_EXTERNAL_URL` | Automática no Render | URL pública do serviço; é adicionada às origens permitidas do WebSocket. |
+| `RENDER_EXTERNAL_URL` | Automática no Render | URL pública do serviço; é adicionada às origens permitidas do WebSocket e, sem `NEXO_PUBLIC_URL`, é a origem canônica dos links sensíveis. |
+| `NEXO_PUBLIC_URL` | Sim em produção (ou `RENDER_EXTERNAL_URL`) | Origem pública canônica (`https://dominio`) usada para montar os links de ativação, recuperação de senha, chamados e publicação — nunca o cabeçalho `Host` da requisição. Em produção precisa ser `https`. |
+| `NEXO_TRUSTED_HOSTS` | Não | Hosts adicionais aceitos nas requisições (CSV; `.dominio` aceita subdomínios). Em produção, o host da origem pública e o da plataforma são aceitos sempre; qualquer outro `Host` recebe 400. |
+| `NEXO_CSP_REPORT_ONLY` | Não (default `0`) | `1` envia a Content-Security-Policy em modo somente-relatório (observar violações sem bloquear) — útil num primeiro rollout; `0` impõe a política. |
+| `NEXO_SENHAS_VAZADAS` | Não (default `0`) | `1` consulta vazamentos conhecidos ao definir/redefinir senha, por k-anonimato (só 5 caracteres do hash saem do servidor; a senha nunca). Indisponibilidade do serviço não bloqueia a troca (fail-open, registrado em log). |
+| `NEXO_DB_POOL_SIZE` / `NEXO_DB_MAX_OVERFLOW` / `NEXO_DB_POOL_TIMEOUT` | Não (defaults `5` / `10` / `10`) | Pool de conexões do SQLAlchemy; só se aplica a PostgreSQL (ignorado em SQLite). |
+| `NEXO_SQL_ECHO` | Não (default `0`) | `1` ecoa o SQL no log em desenvolvimento; sem efeito em produção. |
+| `NEXO_LIMITE_LOGIN_CONTA` / `NEXO_LIMITE_RECUPERACAO_CONTA` | Não (defaults `200 per 15 minutes` / `10 per hour`) | Limites por **conta alvo** (hash do e-mail) no login e na recuperação de senha, somados aos limites por IP. Mantenha o do login acima de 10/min × janela: um orçamento menor seria esgotável de um único IP e trancaria o e-mail alvo (inclusive o do administrador). Lidos a cada requisição. |
 | `HOST` / `PORT` | Não | Bind do servidor (`python app.py`). |
 
 Template completo em [`.env.example`](.env.example).

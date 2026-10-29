@@ -258,7 +258,9 @@ class InstallationConfigurationContractsTests(unittest.TestCase):
     def test_both_ci_jobs_use_shared_installer_before_preserved_test_commands(self):
         workflow = yaml.safe_load((ROOT / ".github/workflows/nexo-security-ci.yml").read_text())
         self.assertEqual(workflow["permissions"], {"contents": "read"})
-        self.assertEqual(set(workflow["jobs"]), {"sqlite-browser", "postgresql-security"})
+        # supply-chain é um job ADVISÓRIO (SCA/SAST/segredos): não roda a suíte nem
+        # usa o instalador compartilhado; o contrato abaixo vale para os jobs de teste.
+        self.assertEqual(set(workflow["jobs"]), {"sqlite-browser", "postgresql-security", "supply-chain"})
         expected_tests = {
             "sqlite-browser": ("python -B -m unittest discover -s tests -t . -v",),
             "postgresql-security": (
@@ -267,7 +269,7 @@ class InstallationConfigurationContractsTests(unittest.TestCase):
             ),
         }
         command = "python -I tools/install_dependencies.py --requirements requirements-dev.txt"
-        for job_id, job in workflow["jobs"].items():
+        for job_id, job in {k: workflow["jobs"][k] for k in expected_tests}.items():
             with self.subTest(job=job_id):
                 self.assertEqual(job.get("permissions", workflow["permissions"]), {"contents": "read"})
                 steps = job["steps"]
@@ -287,6 +289,18 @@ class InstallationConfigurationContractsTests(unittest.TestCase):
                     self.assertNotIn("pip install -r", run)
                     if "playwright install" in run:
                         self.assertGreater(i, installer_position)
+        # Job advisório: permissões só-leitura, não roda a suíte e cada passo de
+        # varredura é continue-on-error (nunca trava o PR nem reduz cobertura).
+        sca = workflow["jobs"]["supply-chain"]
+        self.assertEqual(sca.get("permissions", workflow["permissions"]), {"contents": "read"})
+        scan_steps = [s for s in sca["steps"] if any(
+            t in s.get("run", "") for t in ("pip-audit", "bandit", "varredura_segredos"))]
+        self.assertTrue(scan_steps)
+        for step in scan_steps:
+            self.assertTrue(step.get("continue-on-error") is True)
+        for step in sca["steps"]:
+            self.assertNotIn("pip install -r", step.get("run", ""))
+            self.assertNotIn("discover -s tests", step.get("run", ""))
 
     def test_render_prepares_same_installer_without_changing_runtime_contract(self):
         blueprint = yaml.safe_load((ROOT / "render.yaml").read_text())

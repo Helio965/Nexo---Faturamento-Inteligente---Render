@@ -242,6 +242,49 @@ class Usuario(db.Model, UserMixin):
 
 
 # =====================================================================
+# 4b. SessaoAutenticada  (SEC-001: sessões revogáveis no servidor)
+# =====================================================================
+MOTIVOS_REVOGACAO_SESSAO = ("logout", "troca_senha", "revogacao_global", "empresa", "administrativo")
+
+
+class SessaoAutenticada(db.Model):
+    """Uma linha por login. O cookie carrega só um identificador aleatório;
+    aqui fica o seu hash SHA-256, o dono, a validade e a revogação.
+
+    Sem a linha válida (ou com revogada_em preenchido) o cookie deixa de
+    autorizar HTTP e Socket.IO, em qualquer processo, mesmo que a assinatura
+    continue íntegra. O logout revoga só a sessão atual; a troca de senha,
+    todas as do usuário. A geração de autorização (lixeira/cancelamento) e o
+    BOOT_ID continuam valendo em cima desta verificação.
+    """
+    __tablename__ = "sessao_autenticada"
+
+    id_sessao: Mapped[int] = mapped_column(primary_key=True)
+    # Usuário apagado do banco não deixa sessão: a linha cai com ele (CASCADE).
+    id_usuario: Mapped[int] = mapped_column(
+        ForeignKey("usuario.id_usuario", ondelete="CASCADE"), nullable=False,
+    )
+    identificador_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    criada_em: Mapped[datetime] = mapped_column(InstanteUTC(), nullable=False)
+    expira_em: Mapped[datetime] = mapped_column(InstanteUTC(), nullable=False)
+    revogada_em: Mapped[Optional[datetime]] = mapped_column(InstanteUTC())
+    motivo_revogacao: Mapped[Optional[str]] = mapped_column(String(40))
+
+    usuario = relationship("Usuario")
+
+    __table_args__ = (
+        UniqueConstraint("identificador_hash", name="uq_sessao_identificador"),
+        CheckConstraint("expira_em > criada_em", name="ck_sessao_validade"),
+        CheckConstraint(
+            "(revogada_em IS NULL AND motivo_revogacao IS NULL) OR "
+            "(revogada_em IS NOT NULL AND motivo_revogacao IS NOT NULL)",
+            name="ck_sessao_revogacao",
+        ),
+        Index("ix_sessao_usuario", "id_usuario"),
+    )
+
+
+# =====================================================================
 # 5. Analise
 # =====================================================================
 class Analise(db.Model):
@@ -410,8 +453,84 @@ class RelatorioAnalise(db.Model):
     gerado_por_ia: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+    # SEC-003: o que o cliente vê é a CÓPIA publicada, congelada no ato de
+    # publicar. Os campos acima são o rascunho em edição (IA, "Salvar rascunho").
+    # Relatórios publicados antes desta versão não têm cópia: a leitura cai
+    # no rascunho até a primeira edição, que congela o texto vigente antes de
+    # alterá-lo (ver blueprints/admin.py). Nenhum dado é migrado em massa.
+    titulo_publicado: Mapped[Optional[str]] = mapped_column(String)
+    resumo_executivo_publicado: Mapped[Optional[str]] = mapped_column(Text)
+    conclusao_estrategica_publicada: Mapped[Optional[str]] = mapped_column(Text)
+    gerado_por_ia_publicado: Mapped[Optional[bool]] = mapped_column(Boolean)
+    # Controle otimista do editor: o formulário devolve a versão exibida e o
+    # UPDATE só vale se ela ainda for a atual (version_id_col: SQLAlchemy
+    # incrementa a cada flush e levanta StaleDataError se outra sessão gravou).
+    versao_rascunho: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+    __mapper_args__ = {"version_id_col": versao_rascunho}
 
     analise = relationship("Analise", back_populates="relatorio")
+
+    @property
+    def tem_copia_publicada(self) -> bool:
+        return self.conclusao_estrategica_publicada is not None
+
+    @property
+    def rascunho_difere_da_publicacao(self) -> bool:
+        """Há texto editado (ou gerado) ainda não entregue ao cliente."""
+        if not self.publicado:
+            return False
+        publicada = self.publicada
+        return (self.titulo, self.resumo_executivo, self.conclusao_estrategica, bool(self.gerado_por_ia)) != (
+            publicada.titulo, publicada.resumo_executivo, publicada.conclusao_estrategica,
+            publicada.gerado_por_ia,
+        )
+
+    @property
+    def publicada(self):
+        """Versão visível ao cliente e ao PDF: a cópia publicada ou, para
+        relatórios publicados antes da cópia existir, o rascunho (legado)."""
+        if self.tem_copia_publicada:
+            return VersaoPublicada(
+                self.titulo_publicado or self.titulo,
+                self.resumo_executivo_publicado,
+                self.conclusao_estrategica_publicada,
+                bool(self.gerado_por_ia_publicado),
+                self.data_publicacao, False,
+            )
+        return VersaoPublicada(
+            self.titulo, self.resumo_executivo, self.conclusao_estrategica,
+            bool(self.gerado_por_ia), self.data_publicacao, True,
+        )
+
+    def congelar_publicacao(self) -> None:
+        """Copia o rascunho para os campos publicados (ato explícito de publicar)."""
+        self.titulo_publicado = self.titulo
+        self.resumo_executivo_publicado = self.resumo_executivo
+        self.conclusao_estrategica_publicada = self.conclusao_estrategica
+        self.gerado_por_ia_publicado = bool(self.gerado_por_ia)
+
+    def preservar_publicacao_legada(self) -> None:
+        """Antes de editar um relatório publicado sem cópia: congela o texto
+        que o cliente já vê, para a edição não o alterar."""
+        if self.publicado and not self.tem_copia_publicada:
+            self.congelar_publicacao()
+
+
+class VersaoPublicada:
+    """Leitura imutável do texto publicado (sem acesso ao rascunho)."""
+    __slots__ = ("titulo", "resumo_executivo", "conclusao_estrategica", "gerado_por_ia",
+                 "data_publicacao", "legado")
+
+    def __init__(self, titulo, resumo_executivo, conclusao_estrategica, gerado_por_ia,
+                 data_publicacao, legado):
+        self.titulo = titulo
+        self.resumo_executivo = resumo_executivo
+        self.conclusao_estrategica = conclusao_estrategica
+        self.gerado_por_ia = gerado_por_ia
+        self.data_publicacao = data_publicacao
+        self.legado = legado
 
 
 # =====================================================================

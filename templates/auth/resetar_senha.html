@@ -57,7 +57,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce }}">
   document.querySelectorAll('[data-toggle-pw]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var inp = document.getElementById(btn.getAttribute('data-toggle-pw'));

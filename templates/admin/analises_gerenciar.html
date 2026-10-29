@@ -81,7 +81,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce }}">
   /* Busca client-side pelos dados do cartão (nome fantasia, razão social, CNPJ —
      com ou sem máscara, mesmo quando o cadastro guardou o CNPJ pontuado). */
   (function () {

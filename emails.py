@@ -91,6 +91,8 @@ def enviar_email(destinatarios, assunto: str, template: str, **ctx) -> bool:
 
     try:
         html = render_template(f"emails/{template}", **ctx)
+        # Assunto em uma linha: nada de CR/LF (injeção de cabeçalho) nem texto sem fim.
+        assunto = " ".join(str(assunto).split())[:200]
         msg = Message(subject=assunto, recipients=destinatarios, html=html)
         app = current_app._get_current_object()
         threading.Thread(target=_enviar_async, args=(app, msg), daemon=True).start()
@@ -102,8 +104,12 @@ def enviar_email(destinatarios, assunto: str, template: str, **ctx) -> bool:
 
 
 def _emails_da_empresa(empresa) -> list[str]:
-    """Coleta e-mails de contato da empresa + dos usuários CLIENTE ativos."""
+    """Coleta e-mails de contato da empresa + dos usuários CLIENTE ativos.
+    Empresa na lixeira ou cancelada não recebe mais comunicações do portal."""
     emails = set()
+    if empresa is None or getattr(empresa, "deletado_em", None) is not None \
+            or getattr(empresa, "status_conta", "ATIVA") == "CANCELADA":
+        return []
     if getattr(empresa, "email_contato", None):
         emails.add(empresa.email_contato)
     for u in getattr(empresa, "usuarios", []) or []:
@@ -143,6 +149,18 @@ def email_recuperacao_senha(usuario, link_url: str) -> bool:
         "🔐 Redefinição de senha — NEXO",
         "recuperacao_senha.html",
         usuario=usuario, link_url=link_url,
+    )
+
+
+def email_senha_alterada(usuario, link_recuperacao: str) -> bool:
+    """Aviso ao dono da conta após uma redefinição de senha por token: quem não
+    a fez descobre o comprometimento e tem o caminho para retomar o acesso.
+    Não carrega token nem senha."""
+    return enviar_email(
+        usuario.email,
+        "🔐 A senha da sua conta NEXO foi alterada",
+        "senha_alterada.html",
+        usuario=usuario, link_recuperacao=link_recuperacao,
     )
 
 

@@ -81,7 +81,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
+<script nonce="{{ csp_nonce }}">
   /* Mostra/esconde o formulário de novo chamado. */
   (function () {
     var form = document.getElementById('formNovoChamado');

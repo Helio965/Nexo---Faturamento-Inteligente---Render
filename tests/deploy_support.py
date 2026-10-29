@@ -34,6 +34,9 @@ def ensure_test_environment():
         "ANTHROPIC_API_KEY": "", "HF_API_TOKEN": "",
         "RATELIMIT_STORAGE_URI": "memory://", "PROXY_FIX_HOPS": "0",
         "RENDER_EXTERNAL_URL": "", "SOCKETIO_CORS_ORIGINS": "http://localhost",
+        # SEC-005: origem canônica fictícia dos links; sem restrição de Host
+        # (o cliente de teste usa "localhost" e o navegador, 127.0.0.1:porta).
+        "NEXO_PUBLIC_URL": "https://nexo-test.example.invalid", "NEXO_TRUSTED_HOSTS": "",
         "ADMIN_EMAIL": "admin-test@example.invalid", "ADMIN_SENHA": "",
         "MAX_CONTENT_LENGTH_MB": "20",
     })
@@ -114,6 +117,14 @@ class DeployTestCase(unittest.TestCase):
         response = self.client.post("/auth/login", data={
             "email": email, "senha": self.password,
             "csrf_token": self.csrf_token(),
+        })
+        self.assertEqual(response.status_code, 302)
+        return response
+
+    def logout(self):
+        # SEC-002: o logout é POST + CSRF; o GET só mostra a confirmação.
+        response = self.client.post("/auth/logout", data={
+            "csrf_token": self.csrf_token("/auth/logout"),
         })
         self.assertEqual(response.status_code, 302)
         return response

@@ -3,8 +3,11 @@ NEXO - Blueprint de Notificações (sininho)
 ===========================================
 Rotas compartilhadas por ADMIN e CLIENTE (qualquer usuário autenticado):
   POST /notificacoes/marcar-lidas   → marca todas as não-lidas como lidas.
-  GET  /notificacoes/<id>/abrir      → marca aquela como lida e redireciona
+  POST /notificacoes/<id>/abrir      → marca aquela como lida e redireciona
                                        para o link_destino (ou dashboard).
+  GET  /notificacoes/<id>/abrir      → só redireciona (SEC-002: nenhum GET
+                                       altera estado; links antigos seguem
+                                       funcionando sem marcar como lida).
 A leitura/contagem para o sininho é injetada em todas as páginas pelo
 context processor (ver app.create_app).
 """
@@ -53,14 +56,16 @@ def marcar_lidas():
     return redirect(_local_ou_padrao(request.referrer))
 
 
-@notificacoes_bp.route("/<int:id_notificacao>/abrir")
+@notificacoes_bp.route("/<int:id_notificacao>/abrir", methods=["GET", "POST"])
 @login_required
 def abrir(id_notificacao):
     notif = db.session.get(Notificacao, id_notificacao)
     # Só o dono da notificação pode abri-la; senão, cai no dashboard.
     if notif is None or notif.id_usuario != current_user.id_usuario:
         return redirect(_destino_padrao())
-    if not notif.lida:
+    # SEC-002: a mutação exige POST (+ CSRF). O item do sininho é um
+    # formulário; um GET (prefetch, histórico, link copiado) apenas navega.
+    if request.method == "POST" and not notif.lida:
         notif.lida = True
         db.session.commit()
     return redirect(_local_ou_padrao(notif.link_destino))

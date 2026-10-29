@@ -16,6 +16,7 @@ from . import test_session_revocation_security as session_cases
 from .postgresql_support import PrivatePostgreSQL
 from extensions import db, socketio
 from blueprints import auth
+import notifications
 import realtime
 
 
@@ -44,6 +45,66 @@ class PostgreSQLSessionRevocationSecurityTests(session_cases.SessionRevocationCa
                 return
             threading.Event().wait(0.01)
         self.fail("O UPDATE real não demonstrou espera pelo lock PostgreSQL de autorização.")
+
+    def _wait_for_blocked_statement(self, query_like):
+        deadline = time.monotonic() + 8
+        while time.monotonic() < deadline:
+            with self.engine.connect() as connection:
+                waiting = connection.scalar(text("""
+                    SELECT count(*) FROM pg_stat_activity
+                    WHERE datname = current_database() AND pid <> pg_backend_pid()
+                      AND wait_event_type = 'Lock' AND query ILIKE :padrao
+                      AND cardinality(pg_blocking_pids(pid)) > 0
+                """), {"padrao": query_like})
+            if waiting:
+                return
+            threading.Event().wait(0.01)
+        self.fail(f"Nenhuma consulta {query_like!r} demonstrou espera pelo lock PostgreSQL.")
+
+    def test_logout_waits_for_in_flight_delivery_and_later_deliveries_skip_the_session(self):
+        """SEC-001: FOR UPDATE do logout espera a entrega (FOR SHARE) terminar;
+        a sessão revogada deixa de ser destinatária de qualquer entrega posterior."""
+        locked, release = threading.Event(), threading.Event()
+        http = self._login_client()
+        old_socket = self._socket(http)
+        csrf = self._csrf(http, "/auth/logout")
+        emitted = []
+        original_emit = socketio.emit
+
+        def recording_emit(*args, **kwargs):
+            emitted.append((args[0], kwargs.get("room")))
+            return original_emit(*args, **kwargs)
+
+        def after(connection, cursor, statement, parameters, context, executemany):
+            if "FOR SHARE" in statement.upper() and threading.current_thread().name.startswith("logout-race"):
+                locked.set()
+                if not release.wait(12):
+                    raise AssertionError("Entrega de teste não foi liberada.")
+        event.listen(self.engine, "after_cursor_execute", after)
+        try:
+            with patch.object(notifications.socketio, "emit", side_effect=recording_emit):
+                with ThreadPoolExecutor(max_workers=2, thread_name_prefix="logout-race") as executor:
+                    delivery = executor.submit(self._notify, text="AUTHORIZED_BEFORE_LOGOUT_COMMIT")
+                    try:
+                        self.assertTrue(locked.wait(8))
+                        logout = executor.submit(http.post, "/auth/logout", data={"csrf_token": csrf})
+                        self._wait_for_blocked_statement("SELECT%FOR UPDATE%")
+                        self.assertEqual(self._session_rows(), [(False, None)])
+                        self.assertEqual(emitted, [])
+                    finally:
+                        release.set()
+                    delivery.result(timeout=12)
+                    response = logout.result(timeout=12)
+                self.assertEqual(response.status_code, 302)
+        finally:
+            release.set()
+            event.remove(self.engine, "after_cursor_execute", after)
+        self.assertEqual([name for name, _ in emitted], ["nova_notificacao"])
+        self.assertEqual(self._session_rows(), [(True, "logout")])
+        self.assertFalse(old_socket.is_connected())
+        self._assert_private_denied(http)
+        self._notify(text="PRIVATE_AFTER_LOGOUT")
+        self.assertEqual(len(emitted), 1, "sessão revogada não pode ser destinatária")
 
     def test_notification_commit_delivers_with_single_connection_pool(self):
         """O despachante precisa aguardar a devolução da conexão do COMMIT."""

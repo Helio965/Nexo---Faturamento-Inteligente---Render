@@ -350,7 +350,10 @@ class ETLStorageMaterializationTests(DeployTestCase):
         self.assertEqual(shared.read_bytes(), b"synthetic-existing-cache")
 
     def test_legacy_materialization_is_bounded_and_never_deletes_original(self):
-        source = self.work_dir / "legacy.csv"
+        # SEC-004: referências legadas só são lidas dentro de UPLOAD_FOLDER.
+        pasta = Path(self.app.config["UPLOAD_FOLDER"])
+        pasta.mkdir(parents=True, exist_ok=True)
+        source = pasta / "legacy.csv"
         source.write_bytes(CSV)
         with storage.materializar_para_etl(str(source), len(CSV)) as path:
             copy = Path(path)
@@ -362,6 +365,17 @@ class ETLStorageMaterializationTests(DeployTestCase):
             with storage.materializar_para_etl(str(source), len(CSV) - 1):
                 self.fail("Arquivo legado acima do limite")
         self.assertEqual(source.read_bytes(), CSV)
+
+    def test_legacy_reference_outside_upload_folder_is_not_materialized(self):
+        outside = self.work_dir / "outside-legacy.csv"
+        outside.write_bytes(CSV)
+        for reference in (str(outside), "../outside-legacy.csv"):
+            with self.subTest(reference=reference):
+                with self.assertRaises(ETLInputError) as error:
+                    with storage.materializar_para_etl(reference, len(CSV)):
+                        self.fail("Arquivo fora de UPLOAD_FOLDER não pode ser materializado")
+                self.assertEqual(error.exception.code, "storage_unavailable")
+        self.assertEqual(outside.read_bytes(), CSV)
 
     def test_parallel_owned_copies_do_not_remove_each_other(self):
         reference = storage.salvar(CSV, "parallel.csv")

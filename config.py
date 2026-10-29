@@ -101,6 +101,12 @@ class Config:
     # aponte RATELIMIT_STORAGE_URI para um Redis compartilhado.
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
     RATELIMIT_HEADERS_ENABLED = True
+    # Limites por CONTA alvo (somados aos limites por IP das rotas). Um orçamento por
+    # conta menor do que o teto por IP × janela seria esgotável de um único IP,
+    # trancando o e-mail alvo (inclusive o do administrador); os padrões exigem
+    # esforço sustentado de vários IPs e ainda limitam a adivinhação on-line.
+    LIMITE_LOGIN_CONTA = os.environ.get("NEXO_LIMITE_LOGIN_CONTA", "200 per 15 minutes")
+    LIMITE_RECUPERACAO_CONTA = os.environ.get("NEXO_LIMITE_RECUPERACAO_CONTA", "10 per hour")
 
     # === Tempo real (Socket.IO) ===
     # Origens permitidas no handshake do WebSocket. NUNCA "*" com cookie de
@@ -116,6 +122,27 @@ class Config:
     # variável RENDER_EXTERNAL_URL, definida automaticamente pela plataforma.
     if os.environ.get("RENDER_EXTERNAL_URL"):
         SOCKETIO_CORS_ORIGINS.append(os.environ["RENDER_EXTERNAL_URL"].rstrip("/"))
+
+    # === Origem pública canônica (SEC-005) ===
+    # Links sensíveis enviados por e-mail (ativação, recuperação de senha,
+    # chamados, publicação) são montados SEMPRE a partir desta origem, nunca
+    # do cabeçalho Host da requisição (ver origem_publica.py). Domínio próprio
+    # em NEXO_PUBLIC_URL; sem ela, vale a URL que o Render injeta. A factory
+    # valida o valor (produção: https obrigatório) e, sem nenhuma das duas,
+    # usa http://127.0.0.1:5000 apenas em desenvolvimento.
+    PUBLIC_URL = (os.environ.get("NEXO_PUBLIC_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "").strip()
+    PUBLIC_URL_PLATAFORMA = os.environ.get("RENDER_EXTERNAL_URL", "").strip()
+    # Hosts adicionais aceitos nas requisições (CSV; ".exemplo.com" aceita os
+    # subdomínios). O host da origem pública e o da plataforma entram sempre
+    # em produção; em desenvolvimento, sem a variável, não há restrição.
+    TRUSTED_HOSTS_EXTRAS = [
+        h.strip() for h in os.environ.get("NEXO_TRUSTED_HOSTS", "").split(",") if h.strip()
+    ]
+
+    # === Cabeçalhos de segurança (SEC-010, seguranca_http.py) ===
+    # 1 = emite a CSP em modo somente-relatório (Content-Security-Policy-
+    # Report-Only) para observar violações sem bloquear; padrão: aplicada.
+    CSP_REPORT_ONLY = os.environ.get("NEXO_CSP_REPORT_ONLY", "0") == "1"
 
     # === Proxy reverso ===
     # Nº de proxies confiáveis à frente da app (Render = 1). 0 = sem proxy (dev).
@@ -134,6 +161,16 @@ class Config:
     # pooler pode fechar conexões ociosas, então validamos a conexão antes de
     # usar (pre_ping) e reciclamos antes do timeout típico. Inócuo para SQLite.
     SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True, "pool_recycle": 280}
+    # Pool do PostgreSQL coerente com o servidor (gunicorn -w 1 --threads 50):
+    # sem teto explícito, 50 threads disputam 15 conexões e esperam 30 s cada
+    # (esgotamento). pool_timeout curto falha rápido; tamanho e overflow são
+    # ajustáveis pelo ambiente conforme o limite do pooler (Supabase).
+    if SQLALCHEMY_DATABASE_URI.startswith("postgresql"):
+        SQLALCHEMY_ENGINE_OPTIONS.update({
+            "pool_size": int(os.environ.get("NEXO_DB_POOL_SIZE", 5)),
+            "max_overflow": int(os.environ.get("NEXO_DB_MAX_OVERFLOW", 10)),
+            "pool_timeout": int(os.environ.get("NEXO_DB_POOL_TIMEOUT", 10)),
+        })
 
     # === Admin Master (seed) ===
     ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@nexo.com.br")
@@ -204,7 +241,9 @@ class Config:
 
 class DevelopmentConfig(Config):
     DEBUG = True
-    SQLALCHEMY_ECHO = True
+    # Echo do SQL só sob demanda: com ele ligado, os parâmetros (inclusive o
+    # hash da senha em INSERT/UPDATE de usuario) vão para o log de desenvolvimento.
+    SQLALCHEMY_ECHO = os.environ.get("NEXO_SQL_ECHO", "0") == "1"
 
 
 class ProductionConfig(Config):

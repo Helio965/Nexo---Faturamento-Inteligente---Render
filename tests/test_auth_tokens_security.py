@@ -28,12 +28,14 @@ from sqlalchemy.orm import Session
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from blueprints import auth, admin
-from extensions import db, limiter
+from extensions import db
 from models import Empresa, Plano, Segmento, Usuario
 
 
 OLD_PASSWORD = "Synthetic-old-password-123!"
-NEW_PASSWORD = "Synthetic-new-password-456!"
+# Sem conter nome/e-mail de nenhuma fixture (inclusive o usuário "Synthetic New"
+# do cadastro) nem termo comum: a política de senha (politica_senha.py) recusaria.
+NEW_PASSWORD = "Troca-de-chave-robusta-2026"
 # Mesmo hash entre fixtures torna a vinculação ao ID ainda mais verificável;
 # produção continua gerando salt individual em cada definição de senha.
 FIXTURE_HASH = generate_password_hash(OLD_PASSWORD)
@@ -306,11 +308,16 @@ class AuthTokenSecurityTests(_TokenCase):
         self._assert_rejected(self._post(token, password="Second-attempt-password!"))
         self.assertEqual(self._account()[0], changed)
 
-    def test_selecting_same_password_still_consumes_token(self):
+    def test_selecting_same_password_is_refused_without_consuming_token(self):
+        # Política de senha: a nova senha precisa ser diferente da atual; a
+        # recusa acontece antes do CAS, então o token continua utilizável.
         token = self._token()
-        self._assert_success(self._post(token, password=OLD_PASSWORD))
-        self.assertNotEqual(self._account()[0], FIXTURE_HASH)
-        self.assertTrue(check_password_hash(self._account()[0], OLD_PASSWORD))
+        response = self._post(token, password=OLD_PASSWORD)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("diferente da senha atual", response.get_data(as_text=True))
+        self.assertEqual(self._account()[0], FIXTURE_HASH)
+        self._assert_success(self._post(token))
+        self.assertTrue(check_password_hash(self._account()[0], NEW_PASSWORD))
         self._assert_rejected(self._post(token))
 
     def test_two_tokens_before_the_change_both_become_invalid(self):
@@ -594,9 +601,11 @@ class AuthTokenRateLimitTests(_TokenCase):
 
     def test_recovery_rate_limit_remains_active(self):
         csrf = self._csrf()
+        # E-mails distintos: aqui vale o limite por IP (o limite por conta é
+        # mais apertado e tem teste próprio em test_password_policy_security).
         responses = [self.client.post("/auth/recuperar-senha", data={
-            "email": "unknown@example.invalid", "csrf_token": csrf,
-        }) for _ in range(6)]
+            "email": f"unknown{i}@example.invalid", "csrf_token": csrf,
+        }) for i in range(6)]
         self.assertEqual([response.status_code for response in responses], [302] * 5 + [429])
 
     def test_login_rate_limit_remains_active(self):

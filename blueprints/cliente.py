@@ -24,7 +24,6 @@ Regras:
 """
 
 import os
-import hashlib
 from functools import wraps
 
 from flask import (
@@ -39,7 +38,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from etl_inputs import ETLInputError
 from etl_uploads import ler_upload_validado, limitar_upload
 
-from extensions import db
+from extensions import chave_limite_usuario, db, limiter
 from horario import agora_utc
 from models import (
     Analise, IndicadorAnalise, RelatorioAnalise, UploadRelatorio,
@@ -300,6 +299,8 @@ def analise(id_analise):
     return render_template(
         "cliente/analise.html",
         analise=analise,
+        # SEC-003: o cliente lê a cópia publicada, nunca o rascunho em edição.
+        rel=analise.relatorio.publicada,
         semaforos=semaforos,
         abc_chart=abc_chart,
         auditoria=_auditoria(analise),
@@ -365,6 +366,8 @@ def _buscar_upload(id_analise: int, tipo: str):
 
 @cliente_bp.route("/upload", methods=["GET", "POST"])
 @cliente_required
+# Por usuário: cada POST custa uma validação em processo isolado (CPU/memória).
+@limiter.limit("30 per hour", methods=["POST"], key_func=chave_limite_usuario)
 @limitar_upload
 def upload():
     """Preflight limitado e substituição serializada, sem executar ETL comercial."""
@@ -427,17 +430,15 @@ def upload():
         nome_final = f"analise_{id_analise}_{tipo}_{sha[:8]}.{ext}"
         existente = _buscar_upload(id_analise, tipo)
         caminho_final = storage.salvar(conteudo, nome_final)
-        legado_substituido = None
         if existente and existente.caminho_arquivo and existente.caminho_arquivo != caminho_final:
             compartilhado = db.session.scalar(select(func.count()).select_from(UploadRelatorio).where(
                 UploadRelatorio.caminho_arquivo == existente.caminho_arquivo,
                 UploadRelatorio.id_upload != existente.id_upload,
             ))
             if not compartilhado:
-                if existente.caminho_arquivo.startswith(storage.PREFIXO_DB):
-                    storage.remover(existente.caminho_arquivo)
-                else:
-                    legado_substituido = existente.caminho_arquivo
+                # 'db:' sai nesta transação; o legado em disco só depois do
+                # commit válido (agendado por storage.remover, SEC-004).
+                storage.remover(existente.caminho_arquivo)
         if existente:
             db.session.delete(existente)
             db.session.flush()
@@ -457,8 +458,6 @@ def upload():
             url_for("admin.analise_upload", id_analise=id_analise),
         )
         db.session.commit()
-        if legado_substituido:
-            storage.remover(legado_substituido)
         flash(f"Relatório de {tipo} enviado. A equipe NEXO fará a validação e o processamento.", "success")
         return redirect(url_for("cliente.upload"))
     except ETLInputError as erro:
@@ -486,7 +485,8 @@ def tickets():
     empresa = current_user.empresa
 
     if request.method == "POST":
-        assunto = (request.form.get("assunto") or "").strip()
+        # Uma linha curta: o assunto vai para notificações, e-mails e listagens.
+        assunto = " ".join((request.form.get("assunto") or "").split())[:160]
         categoria = (request.form.get("categoria") or "").strip().upper()
         mensagem = (request.form.get("mensagem") or "").strip()
 

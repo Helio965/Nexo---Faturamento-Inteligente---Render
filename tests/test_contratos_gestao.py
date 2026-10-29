@@ -642,7 +642,12 @@ class EsquemaAusenteTests(ContratosCase):
                 patch("logging.config.fileConfig"):
             downgrade(directory=str(ROOT / "migrations"), revision="e4c004a26b01")
         contract_policy._esquema_por_engine.clear()
-        from models import Usuario
+        # A migração de sessões (SEC-001) é descendente da de contratos, então o
+        # downgrade acima também remove sessao_autenticada. Ela é ortogonal ao
+        # regime contratual; recriada aqui para que o login (fail-closed) funcione
+        # num cenário que, na prática, nunca roda o código novo sem a tabela.
+        from models import SessaoAutenticada, Usuario
+        SessaoAutenticada.__table__.create(self.db.engine, checkfirst=True)
         self.admin = self.db.session.get(Usuario, self.admin_id)
         self.assertFalse(contract_policy.esquema_contratual_disponivel())
         self.assertEqual(self.situacao().regime, "LEGADO")
@@ -769,7 +774,8 @@ class CorrecoesRevisaoTests(ContratosCase):
         self.db.session.commit()
         self.login("admin-test@example.invalid")
         resposta = self.client.post(f"/admin/empresa/excluir-permanente/{self.empresa_id}",
-                                    data={"csrf_token": self.csrf_token("/admin/lixeira")})
+                                    data={"csrf_token": self.csrf_token("/admin/lixeira"),
+                                          "senha_confirmacao": self.password})
         self.assertEqual(resposta.status_code, 302)
         self.db.session.expire_all()
         self.assertIsNotNone(self.db.session.get(Empresa, self.empresa_id))

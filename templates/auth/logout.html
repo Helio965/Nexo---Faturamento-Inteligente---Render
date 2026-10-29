@@ -1,0 +1,27 @@
+{% extends "auth/_layout.html" %}
+
+{% block title %}Sair — NEXO{% endblock %}
+
+{% block content %}
+{# SEC-002: o logout é uma ação (POST + CSRF). Abrir este endereço por GET
+   (favorito, link antigo, prefetch) não encerra nada: apenas confirma. #}
+<div class="auth-card">
+    <div class="auth-brand">
+        <div class="auth-logo">
+            <img src="{{ url_for('static', filename='img/nexo-cubo-brilho.png') }}" alt="" width="253" height="279" decoding="async">
+        </div>
+        <p class="auth-eyebrow">NEXO <span>Faturamento Inteligente</span></p>
+        <div>
+            <h1 class="auth-title">Encerrar sessão</h1>
+        </div>
+    </div>
+
+    <p class="conta-encerrada-texto">Deseja sair do portal neste navegador? As demais sessões abertas em outros dispositivos continuam ativas.</p>
+
+    <form method="POST" action="{{ url_for('auth.logout') }}" class="d-grid gap-2">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="btn-nexo auth-submit w-100 justify-content-center"><i class="bi bi-box-arrow-right" aria-hidden="true"></i> Sair agora</button>
+        <a href="{{ url_for('admin.dashboard' if current_user.is_admin else 'cliente.dashboard') }}" class="btn-ghost justify-content-center"><i class="bi bi-arrow-left" aria-hidden="true"></i> Continuar no portal</a>
+    </form>
+</div>
+{% endblock %}

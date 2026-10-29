@@ -404,6 +404,9 @@ a { text-decoration: none; }
 .nav-logout { color: #b4b0cf; margin-bottom: 0; }
 .nav-logout:hover { background: var(--danger-bg); color: #fecaca; border-color: rgba(239, 68, 68, 0.22); }
 .nav-logout:hover i { background: rgba(239, 68, 68, 0.2); color: #fecaca; }
+/* SEC-002: "Sair" é um <button> dentro de um <form> POST; mesmo visual do link. */
+.nav-logout-form { margin: 0; }
+button.nav-logout { width: 100%; background: transparent; font: inherit; text-align: left; cursor: pointer; }
 
 .sidebar-overlay {
   display: none;
@@ -1568,12 +1571,17 @@ input, textarea, select, option,
 }
 .bell-mark:hover { color: #d8c2fd; text-decoration: underline; }
 .bell-list { max-height: 360px; overflow-y: auto; }
+/* SEC-002: cada item é um <button type="submit"> num <form> POST (abrir marca
+   como lida); o botão herda o visual do antigo link. */
+.bell-item-form { margin: 0; }
 .bell-item {
   display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px;
+  width: 100%; text-align: left; font: inherit; background: transparent; border: 0;
   text-decoration: none; color: var(--text); border-bottom: 1px solid var(--border);
   transition: background 0.12s ease;
 }
-.bell-item:last-child { border-bottom: none; }
+.bell-item-form:last-of-type .bell-item { border-bottom: none; }
+.bell-item:focus-visible { outline: 2px solid var(--primary-2); outline-offset: -2px; }
 .bell-item:hover { background: var(--surface-hover); }
 .bell-item .bell-dot {
   width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; flex: 0 0 auto;
@@ -1692,6 +1700,9 @@ input, textarea, select, option,
   transition: background 0.15s ease, color 0.15s ease;
 }
 .bell-foot .bell-mark:hover { background: rgba(168, 85, 247, 0.20); color: #e9defc; text-decoration: none; }
+/* Botão com aparência de link discreto (ex.: "Sair" na troca de senha). */
+.btn-link-dim { background: none; border: 0; padding: 0; color: var(--text-dim); font: inherit; cursor: pointer; }
+.btn-link-dim:hover { color: var(--text-muted); text-decoration: underline; }
 
 /* Item: hover premium + cursor pointer */
 .bell-item { gap: 10px; cursor: pointer; transition: background 0.14s ease, box-shadow 0.14s ease; }

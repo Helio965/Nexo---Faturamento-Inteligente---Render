@@ -6,7 +6,8 @@
 {% block page_title %}Análise{% endblock %}
 
 {% block content %}
-{% set rel = analise.relatorio %}
+{# SEC-003: `rel` é a versão PUBLICADA (cliente.analise); o rascunho não chega aqui. #}
+{% set rel = rel if rel is defined else (analise.relatorio.publicada if analise.relatorio else none) %}
 {% set ind = analise.indicador %}
 
 <div class="page-head">
@@ -164,7 +165,7 @@
 
 {% block extra_js %}
 {% if analise.indicador %}
-<script>
+<script nonce="{{ csp_nonce }}">
   /* Mesma leitura do comparativo da Visão Geral: Compras em âmbar, Vendas em azul. */
   NEXO.plot('chartAnaliseCli', [{
     type: 'bar',
@@ -184,7 +185,7 @@
                  ', vendas R$ ' + NEXO.fmtBRL({{ (analise.indicador.faturamento_total or 0)|float }}) + '.');
 </script>
 {% if abc_chart %}
-<script>
+<script nonce="{{ csp_nonce }}">
   window.NEXO_ABC = {{ abc_chart|tojson }};
   NEXO.plotParetoAbc('chartAbcAnalise', window.NEXO_ABC);
 </script>
@@ -192,7 +193,7 @@
 {% endif %}
 
 {# ---- Filtro dinâmico da Curva ABC (client-side, sem reload) ---- #}
-<script>
+<script nonce="{{ csp_nonce }}">
   (function () {
     var filtro = document.getElementById('abcFilter');
     var tabela = document.getElementById('abcTable');

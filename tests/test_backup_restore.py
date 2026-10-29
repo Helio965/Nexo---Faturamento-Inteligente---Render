@@ -115,7 +115,8 @@ class PostgreSQLBackupRestoreTests(unittest.TestCase):
                          f"Ensaio isolado falhou na etapa {report.get('stage', 'desconhecida')} "
                          f"({report.get('error_type', 'erro não identificado')}); saídas brutas omitidas.")
         self.assertEqual(report.get("status"), "ok")
-        self.assertEqual(report.get("tables"), 20)
+        # 19 tabelas do domínio + alembic_version + sessao_autenticada (SEC-001).
+        self.assertEqual(report.get("tables"), 21)
         self.assertEqual(report.get("uploads"), 4)
         self.assertEqual(report.get("files"), 5)
         not_executed = report.get("not_executed", [])
@@ -205,7 +206,7 @@ class BackupDrillSafetyTests(unittest.TestCase):
             for tool in TOOLS:
                 _tool(Path(fake), tool).write_bytes(b"")
             for platform, approved, accepted in cases:
-                report = {"status": "ok", "tables": 20, "uploads": 4, "files": 5,
+                report = {"status": "ok", "tables": 21, "uploads": 4, "files": 5,  # espelha o ensaio real
                           "checks": approved, "not_executed": ["etl"]}
                 completed = subprocess.CompletedProcess([], 0, stdout=json.dumps(report))
                 with self.subTest(platform=platform, checks=approved[-1:], accepted=accepted), \
@@ -449,7 +450,9 @@ class _PrivateDrill(unittest.TestCase):
                 sequence = db.session.scalar(text("SELECT pg_get_serial_sequence(:table_name, :column_name)"),
                                              {"table_name": table.name, "column_name": pk.name})
                 self.assertIsNotNone(sequence)
-                maximum = max(row[0] for row in db.session.execute(select(pk)))
+                # Tabela vazia (p.ex. sessao_autenticada antes de qualquer login) tem
+                # sequência válida mas nenhuma linha: o máximo é 0, não um erro.
+                maximum = max((row[0] for row in db.session.execute(select(pk))), default=0)
                 next_value = db.session.scalar(text("SELECT nextval(CAST(:sequence AS regclass))"),
                                               {"sequence": sequence})
                 self.assertGreater(next_value, maximum)

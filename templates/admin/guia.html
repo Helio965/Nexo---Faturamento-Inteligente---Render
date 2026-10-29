@@ -50,8 +50,9 @@
                     <td class="text-end">
                         <div class="acoes">
                             <a href="{{ url_for('admin.guia_editar', id=t.id) }}" class="btn-ghost btn-sm-x" aria-label="Editar tópico: {{ t.pergunta }}"><i class="bi bi-pencil" aria-hidden="true"></i> Editar</a>
+                            {# SEC-010: sem manipulador inline; base.html confirma via data-confirm (CSP). #}
                             <form method="POST" action="{{ url_for('admin.guia_deletar', id=t.id) }}" style="display:inline;"
-                                  onsubmit="return confirm('Remover este tópico da Base de Conhecimento?');">
+                                  data-confirm="Remover este tópico da Base de Conhecimento?">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn-ghost is-danger btn-sm-x" title="Remover tópico" aria-label="Remover tópico: {{ t.pergunta }}"><i class="bi bi-trash" aria-hidden="true"></i></button>
                             </form>

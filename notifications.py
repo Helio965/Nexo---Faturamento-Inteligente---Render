@@ -21,8 +21,10 @@ from sqlalchemy.orm import Session
 from extensions import db, socketio
 from horario import horario_brasilia, iso_utc
 from models import Empresa, Notificacao, Usuario
-from session_security import condicoes_empresa_acessivel, impressao_sessao, usuario_pode_acessar
-from realtime import sala_do_usuario
+from session_security import (
+    condicoes_empresa_acessivel, hashes_sessoes_ativas, impressao_sessao, usuario_pode_acessar,
+)
+from realtime import sala_da_sessao
 
 logger = logging.getLogger(__name__)
 
@@ -69,8 +71,10 @@ def _entregar_tempo_real(bind, id_usuario, payload):
     # A transação que criou a notificação já terminou. A sessão independente
     # evita consultar uma sessão committed ou bloquear o próprio chamador.
     # FOR SHARE mantém credencial e geração até enfileirar o pacote. O UPDATE
-    # de senha ou exclusão da empresa só confirma depois, ou já é visto aqui.
-    # A leitura da empresa é MVCC, na mesma Session e sem lock invertido.
+    # de senha, a exclusão da empresa ou o logout (FOR UPDATE no usuário) só
+    # confirmam depois, ou já são vistos aqui. A leitura da empresa é MVCC,
+    # na mesma Session e sem lock invertido. SEC-001: só as sessões ainda
+    # registradas e não revogadas são destinatárias (uma sala por sessão).
     with Session(bind=bind) as consulta:
         usuario = consulta.scalar(select(Usuario).where(
             Usuario.id_usuario == id_usuario,
@@ -78,11 +82,12 @@ def _entregar_tempo_real(bind, id_usuario, payload):
         if (not usuario_pode_acessar(usuario, consulta=consulta)
                 or (usuario.role == "CLIENTE" and usuario.primeiro_acesso)):
             return
-        socketio.emit(
-            "nova_notificacao", payload,
-            room=sala_do_usuario(id_usuario, impressao_sessao(usuario)),
-            namespace="/",
-        )
+        impressao = impressao_sessao(usuario)
+        for hash_sessao in hashes_sessoes_ativas(id_usuario, consulta=consulta):
+            socketio.emit(
+                "nova_notificacao", payload,
+                room=sala_da_sessao(hash_sessao, impressao), namespace="/",
+            )
 
 
 def _apos_commit_notificacoes(sessao):

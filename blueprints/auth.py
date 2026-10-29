@@ -12,13 +12,16 @@ from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from werkzeug.security import check_password_hash, generate_password_hash
 
-from extensions import db, limiter
+from extensions import chave_limite_conta, db, limiter
 from models import Empresa, Usuario
-from emails import email_recuperacao_senha, email_boas_vindas
+from emails import email_recuperacao_senha, email_boas_vindas, email_senha_alterada
 from contract_policy import obter_situacao_contratual
+from origem_publica import url_publica
+from politica_senha import validar_nova_senha
 from session_security import (
-    CHAVE_CREDENCIAL, condicoes_empresa_acessivel, impressao_sessao,
-    impressao_credencial_sessao, mesma_impressao, registrar_sessao,
+    CHAVE_CREDENCIAL, CHAVE_SESSAO, carregar_usuario, condicoes_empresa_acessivel,
+    carimbar_sessao, hash_token_sessao, impressao_sessao, impressao_credencial_sessao,
+    mesma_impressao, registrar_sessao, revogar_sessao_por_hash, revogar_sessoes_usuario,
     usuario_pode_acessar, vincular_geracao_autorizacao,
 )
 
@@ -204,12 +207,17 @@ def _atualizar_credencial(estado: _CredencialEsperada, nova_senha: str, *, renov
         if resultado.rowcount != 1:
             db.session.rollback()
             return False
+        # SEC-001: revogação global. Toda sessão registrada do usuário cai
+        # junto com a senha, na mesma transação do CAS; a sessão renovada do
+        # primeiro acesso nasce nessa mesma transação (um único COMMIT).
+        revogar_sessoes_usuario(db.session, estado.id_usuario, "troca_senha")
         renovar_cliente = (
             renovar_sessao and has_request_context()
             and session.get("_user_id") == str(estado.id_usuario)
             and session.get("boot_id") == current_app.config["BOOT_ID"]
             and mesma_impressao(impressao_sessao(estado), session.get(CHAVE_CREDENCIAL))
         )
+        token_renovado = registrar_sessao(db.session, estado.id_usuario)[0] if renovar_cliente else None
         db.session.commit()
     except SQLAlchemyError as erro:
         _falha_banco_senha(erro)
@@ -220,8 +228,8 @@ def _atualizar_credencial(estado: _CredencialEsperada, nova_senha: str, *, renov
     impressao_atual = impressao_credencial_sessao(
         estado.id_usuario, novo_hash, estado.geracao_autorizacao,
     )
-    if renovar_cliente:
-        registrar_sessao(estado, impressao_esperada=impressao_atual)
+    if token_renovado is not None:
+        carimbar_sessao(token_renovado, impressao_atual)
     try:
         from realtime import revogar_conexoes_usuario
         revogar_conexoes_usuario(
@@ -268,17 +276,23 @@ def _conta_encerrada(usuario) -> bool:
         return False
 
 
-def _validar_nova_senha(nova: str, confirma: str):
-    """Regras mínimas de senha. Retorna mensagem de erro ou None se OK."""
-    if len(nova) < 8:
-        return "A senha deve ter ao menos 8 caracteres."
-    if nova != confirma:
-        return "As senhas não coincidem."
-    return None
+def _validar_nova_senha(nova: str, confirma: str, estado: _CredencialEsperada | None = None):
+    """Política de senha (politica_senha.py) aplicada à credencial que será
+    substituída: a senha não pode conter o e-mail/nome nem repetir a atual."""
+    usuario = estado.usuario if estado is not None else None
+    return validar_nova_senha(
+        nova, confirma,
+        email=getattr(usuario, "email", None), nome=getattr(usuario, "nome", None),
+        hash_atual=estado.senha_hash if estado is not None else None,
+    )
 
 
 @auth_bp.route("/login", methods=["GET", "POST"])
 @limiter.limit("10 per minute", methods=["POST"])  # trava brute force de senha
+# Por conta alvo (hash do e-mail), independentemente do IP de origem. Orçamento
+# em config (LIMITE_LOGIN_CONTA): acima do teto por IP × janela, para que um só
+# IP não tranque o e-mail alvo; lido a cada requisição (ajustável sem reinício).
+@limiter.limit(lambda: current_app.config["LIMITE_LOGIN_CONTA"], methods=["POST"], key_func=chave_limite_conta)
 def login():
     """Gere o ecrã e a lógica de login do utilizador."""
     # Se já estiver autenticado, vai DIRETO ao dashboard do perfil correto.
@@ -316,8 +330,26 @@ def login():
             # Efetua o login na sessão (sem "remember": cookie morre ao fechar o
             # navegador). Carimba a sessão com o BOOT_ID atual para que um
             # restart do servidor invalide o login automaticamente.
+            # SEC-001: a sessão anônima é descartada (anti-fixação) e o login
+            # só vale com a sessão registrada no banco (fail-closed).
+            session.clear()
             login_user(usuario, remember=False)
-            registrar_sessao(usuario, impressao_esperada=impressao_login)
+            try:
+                token_sessao = registrar_sessao(db.session, usuario.id_usuario)[0]
+                usuario.ultimo_acesso = datetime.now(timezone.utc)
+                db.session.commit()
+            except SQLAlchemyError as erro:
+                db.session.rollback()
+                logout_user()
+                session.clear()
+                logger.warning("Registro de sessão indisponível (%s).", type(erro).__name__)
+                resposta = make_response(render_template(
+                    "erro_simples.html", titulo="Serviço indisponível", codigo=503,
+                    mensagem="Não foi possível iniciar a sessão. Tente novamente em instantes.",
+                ), 503)
+                resposta.headers["Cache-Control"] = "no-store"
+                return resposta
+            carimbar_sessao(token_sessao, impressao_login)
 
             # Trata o redirecionamento caso o utilizador tenha tentado aceder a uma
             # página protegida antes. Só aceitamos destinos LOCAIS (anti open redirect).
@@ -339,11 +371,47 @@ def login():
     return render_template("auth/login.html", email_digitado=request.form.get("email", "").strip())
 
 
-@auth_bp.route("/logout")
+@auth_bp.route("/logout", methods=["GET", "POST"])
 @login_required
 def logout():
-    """Termina a sessão do utilizador."""
+    """Termina a sessão ATUAL do utilizador (POST + CSRF).
+
+    SEC-002: GET apenas mostra a confirmação; nenhum link, imagem ou prefetch
+    encerra a sessão. SEC-001: a linha registrada desta sessão é revogada no
+    banco antes de o cookie ser descartado, de modo que uma cópia do cookie
+    deixa de autorizar HTTP e Socket.IO em qualquer processo. As demais
+    sessões do mesmo usuário (outros navegadores) continuam válidas.
+    """
+    if request.method == "GET":
+        resposta = make_response(render_template("auth/logout.html"))
+        resposta.headers["Cache-Control"] = "no-store"
+        return resposta
+    hash_atual = hash_token_sessao(session.get(CHAVE_SESSAO))
+    try:
+        # FOR UPDATE no usuário: entregas em andamento (FOR SHARE) terminam
+        # antes do COMMIT e as seguintes já veem a sessão revogada.
+        usuario = carregar_usuario(current_user.id_usuario, escrita=True)
+        if usuario is not None and hash_atual is not None:
+            revogar_sessao_por_hash(db.session, usuario.id_usuario, hash_atual, "logout")
+        db.session.commit()
+    except SQLAlchemyError as erro:
+        # Não afirmar que a sessão terminou quando o servidor não a revogou.
+        db.session.rollback()
+        logger.warning("Logout indisponível (%s).", type(erro).__name__)
+        resposta = make_response(render_template(
+            "erro_simples.html", titulo="Serviço indisponível", codigo=503,
+            mensagem="Não foi possível encerrar a sessão no servidor. Tente novamente em instantes.",
+        ), 503)
+        resposta.headers["Cache-Control"] = "no-store"
+        return resposta
     logout_user()
+    session.clear()
+    try:
+        from realtime import revogar_conexoes_sessao
+        revogar_conexoes_sessao(hash_atual)
+    except Exception as erro:
+        # Já revogada no banco: a varredura e as salas por sessão completam.
+        logger.warning("Desconexão Socket.IO no logout indisponível (%s).", type(erro).__name__)
     flash("Sessão terminada com sucesso.", "success")
     return redirect(url_for("auth.login"))
 
@@ -364,12 +432,12 @@ def primeiro_acesso():
     if request.method == "POST":
         nova = request.form.get("nova_senha", "")
         confirma = request.form.get("confirma_senha", "")
-        erro = _validar_nova_senha(nova, confirma)
+        estado = _estado_credencial(current_user)
+        erro = _validar_nova_senha(nova, confirma, estado)
         if erro:
             flash(erro, "danger")
             return render_template("auth/primeiro_acesso.html")
 
-        estado = _estado_credencial(current_user)
         if not _atualizar_credencial(estado, nova, renovar_sessao=True):
             flash("Não foi possível definir a senha. Faça login ou solicite um novo link.", "danger")
             return redirect(url_for("auth.login"))
@@ -381,6 +449,9 @@ def primeiro_acesso():
 
 @auth_bp.route("/recuperar-senha", methods=["GET", "POST"])
 @limiter.limit("5 per minute", methods=["POST"])  # evita abuso do envio de e-mail
+# Por conta alvo (LIMITE_RECUPERACAO_CONTA): limita o envio de e-mails a um alvo a
+# partir de vários IPs sem permitir que poucos pedidos bloqueiem a autorrecuperação.
+@limiter.limit(lambda: current_app.config["LIMITE_RECUPERACAO_CONTA"], methods=["POST"], key_func=chave_limite_conta)
 def recuperar_senha():
     """
     Solicita recuperação ou reenvio de ativação, conforme o estado da conta.
@@ -393,13 +464,16 @@ def recuperar_senha():
                 select(Usuario).where(Usuario.email == email)
             ).scalar_one_or_none()
             if usuario_pode_acessar(usuario):
+                # SEC-005: o link sai da origem canônica configurada, nunca do
+                # cabeçalho Host recebido (um Host forjado levaria o token ao
+                # domínio do atacante).
                 if _permite_finalidade(usuario, _ATIVACAO):
                     token = gerar_token_definir_senha(usuario)
-                    link = url_for("auth.ativar_acesso", token=token, _external=True)
+                    link = url_publica("auth.ativar_acesso", token=token)
                     email_boas_vindas(usuario, link)
                 else:
                     token = gerar_token_recuperacao_senha(usuario)
-                    link = url_for("auth.resetar_senha", token=token, _external=True)
+                    link = url_publica("auth.resetar_senha", token=token)
                     email_recuperacao_senha(usuario, link)
                 logger.info("Solicitação de recuperação de senha processada.")
         except SQLAlchemyError as erro:
@@ -426,7 +500,7 @@ def resetar_senha(token):
     if request.method == "POST":
         nova = request.form.get("nova_senha", "")
         confirma = request.form.get("confirma_senha", "")
-        erro = _validar_nova_senha(nova, confirma)
+        erro = _validar_nova_senha(nova, confirma, estado)
         if erro:
             flash(erro, "danger")
             return render_template("auth/resetar_senha.html", token=token)
@@ -434,6 +508,9 @@ def resetar_senha(token):
         if not _atualizar_credencial(estado, nova):
             flash("Token inválido ou expirado. Solicite um novo link de redefinição.", "danger")
             return redirect(url_for("auth.recuperar_senha"))
+        # Aviso ao dono da conta (sem link de token): uma redefinição que ele
+        # não fez vira sinal de comprometimento, com o caminho para reagir.
+        email_senha_alterada(estado.usuario, url_publica("auth.recuperar_senha"))
         flash("Senha redefinida com sucesso. Faça login com a nova senha.", "success")
         return redirect(url_for("auth.login"))
 
@@ -460,7 +537,7 @@ def ativar_acesso(token):
     if request.method == "POST":
         nova = request.form.get("nova_senha", "")
         confirma = request.form.get("confirma_senha", "")
-        erro = _validar_nova_senha(nova, confirma)
+        erro = _validar_nova_senha(nova, confirma, estado)
         if erro:
             flash(erro, "danger")
             return render_template("auth/primeiro_acesso_token.html", token=token, usuario=usuario)

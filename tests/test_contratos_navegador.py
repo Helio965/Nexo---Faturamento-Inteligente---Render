@@ -81,6 +81,17 @@ _CDN_INTEGRO = {
     _CDN + "bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js": (
         "bootstrap.bundle.min.js", "application/javascript",
         "YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz"),
+    # SEC-009: os templates fixam SRI em todo recurso de CDN; uma cópia que não
+    # seja byte a byte idêntica é bloqueada pelo navegador (erro no console).
+    _CDN + "bootstrap-icons@1.11.3/font/bootstrap-icons.min.css": (
+        "bootstrap-icons.min.css", "text/css",
+        "XGjxtQfXaH2tnPFa9x+ruJTuLE3Aa6LhHSWRr1XeTyhezb4abCG4ccI5AkVDxqC+"),
+    _CDN + "plotly.js-dist-min@2.35.2/plotly.min.js": (
+        "plotly.min.js", "application/javascript",
+        "cCVCZkAjYNxaYKbM8lsArLznDF/SvMFr1jcZrvOpSTCa0W40ZAdLzHCEulnUa5i7"),
+    "https://cdn.socket.io/4.7.5/socket.io.min.js": (
+        "socket.io.min.js", "application/javascript",
+        "2huaZvOR9iDzHqslqwpR87isEmrfxqyWOF7hr7BY6KG0+hVKLoEXMPUJw3ynWuhO"),
 }
 
 
@@ -108,6 +119,40 @@ def _copias_locais_da_cdn():
             if resumo == sri:
                 copias[url] = (str(arquivo), tipo)
     return copias
+
+
+# Fontes que o bootstrap-icons.min.css íntegro carrega por URL com query string
+# (sem SRI possível). Cópia local quando existir em NEXO_TEST_CDN_DIR; sem ela,
+# corpo vazio: o Chromium só avisa que não decodificou a fonte (não é erro).
+_FONTES_CDN = {
+    _CDN + "bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff2": ("bootstrap-icons.woff2", "font/woff2"),
+    _CDN + "bootstrap-icons@1.11.3/font/fonts/bootstrap-icons.woff": ("bootstrap-icons.woff", "font/woff"),
+}
+
+
+def _servir_fonte(rota, url):
+    """Responde a uma fonte conhecida da CDN (cópia local ou vazia); outras são abortadas."""
+    conhecida = _FONTES_CDN.get(url.split("?", 1)[0])
+    if conhecida is None:
+        rota.abort()
+        return
+    nome, tipo = conhecida
+    pasta = os.environ.get("NEXO_TEST_CDN_DIR")
+    arquivo = Path(pasta) / nome if pasta else None
+    if arquivo is not None and arquivo.is_file():
+        rota.fulfill(status=200, path=str(arquivo), content_type=tipo)
+    else:
+        rota.fulfill(status=200, content_type=tipo, body=b"")
+
+
+def _liberar_origem_socketio(caso, base):
+    """O servidor de teste nasce numa porta aleatória e o handshake do Socket.IO
+    (anti-CSWSH) só aceita as origens configuradas: a origem do teste é
+    acrescentada nesta instância, sem tocar na configuração do produto."""
+    from extensions import socketio
+    eio = socketio.server.eio
+    origens = list(eio.cors_allowed_origins) if isinstance(eio.cors_allowed_origins, (list, tuple)) else []
+    caso.stack.enter_context(patch.object(eio, "cors_allowed_origins", [*origens, base]))
 
 
 _MEDIR_LAYOUT = """() => {
@@ -160,6 +205,7 @@ class ContratosNavegadorTests(ContratosCase):
             self.stack.enter_context(patch(alvo, original))
         self.servidor = make_server("127.0.0.1", 0, self.app, threaded=True)
         self.base = f"http://127.0.0.1:{self.servidor.server_port}"
+        _liberar_origem_socketio(self, self.base)
         threading.Thread(target=self.servidor.serve_forever, daemon=True).start()
         self.addCleanup(self._parar_servidor)
         self.pw = sync_playwright().start()
@@ -168,6 +214,10 @@ class ContratosNavegadorTests(ContratosCase):
         self.addCleanup(self.navegador.close)
         self.cdn_local = _copias_locais_da_cdn()
         self.erros_js = []
+        if len(self.cdn_local) < len(_CDN_INTEGRO):
+            # SEC-009: um recurso fixado por SRI sem cópia íntegra local seria
+            # bloqueado pelo navegador (erro no console), não substituído.
+            self.skipTest("Cópias íntegras da CDN incompletas (NEXO_TEST_CDN_DIR)")
 
     def _parar_servidor(self):
         self.servidor.shutdown()
@@ -185,6 +235,8 @@ class ContratosNavegadorTests(ContratosCase):
         elif url in self.cdn_local:
             caminho, tipo = self.cdn_local[url]
             rota.fulfill(status=200, path=caminho, content_type=tipo)
+        elif requisicao.resource_type == "font":
+            _servir_fonte(rota, url)
         elif url == _CDN + "bootstrap@5.3.3/dist/css/bootstrap.min.css":
             rota.fulfill(status=200, content_type="text/css", body=_BOOTSTRAP_MINIMO)
         elif requisicao.resource_type == "stylesheet":
