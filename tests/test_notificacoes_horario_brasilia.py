@@ -427,6 +427,22 @@ class HorarioBrasiliaTests(DeployTestCase):
         self.assertLess(chamado.data_abertura, chamado.mensagens[0].data_envio)
         self.assertLess(chamado.mensagens[0].data_envio, gravado)
 
+    def test_f_resposta_grava_mensagem_e_atualizacao_no_mesmo_instante(self):
+        """Na resposta, a mensagem e a atualização do chamado são o mesmo evento: uma
+        leitura do relógio. Com um relógio que avança um minuto a cada leitura, duas
+        leituras deixariam a "Última atualização" um minuto antes da "Última mensagem"."""
+        id_chamado = self.portal.abrir_chamado()
+        leituras = (A + timedelta(minutes=i) for i in range(1, 10_000))
+        self.app.config["NEXO_RELOGIO"] = lambda: next(leituras)
+        for papel, responder in (("ADMIN", self.portal.responder_admin), ("CLIENTE", self.portal.responder_cliente)):
+            with self.subTest(resposta=papel):
+                responder(id_chamado)
+                ultima = self.portal.conversa("ADMIN", id_chamado)["mensagens"][-1]
+                painel = self.portal.painel_admin(id_chamado)
+                self.assertEqual(painel["Última mensagem"], ultima)
+                self.assertEqual(painel["Última atualização"], ultima)
+                self.assertEqual(self.portal.lista("ADMIN")[id_chamado], ultima)
+
     def test_g_sininho_recarregado_mostra_o_texto_do_tempo_real(self):
         id_chamado = self.portal.abrir_chamado()
         self.portal.relogio(datetime(2026, 10, 29, 18, 45, tzinfo=UTC))

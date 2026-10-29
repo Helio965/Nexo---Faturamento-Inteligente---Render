@@ -1240,14 +1240,17 @@ def ticket_detalhe(id_chamado):
             if not texto:
                 flash("Digite uma resposta.", "warning")
                 return redirect(url_for("admin.ticket_detalhe", id_chamado=id_chamado))
+            # Uma leitura do relógio: a resposta é a mensagem e a atualização do chamado.
+            instante = agora_utc()
             db.session.add(MensagemSuporte(
                 id_chamado=id_chamado,
                 id_usuario_remetente=current_user.id_usuario,
                 mensagem=texto,
+                data_envio=instante,
             ))
             if chamado.status_chamado == "ABERTO":
                 chamado.status_chamado = "EM_ATENDIMENTO"
-            chamado.data_atualizacao = agora_utc()
+            chamado.data_atualizacao = instante
             notificar_clientes_empresa(
                 chamado.id_empresa,
                 f"A equipe NEXO respondeu seu chamado “{chamado.assunto}”.",
