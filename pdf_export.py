@@ -3,7 +3,7 @@ NEXO - Faturamento Inteligente | Exportação da Análise Executiva em PDF
 ======================================================================
 Gera, com ReportLab (platypus), o PDF da análise publicada: cabeçalho da marca,
 indicadores, Curva ABC (Top 5) com o gráfico de pizza da distribuição do
-faturamento, síntese executiva em semáforos (5W2H) e a devolutiva do consultor.
+faturamento, síntese executiva em semáforos e a devolutiva do consultor.
 
 Layout claro (fundo branco) — apropriado para impressão/anexo — com os acentos
 de cor da identidade NEXO (roxo) e o mesmo código de cores da app para as
@@ -665,7 +665,7 @@ def gerar_pdf_analise(analise, semaforos, abc_top) -> bytes:
     # Síntese executiva (semáforos): o título viaja com o primeiro cartão.
     if semaforos:
         cartoes = [_semaforo_flowable(card, largura, est) for card in semaforos]
-        elems.append(KeepTogether([Paragraph("Síntese executiva (5W2H)", est["h2"]), cartoes[0]]))
+        elems.append(KeepTogether([Paragraph("Síntese executiva", est["h2"]), cartoes[0]]))
         for cartao in cartoes[1:]:
             elems.append(Spacer(1, 3 * mm))
             elems.append(cartao)
