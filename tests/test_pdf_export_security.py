@@ -242,7 +242,7 @@ class PDFExportSecurityTests(_PDFChecks, unittest.TestCase):
             "Síntese executiva (5W2H)", "O QUE FAZER", "POR QUE FAZER", "ATENÇÃO",
             "Devolutiva do consultor", "Resumo executivo", "Conclusão estratégica",
             "Documento gerado pelo portal NEXO", "Página 1 de ", "Não representa lucro, margem ou CMV.",
-            "Tintas & Cores", "Análise de reposição",
+            "Tintas & Cores", "Análise de reposição", "Distribuição do faturamento por produto",
         ):
             with self.subTest(esperado=esperado):
                 self.assertIn(esperado, texto)

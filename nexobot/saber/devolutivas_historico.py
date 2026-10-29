@@ -335,7 +335,8 @@ REGISTROS = (
         categoria="Histórico e PDF",
         resumo=(
             "O PDF traz o cabeçalho NEXO com a referência, o título da devolutiva, empresa, CNPJ e período, os "
-            "indicadores do período, a Curva ABC com os 5 primeiros produtos, a síntese executiva em semáforos "
+            "indicadores do período, a Curva ABC com os 5 primeiros produtos, o gráfico de pizza com a "
+            "participação de cada um no faturamento (e de “Outros produtos”), a síntese executiva em semáforos "
             "e a devolutiva (resumo executivo e conclusão estratégica)."
         ),
         explicacao=(
@@ -345,11 +346,12 @@ REGISTROS = (
         ),
         perguntas=("O que vem no PDF?",
                    "O PDF tem a curva ABC?",
+                   "O PDF tem gráfico de pizza?",
                    "O PDF inclui os semáforos?",
                    "Quais informações o arquivo contém?",
                    "O que tem no PDF?",
                    "O que está no PDF?"),
-        termos="pdf conteudo contem inclui secoes layout impressao",
+        termos="pdf conteudo contem inclui secoes layout impressao grafico pizza participacao",
         relacionados=("nexo.historico.pdf_exportar", "nexo.devolutivas.o_que_e"),
         destino="historico",
         fontes=("pdf_export.py", "blueprints/cliente.py"),

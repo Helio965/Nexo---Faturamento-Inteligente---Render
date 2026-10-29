@@ -2,8 +2,8 @@
 NEXO - Faturamento Inteligente | Exportação da Análise Executiva em PDF
 ======================================================================
 Gera, com ReportLab (platypus), o PDF da análise publicada: cabeçalho da marca,
-indicadores, Curva ABC (Top 5), síntese executiva em semáforos (5W2H) e a
-devolutiva do consultor.
+indicadores, Curva ABC (Top 5) com o gráfico de pizza da distribuição do
+faturamento, síntese executiva em semáforos (5W2H) e a devolutiva do consultor.
 
 Layout claro (fundo branco) — apropriado para impressão/anexo — com os acentos
 de cor da identidade NEXO (roxo) e o mesmo código de cores da app para as
@@ -12,7 +12,7 @@ classes ABC e os semáforos. Mantém a regra: sem lucro/margem/CMV.
 Paginação: o conteúdo ocupa exatamente a área entre as margens (quadro sem
 recuo interno); nenhum título fica sozinho no fim de uma página — cada título
 viaja com o primeiro bloco do seu conteúdo —, blocos curtos (indicadores,
-tabela, cada cartão) não se partem e os textos longos da
+tabela, gráfico com legenda, cada cartão) não se partem e os textos longos da
 devolutiva quebram entre páginas normalmente. O rodapé de todas as páginas traz
 "Página X de Y".
 
@@ -20,12 +20,16 @@ Função pública:
     gerar_pdf_analise(analise, semaforos, abc_top) -> bytes
 """
 
+from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from io import BytesIO
+import logging
 import re
 from xml.sax.saxutils import escape
 
+from reportlab.graphics.charts.piecharts import Pie
+from reportlab.graphics.shapes import Circle, Drawing, Rect
 from reportlab.lib.colors import HexColor, white
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -37,6 +41,8 @@ from reportlab.platypus import (
     Table, TableStyle,
 )
 
+log = logging.getLogger(__name__)
+
 # ---- Paleta NEXO ----
 ROXO = HexColor("#7c3aed")
 ROXO2 = HexColor("#a855f7")
@@ -44,6 +50,7 @@ LAVANDA = HexColor("#ede9fb")
 TINTA = HexColor("#1f2330")
 CINZA = HexColor("#6a7088")
 LINHA = HexColor("#e6e8ef")
+CONTORNO = HexColor("#c3c6d4")
 FUNDO_SUAVE = HexColor("#f5f6fa")
 
 CLASSE_COR = {"A": HexColor("#22c55e"), "B": HexColor("#f59e0b"), "C": HexColor("#9aa0b7")}
@@ -59,7 +66,17 @@ SEMAFORO_FUNDO = {
 }
 SEMAFORO_ROTULO = {"critico": "CRÍTICO", "atencao": "ATENÇÃO", "oportunidade": "OPORTUNIDADE"}
 
-TOP_N_PDF = 5                      # a tabela mostra os 5 primeiros produtos da Curva ABC
+# Gráfico de pizza: rampa ordinal no matiz do roxo NEXO (mais escuro = maior
+# participação; as fatias vêm em ordem de faturamento). Validada com o
+# verificador de paletas: L monotônico, ΔL >= 0,06 entre vizinhos (cores
+# distinguíveis também por daltônicos e na impressão em tons de cinza), um só
+# matiz e contraste >= 2:1 no extremo claro. "Outros produtos" usa um cinza
+# neutro claro (ΔE >= 16 contra todos os passos), com o contorno do círculo.
+RAMPA_PIZZA = tuple(HexColor(c) for c in ("#5a06bb", "#7040ce", "#8765e0", "#9d83ee", "#b4a1fc"))
+COR_OUTROS = HexColor("#d5d8e2")
+TOP_N_PDF = 5                      # a tabela e o gráfico mostram os mesmos produtos
+LIMITE_ROTULO_NA_FATIA = Decimal("12")   # % mínima para escrever o percentual dentro da fatia
+TOLERANCIA_CENTAVOS = Decimal("0.005")   # diferenças abaixo de meio centavo são arredondamento
 
 # ---- Geometria da página (A4, pontos) ----
 MARGEM_X = 18 * mm
@@ -99,6 +116,13 @@ def _brl(valor) -> str:
     return texto.replace(",", "_").replace(".", ",").replace("_", ".")
 
 
+def _pct(valor, casas: int = 2) -> str:
+    """74.22871 -> '74,23%' (vírgula decimal, arredondamento meio para cima)."""
+    numero = _decimal(valor) or Decimal(0)
+    quantum = Decimal(1).scaleb(-casas)
+    return f"{numero.quantize(quantum, ROUND_HALF_UP):.{casas}f}".replace(".", ",") + "%"
+
+
 def _num(valor) -> str:
     try:
         return f"{float(valor or 0):,.0f}".replace(",", ".")
@@ -121,6 +145,20 @@ def _encurtar(texto, fonte, tamanho, largura) -> str:
     while texto and stringWidth(texto + "…", fonte, tamanho) > largura:
         texto = texto[:-1]
     return texto.rstrip() + "…"
+
+
+def _luminancia(cor) -> float:
+    def canal(c):
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    return 0.2126 * canal(cor.red) + 0.7152 * canal(cor.green) + 0.0722 * canal(cor.blue)
+
+
+def _tinta_sobre(fundo):
+    """Branco ou tinta escura, o que tiver mais contraste sobre o fundo."""
+    lum = _luminancia(fundo)
+    contraste_branco = 1.05 / (lum + 0.05)
+    contraste_tinta = (lum + 0.05) / (_luminancia(TINTA) + 0.05)
+    return white if contraste_branco >= contraste_tinta else TINTA
 
 
 # ---- Cabeçalho e rodapé ----
@@ -225,9 +263,11 @@ def _estilos():
                              fontSize=12.5, leading=15, textColor=ROXO, spaceBefore=0, spaceAfter=6),
         "h3": ParagraphStyle("h3", parent=base, fontName="Helvetica-Bold",
                              fontSize=10.5, leading=13, textColor=TINTA, spaceBefore=2, spaceAfter=3),
+        "sub": ParagraphStyle("sub", parent=base, fontSize=8.5, leading=11.5, textColor=CINZA, spaceAfter=0),
         "p": ParagraphStyle("p", parent=base, fontSize=9.5, leading=14, textColor=TINTA, spaceAfter=5,
                             allowWidows=0),
         "small": ParagraphStyle("small", parent=base, fontSize=8, leading=11, textColor=CINZA),
+        "aviso": ParagraphStyle("aviso", parent=base, fontSize=8, leading=11, textColor=TINTA),
         "kpi_label": ParagraphStyle("kl", parent=base, fontSize=7.5, leading=9, textColor=CINZA),
         "kpi_value": ParagraphStyle("kv", parent=base, fontName="Helvetica-Bold",
                                     fontSize=13, leading=16, textColor=TINTA),
@@ -238,6 +278,7 @@ def _estilos():
         "sc_val": ParagraphStyle("scv", parent=base, fontSize=8.5, leading=12, textColor=TINTA),
         "cell": ParagraphStyle("cell", parent=base, fontSize=9, leading=12),
         "cell_b": ParagraphStyle("cellb", parent=base, fontName="Helvetica-Bold", fontSize=9),
+        "leg": ParagraphStyle("leg", parent=base, fontSize=8.5, leading=10.5, textColor=TINTA),
     }
     return estilos
 
@@ -319,6 +360,194 @@ def _abc_flowable(abc_top, largura, est):
     t = Table(linhas, colWidths=larguras, repeatRows=1)
     t.setStyle(TableStyle(estilo))
     return t
+
+
+@dataclass(frozen=True)
+class Fatia:
+    nome: str
+    classe: str | None
+    faturamento: Decimal
+    percentual: Decimal          # sobre a base, sem arredondar
+    cor: object
+    outros: bool = False
+
+
+@dataclass(frozen=True)
+class Distribuicao:
+    fatias: tuple
+    base: Decimal                # denominador das participações
+    base_e_faturamento_total: bool
+    avisos: tuple
+
+
+def calcular_distribuicao(faturamento_total, produtos) -> Distribuicao | None:
+    """Participação individual de cada produto exibido na tabela Curva ABC.
+
+    participação = faturamento do produto ÷ faturamento total do período × 100;
+    "Outros produtos" = faturamento total − soma dos produtos exibidos (quando
+    positivo). Os dados não são ajustados para a soma dos percentuais
+    arredondados dar 100%. Inconsistências viram aviso explícito no PDF:
+      - soma dos produtos maior que o faturamento total: a base passa a ser a
+        soma dos produtos e não há fatia "Outros";
+      - faturamento total ausente ou não positivo: idem;
+      - produto com faturamento zero ou negativo: fica fora do gráfico.
+    Devolve None quando não há faturamento positivo para distribuir.
+    """
+    avisos = []
+    exibidos = []
+    ignorados = 0
+    for p in produtos[:TOP_N_PDF]:
+        valor = _decimal(p.faturamento)
+        if valor is None or valor <= 0:
+            ignorados += 1
+            continue
+        exibidos.append((p, valor))
+    soma = sum((valor for _, valor in exibidos), Decimal(0))
+    if soma <= 0:
+        return None
+    total = _decimal(faturamento_total)
+    if total is None or total <= 0:
+        base, usa_total = soma, False
+        avisos.append("Faturamento total do período indisponível: as participações foram "
+                      "calculadas sobre a soma dos produtos exibidos.")
+    elif soma - total > TOLERANCIA_CENTAVOS:
+        base, usa_total = soma, False
+        avisos.append(f"A soma dos produtos exibidos (R$ {_brl(soma)}) é maior que o faturamento total "
+                      f"informado (R$ {_brl(total)}); as participações foram calculadas sobre a soma "
+                      "dos produtos, sem a fatia Outros produtos.")
+        log.warning("PDF: soma da Curva ABC exibida (%s) maior que o faturamento total (%s).", soma, total)
+    else:
+        base, usa_total = total, True
+    if ignorados:
+        avisos.append(f"{ignorados} produto(s) da tabela com faturamento zero ou negativo não entram no gráfico.")
+    fatias = [
+        Fatia(nome=str(p.produto_nome or ""), classe=p.classe_abc, faturamento=valor,
+              percentual=valor / base * 100, cor=RAMPA_PIZZA[min(i, len(RAMPA_PIZZA) - 1)])
+        for i, (p, valor) in enumerate(exibidos)
+    ]
+    if usa_total:
+        restante = total - soma
+        if restante > TOLERANCIA_CENTAVOS:
+            fatias.append(Fatia(nome="Outros produtos", classe=None, faturamento=restante,
+                                percentual=restante / base * 100, cor=COR_OUTROS, outros=True))
+    return Distribuicao(fatias=tuple(fatias), base=base, base_e_faturamento_total=usa_total,
+                        avisos=tuple(avisos))
+
+
+def _grafico_pizza(distribuicao, diametro):
+    """Pizza vetorial 2D (ReportLab Graphics): fatias proporcionais, separadas
+    por um filete branco, começando às 12 h no sentido horário. Só as fatias
+    grandes recebem o percentual dentro; as demais ficam na legenda."""
+    folga = 2 * mm
+    lado = diametro + 2 * folga
+    desenho = Drawing(lado, lado)
+    pizza = Pie()
+    pizza.x = pizza.y = folga
+    pizza.width = pizza.height = diametro
+    pizza.data = [float(f.faturamento) for f in distribuicao.fatias]
+    pizza.startAngle = 90
+    pizza.direction = "clockwise"
+    pizza.sideLabels = 0
+    pizza.simpleLabels = 1
+    pizza.labels = [_pct(f.percentual) if f.percentual >= LIMITE_ROTULO_NA_FATIA else ""
+                    for f in distribuicao.fatias]
+    pizza.slices.strokeColor = white
+    pizza.slices.strokeWidth = 1.2
+    pizza.slices.labelRadius = 0.62
+    pizza.slices.fontName = "Helvetica-Bold"
+    pizza.slices.fontSize = 8.5
+    for i, fatia in enumerate(distribuicao.fatias):
+        pizza.slices[i].fillColor = fatia.cor
+        pizza.slices[i].fontColor = _tinta_sobre(fatia.cor)
+    desenho.add(pizza)
+    # Contorno fino do círculo: mantém visível a borda de fatias claras sobre o papel branco.
+    desenho.add(Circle(folga + diametro / 2, folga + diametro / 2, diametro / 2,
+                       fillColor=None, strokeColor=CONTORNO, strokeWidth=0.6))
+    return desenho
+
+
+def _amostra(cor):
+    lado = 3.6 * mm
+    desenho = Drawing(lado, lado)
+    desenho.add(Rect(0, 0, lado, lado, rx=1.2, ry=1.2, fillColor=cor,
+                     strokeColor=CONTORNO if cor == COR_OUTROS else None, strokeWidth=0.5))
+    return desenho
+
+
+def _legenda_flowable(distribuicao, largura, est):
+    larguras = [7 * mm, largura - 70 * mm, 14 * mm, 28 * mm, 21 * mm]
+    cab = ParagraphStyle("legh", parent=est["leg"], fontName="Helvetica-Bold", fontSize=8, leading=10)
+    linhas = [["", Paragraph("Produto", cab), "Classe", "Faturamento (R$)", "Participação"]]
+    estilo = [
+        ("BACKGROUND", (0, 0), (-1, 0), FUNDO_SUAVE),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), 8.5),
+        ("FONTSIZE", (0, 0), (-1, 0), 8),
+        ("TEXTCOLOR", (0, 0), (-1, -1), TINTA),
+        ("ALIGN", (0, 0), (0, -1), "CENTER"),
+        ("ALIGN", (2, 0), (2, -1), "CENTER"),
+        ("ALIGN", (3, 0), (4, -1), "RIGHT"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 3), ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ("TOPPADDING", (0, 0), (-1, -1), 3.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5),
+        ("LINEBELOW", (0, 0), (-1, -1), 0.4, LINHA),
+        ("FONTNAME", (4, 1), (4, -1), "Helvetica-Bold"),
+    ]
+    for i, fatia in enumerate(distribuicao.fatias, start=1):
+        nome = Paragraph(_texto_pdf(fatia.nome), est["leg"])
+        if fatia.outros:
+            classe = "—"
+        else:
+            classe = fatia.classe
+            estilo.append(("TEXTCOLOR", (2, i), (2, i), CLASSE_COR.get(fatia.classe, CINZA)))
+            estilo.append(("FONTNAME", (2, i), (2, i), "Helvetica-Bold"))
+        linhas.append([_amostra(fatia.cor), nome, classe, _brl(fatia.faturamento), _pct(fatia.percentual)])
+    rotulo_total = "Faturamento total" if distribuicao.base_e_faturamento_total else "Soma dos produtos exibidos"
+    linhas.append(["", Paragraph(f"<b>{rotulo_total}</b>", est["leg"]), "", _brl(distribuicao.base), "100,00%"])
+    estilo += [
+        ("FONTNAME", (3, -1), (4, -1), "Helvetica-Bold"),
+        ("LINEABOVE", (0, -1), (-1, -1), 0.6, CONTORNO),
+    ]
+    t = Table(linhas, colWidths=larguras)
+    t.setStyle(TableStyle(estilo))
+    return t
+
+
+def _secao_distribuicao(distribuicao, largura, est):
+    """Título, subtítulo, gráfico (à esquerda) + legenda (à direita) e nota, num
+    bloco que não se parte: se não couber depois da tabela, vai inteiro para a
+    página seguinte."""
+    largura_grafico = 62 * mm
+    grafico = _grafico_pizza(distribuicao, diametro=54 * mm)
+    legenda = _legenda_flowable(distribuicao, largura - largura_grafico, est)
+    corpo = Table([[grafico, legenda]], colWidths=[largura_grafico, largura - largura_grafico])
+    corpo.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (0, 0), "LEFT"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+        ("TOPPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+    ]))
+    nota = ("Participação individual = faturamento do produto ÷ faturamento total do período × 100."
+            if distribuicao.base_e_faturamento_total else
+            "Participação individual = faturamento do produto ÷ soma dos produtos exibidos × 100.")
+    if any(f.outros for f in distribuicao.fatias):
+        nota += f" “Outros produtos” reúne o faturamento dos itens fora do Top {TOP_N_PDF}."
+    soma_arredondada = sum((Decimal(_pct(f.percentual)[:-1].replace(",", ".")) for f in distribuicao.fatias),
+                           Decimal(0))
+    if soma_arredondada != Decimal("100.00"):
+        nota += (" Percentuais arredondados para duas casas decimais: a soma exibida pode diferir "
+                 "de 100% por arredondamento.")
+    bloco = [
+        Paragraph("Distribuição do faturamento por produto", est["h2"]),
+        Paragraph("Participação dos principais produtos no faturamento do período.", est["sub"]),
+        Spacer(1, 3 * mm),
+        corpo,
+        Spacer(1, 2.5 * mm),
+        Paragraph(_texto_pdf(nota), est["small"]),
+    ]
+    for aviso in distribuicao.avisos:
+        bloco += [Spacer(1, 1.5 * mm), Paragraph(f"<b>Atenção:</b> {_texto_pdf(aviso)}", est["aviso"])]
+    return KeepTogether(bloco)
 
 
 def _semaforo_flowable(card, largura, est):
@@ -410,7 +639,7 @@ def gerar_pdf_analise(analise, semaforos, abc_top) -> bytes:
                                    _kpis_flowable(ind, largura, est)]))
         elems.append(Spacer(1, 7 * mm))
 
-    # Curva ABC: título, tabela e explicação juntos.
+    # Curva ABC: título, tabela e explicação juntos; depois, o gráfico de pizza.
     if produtos:
         elems.append(KeepTogether([
             Paragraph(f"Curva ABC · Top {len(produtos)} produtos (Princípio de Pareto)", est["h2"]),
@@ -420,6 +649,10 @@ def gerar_pdf_analise(analise, semaforos, abc_top) -> bytes:
                       "B: 80–95% (táticos) · C: ~5% restantes (operacionais).", est["small"]),
         ]))
         elems.append(Spacer(1, 7 * mm))
+        distribuicao = calcular_distribuicao(ind.faturamento_total if ind else None, produtos)
+        if distribuicao is not None:
+            elems.append(_secao_distribuicao(distribuicao, largura, est))
+            elems.append(Spacer(1, 7 * mm))
 
     # Síntese executiva (semáforos): o título viaja com o primeiro cartão.
     if semaforos:
