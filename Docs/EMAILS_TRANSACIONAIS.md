@@ -39,14 +39,17 @@ e-mail), `blueprints/auth.py` e `blueprints/admin.py` (gatilhos), templates em
    15 s, também aplicado ao SMTP, que o Flask-Mail abria sem prazo). Uma única
    nova tentativa é feita quando o pedido comprovadamente não foi processado
    (HTTP 429 dentro do `Retry-After`, 500/503 ou falha de conexão antes do
-   envio). Prazo esgotado, conexão caída **depois** do envio e 502/504 de
-   gateway não são repetidos (evita e-mail duplicado): ficam como falha de
-   resultado incerto (`tempo_esgotado`, `conexao_interrompida`,
-   `gateway_sem_resposta`), e o admin lê "pode não ter sido enviado". A chave
-   da API nunca acompanha um redirecionamento, e uma resposta que não seja a do
-   envio (201/202) não conta como aceite. No encerramento do processo
-   (deploy/reinício), envios em andamento são aguardados por até ~20 s; os que
-   não terminarem ficam registrados em log como **interrompidos**.
+   envio, inclusive prazo esgotado na conexão: `conexao_sem_resposta`). Prazo
+   esgotado na resposta, conexão caída **depois** do envio (na API ou já na
+   transação SMTP) e 502/504 de gateway não são repetidos (evita e-mail
+   duplicado): ficam como falha de resultado incerto (`tempo_esgotado`,
+   `conexao_interrompida`, `gateway_sem_resposta`), e o admin lê "pode não
+   ter sido enviado". Outros 5xx (501, 507…) também não são repetidos. A
+   chave da API nunca acompanha um redirecionamento, e uma resposta que não
+   seja a do envio (201/202) não conta como aceite. No encerramento do
+   processo (deploy/reinício), envios em andamento são aguardados por até
+   ~20 s; os que não terminarem ficam registrados em log como
+   **interrompidos**.
 7. Falha de e-mail **nunca desfaz** o cadastro, a publicação, a resolução do
    chamado nem a troca de senha.
 
@@ -150,7 +153,7 @@ E-mail transacional não enviado (falha) | tipo=recuperacao_senha transporte=bre
 | `remetente_nao_autorizado` / `remetente_invalido` | Remetente não verificado ou mal escrito | Seção 4, passo 2 |
 | `conta_em_validacao` / `creditos_insuficientes` / `conta_sem_permissao` | Situação da conta Brevo | Painel/suporte do Brevo |
 | `limite_excedido` | Cota diária (plano gratuito: 300/dia) ou rajada | Aguardar; revisar o plano |
-| `provedor_indisponivel` / `rede` | Instabilidade do Brevo ou da rede (pedido não processado) | Conferir status do Brevo; reenviar depois |
+| `provedor_indisponivel` / `rede` / `conexao_sem_resposta` | Instabilidade do Brevo ou da rede (pedido não processado) | Conferir status do Brevo; reenviar depois |
 | `tempo_esgotado` / `conexao_interrompida` / `gateway_sem_resposta` | Resposta perdida depois do envio: **o e-mail pode ter sido aceito** | Conferir o evento no Brevo antes de reenviar |
 | `configuracao_invalida` | `BREVO_API_URL` errada, sem https ou redirecionada | Voltar ao padrão `https://api.brevo.com/v3/smtp/email` |
 | `smtp_conexao` | SMTP bloqueado (Render Free) ou servidor fora | Usar o Brevo |
@@ -209,8 +212,10 @@ Teste real (somente com autorização e destinatário controlado):
 ## 9. E-mails com maiúsculas e minúsculas
 
 Cadastros novos gravam o e-mail em minúsculas e recusam um endereço que já
-exista com outra combinação de maiúsculas. Login e recuperação procuram o texto
-exato e, se não houver, a conta única que coincide sem diferenciar maiúsculas.
+exista com outra combinação de maiúsculas. Salvar a edição de uma empresa grava
+o e-mail de contato também na forma normalizada (ação explícita do admin).
+Login e recuperação procuram o texto exato e, se não houver, a conta única que
+coincide sem diferenciar maiúsculas.
 **Nenhum registro existente é alterado.** Para conferir conflitos legados
 (somente leitura, no SQL Editor do Supabase):
 

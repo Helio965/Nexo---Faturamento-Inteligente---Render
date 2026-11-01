@@ -60,6 +60,12 @@ class _ConexaoSMTPComPrazo(Connection):
             raise
         return host
 
+    def send(self, message, envelope_from=None):
+        # A partir daqui a mensagem está na transação SMTP (MAIL/RCPT/DATA): uma
+        # queda agora deixa o resultado incerto (emails.py não afirma "não saiu").
+        message.nexo_fase_smtp = "envio"
+        return super().send(message, envelope_from)
+
     def __exit__(self, exc_type, exc_value, tb):
         # O QUIT final não muda o resultado: com a mensagem já aceita (ou com a
         # falha original seguindo adiante), uma conexão derrubada pelo servidor

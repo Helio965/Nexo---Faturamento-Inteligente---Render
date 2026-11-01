@@ -126,6 +126,8 @@ CATEGORIAS = {
     "tempo_esgotado": ("o provedor não respondeu dentro do prazo (o aceite não foi confirmado; confira os "
                        "registros do provedor antes de reenviar)"),
     "rede": "falha de rede ao contatar o provedor de e-mail",
+    "conexao_sem_resposta": ("o provedor não aceitou a conexão dentro do prazo (o pedido não chegou a ser "
+                             "enviado)"),
     "tls": "falha na verificação TLS da conexão com o provedor",
     "smtp_autenticacao": "o servidor SMTP recusou as credenciais (MAIL_USERNAME/MAIL_PASSWORD)",
     "smtp_remetente_recusado": "o servidor SMTP recusou o remetente",
@@ -512,6 +514,7 @@ def _falha_provedor(status: int, codigo: str | None, categoria: str, espera: flo
     erro.nexo_codigo = codigo
     erro.nexo_categoria = categoria
     erro.nexo_espera = espera
+    erro.nexo_reenvio = status in (429, 500, 503)
     return erro
 
 
@@ -653,7 +656,9 @@ def _categoria_excecao(erro: BaseException, transporte: str) -> tuple[str, bool]
         if isinstance(motivo, ssl.SSLError):
             return "tls", True
         if isinstance(motivo, TimeoutError):
-            return "tempo_esgotado", True
+            # Prazo na conexão ou no TLS: o pedido não saiu (falha certa).
+            # "tempo_esgotado" fica para o prazo na leitura da resposta.
+            return "conexao_sem_resposta", True
         return "rede", True
     if isinstance(erro, smtplib.SMTPAuthenticationError):
         return "smtp_autenticacao", False
@@ -698,11 +703,16 @@ def _executar_envio(app, msg, envio: EnvioEmail) -> EnvioEmail:
         except Exception as e:  # noqa: BLE001 — nenhuma falha de e-mail sobe para o fluxo
             categoria = getattr(e, "nexo_categoria", None)
             if categoria is not None:
-                antes_do_envio = categoria in _CATEGORIAS_TRANSITORIAS
+                antes_do_envio = bool(getattr(e, "nexo_reenvio", False))
             else:
                 categoria, antes_do_envio = _categoria_excecao(e, transporte)
+            if (transporte == "smtp" and categoria == "smtp_conexao"
+                    and getattr(msg, "nexo_fase_smtp", None) == "envio"):
+                # A conexão caiu (ou o prazo esgotou) já na transação SMTP: o
+                # servidor pode ter aceitado a mensagem — resultado incerto.
+                categoria = "conexao_interrompida"
             reenviar = (transporte == "brevo" and envio.tentativas < _MAX_TENTATIVAS and antes_do_envio
-                        and categoria in (_CATEGORIAS_TRANSITORIAS | {"rede", "tempo_esgotado"}))
+                        and categoria in (_CATEGORIAS_TRANSITORIAS | {"rede", "conexao_sem_resposta"}))
             espera = getattr(e, "nexo_espera", None)
             if reenviar and isinstance(espera, (int, float)) and espera > _ESPERA_MAXIMA:
                 # O provedor pediu para esperar mais do que este fluxo pode:

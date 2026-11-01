@@ -526,6 +526,29 @@ class FalhasDoProvedorTests(_EmailCase):
         self.assertEqual((envio.estado, envio.categoria), (EstadoEnvio.FALHA_NO_ENVIO, "tempo_esgotado"))
         self.assertIn("confira os registros do provedor", envio.descricao_categoria)
 
+    def test_t07_prazo_esgotado_na_conexao_tem_uma_nova_tentativa_e_e_falha_certa(self):
+        # O urllib embrulha em URLError o que falha antes de o pedido sair
+        # (conexão, TLS, envio do corpo); o prazo na leitura da resposta vem cru.
+        http, _saida, envio = self._recuperar([URLError(TimeoutError("PRIVATE")) for _ in range(2)])
+        self.assertEqual(http.call_count, 2)
+        self.pausas.assert_called_once_with(1.5)
+        self.assertEqual((envio.estado, envio.categoria, envio.tentativas),
+                         (EstadoEnvio.FALHA_NO_ENVIO, "conexao_sem_resposta", 2))
+        self.assertNotIn(envio.categoria, emails.CATEGORIAS_RESULTADO_INCERTO)
+        self.assertIn("não chegou a ser enviado", envio.descricao_categoria)
+        _http, _saida, envio = self._recuperar([URLError(TimeoutError("PRIVATE")), _RespostaBrevo()])
+        self.assertEqual((envio.estado, envio.tentativas), (EstadoEnvio.ACEITO_PELO_PROVEDOR, 2))
+
+    def test_5xx_que_nao_garante_pedido_nao_processado_nao_e_repetido(self):
+        # Só 429, 500 e 503 são repetidos; outro 5xx não prova que nada saiu.
+        for status in (501, 507):
+            with self.subTest(status=status):
+                http, _saida, envio = self._recuperar([_erro_http(status), _RespostaBrevo()])
+                http.assert_called_once()
+                self.assertEqual((envio.estado, envio.categoria, envio.http_status, envio.tentativas),
+                                 (EstadoEnvio.FALHA_NO_ENVIO, "provedor_indisponivel", status, 1))
+        self.pausas.assert_not_called()
+
     def test_t07_indisponibilidade_temporaria_tem_uma_nova_tentativa(self):
         http, _saida, envio = self._recuperar([
             _erro_http(429, {"code": "too_many_requests"}, {"Retry-After": "3"}), _RespostaBrevo()])
@@ -1235,7 +1258,7 @@ class ComponentesTests(unittest.TestCase):
                                EMAIL_TIMEOUT_SEGUNDOS=4.0, TESTING=False)
         extensions.mail.init_app(self.app)
 
-    def _smtp_falso(self, falha_login=False):
+    def _smtp_falso(self, falha_login=False, falha_tls=None, falha_envio=None):
         instancias = []
 
         class SMTPFalso:
@@ -1249,6 +1272,8 @@ class ComponentesTests(unittest.TestCase):
 
             def starttls(falso, context=None):
                 falso.eventos.append(("starttls", context))
+                if falha_tls is not None:
+                    raise falha_tls
 
             def login(falso, usuario, senha):
                 falso.eventos.append(("login", usuario))
@@ -1257,6 +1282,8 @@ class ComponentesTests(unittest.TestCase):
 
             def sendmail(falso, *args):
                 falso.eventos.append(("sendmail",))
+                if falha_envio is not None:
+                    raise falha_envio
 
             def quit(falso):
                 raise smtplib.SMTPServerDisconnected("PRIVATE")
@@ -1293,6 +1320,29 @@ class ComponentesTests(unittest.TestCase):
         self.assertIsInstance(smtp.context, ssl.SSLContext)
         self.assertEqual(smtp.eventos[-1], ("close",))
 
+    def test_queda_na_transacao_smtp_e_resultado_incerto_e_antes_dela_e_falha_certa(self):
+        casos = (
+            ("envio", smtplib.SMTPServerDisconnected("PRIVATE"), "conexao_interrompida"),
+            ("envio", TimeoutError("PRIVATE"), "conexao_interrompida"),
+            ("envio", smtplib.SMTPRecipientsRefused({}), "smtp_destinatario_recusado"),
+            ("tls", smtplib.SMTPServerDisconnected("PRIVATE"), "smtp_conexao"),
+        )
+        for fase, erro, categoria in casos:
+            with self.subTest(fase=fase, erro=type(erro).__name__):
+                falso, instancias = self._smtp_falso(**{f"falha_{fase}": erro})
+                envio = emails.EnvioEmail("recuperacao_senha")
+                with self.app.app_context(), patch.object(extensions.smtplib, "SMTP", falso), \
+                        patch.object(emails, "_HISTORICO", deque(maxlen=50)), \
+                        patch.object(emails, "_dormir") as pausa:
+                    emails._executar_envio(self.app, self._mensagem(), envio)
+                pausa.assert_not_called()  # o SMTP nunca repete
+                self.assertEqual(len(instancias), 1)
+                self.assertEqual((envio.estado, envio.transporte, envio.categoria, envio.tentativas),
+                                 (EstadoEnvio.FALHA_NO_ENVIO, "smtp", categoria, 1))
+                self.assertEqual(categoria in emails.CATEGORIAS_RESULTADO_INCERTO,
+                                 categoria == "conexao_interrompida")
+                self.assertEqual(instancias[0].eventos[-1], ("close",))
+
     def test_categorias_de_erro_smtp(self):
         casos = {
             smtplib.SMTPAuthenticationError(535, b"x"): "smtp_autenticacao",
@@ -1306,6 +1356,10 @@ class ComponentesTests(unittest.TestCase):
         for erro, categoria in casos.items():
             with self.subTest(erro=type(erro).__name__):
                 self.assertEqual(emails._categoria_excecao(erro, "smtp")[0], categoria)
+        # API: prazo antes de o pedido sair (URLError) x prazo na resposta (cru).
+        self.assertEqual(emails._categoria_excecao(URLError(TimeoutError("x")), "brevo"),
+                         ("conexao_sem_resposta", True))
+        self.assertEqual(emails._categoria_excecao(TimeoutError("x"), "brevo"), ("tempo_esgotado", False))
 
     def test_texto_simples_tem_os_links_e_ignora_estilo(self):
         texto = emails._texto_simples(

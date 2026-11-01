@@ -57,12 +57,15 @@ e-mail, logs, publicação, chamados, navegação e deploy.
 | `blueprints/auth.py` | Login e recuperação com a busca de `contas_email.py`; resultado operacional em log interno (resposta pública genérica); nenhum erro 500 na recuperação; aviso de senha alterada à prova de falhas. |
 | `blueprints/admin.py` | Cadastro: e-mails normalizados e validados, duplicata por caixa recusada, ativação síncrona com mensagem verdadeira e referência; edição normaliza o contato; reenvio de ativação; Diagnóstico de e-mail e envio de teste (só para o próprio admin, limitado); chamado: sem duplicar aviso e e-mail à prova de falhas; publicação: política após o commit protegida; alerta no dashboard. |
 | `politica_senha.py` | `http.client.HTTPException` na checagem opcional de senhas vazadas não derruba a troca. |
+| `notifications.py` | `classificar_notificacao` dá o selo "Aberto" ao aviso de e-mail recusado ("Falha no envio de e-mail…"), mesmo quando o texto fala em "resolvido" ou "indisponível". |
+| `.github/workflows/nexo-security-ci.yml` | Tempo-limite do job `security-sqlite-browser` de 20 para 30 min: a suíte com navegador já levava ~18 min na `main` e passou do limite com os testes novos. |
 | `templates/admin/diagnostico_email.html` (novo), `templates/admin/empresa_detalhe.html`, `templates/admin/dashboard.html` | Painel de diagnóstico; card "Acesso ao portal" com situação e reenvio; aviso de pendência. |
 | `templates/emails/boas_vindas.html`, `templates/emails/teste_configuracao.html` (novo) | Empresa do cadastro e orientação de acesso ao portal; e-mail de teste sem token. |
 | `templates/auth/{resetar_senha,primeiro_acesso_token,primeiro_acesso}.html`, `nexobot/saber/{acesso,primeiros_passos}.py` | Mínimo de 12 caracteres, igual à política. |
 | `tools/varredura_segredos.py` | Detecta chaves de API e SMTP do Brevo versionadas. |
 | `render.yaml`, `.env.example`, `README.md`, `Docs/PREPARACAO_RENDER.md`, `Docs/EMAILS_TRANSACIONAIS.md` (novo) | Configuração do Brevo, IPs autorizados, tipos de chave, novas variáveis, diagnóstico e testes controlados. `render.yaml`: só comentários. |
-| `tests/test_emails_transacionais.py` (novo), `tests/postgresql_auth_tokens.py`, `tests/test_auth_email_flows.py`, `tests/test_sensitive_http_logs.py` | T01–T17 e regressões; variantes em PostgreSQL real; testes antigos ajustados à nova semântica (cadastro síncrono; `strict-origin`). |
+| `tests/test_emails_transacionais.py` (novo), `tests/postgresql_auth_tokens.py`, `tests/test_auth_email_flows.py`, `tests/test_sensitive_http_logs.py`, `tests/test_security_deploy.py` | T01–T17 e regressões; variantes em PostgreSQL real; testes antigos ajustados à nova semântica (cadastro síncrono; `strict-origin`; dublê de banco da busca única por e-mail). |
+| `Docs/INTEGRACOES/evidencias_emails_transacionais/*.jpg` (novos) | Capturas no Chromium, com dados fictícios: Diagnóstico de e-mail (desktop e celular), detalhe da empresa com "Acesso ao portal" (celular) e dashboard com a faixa de pendência (desktop). Nenhuma rola na horizontal. |
 
 ## D. Correções realizadas
 
@@ -70,8 +73,8 @@ e-mail, logs, publicação, chamados, navegação e deploy.
 com estado e categoria; o aceite do provedor (HTTP 201 com `messageId`) é registrado como
 `ACEITO_PELO_PROVEDOR`, nunca como "entregue". Logs estruturados sem dados privados; a
 mensagem de erro do provedor é usada só para classificar (ex.: `ip_nao_autorizado`) e nunca é
-registrada. Prazo em toda tentativa (inclusive SMTP), uma nova tentativa para 429/5xx/falha de
-conexão antes do envio, e espera limitada no encerramento do processo com registro explícito
+registrada. Prazo em toda tentativa (inclusive SMTP), uma nova tentativa para 429, 500, 503 e
+falha de conexão antes do envio, e espera limitada no encerramento do processo com registro explícito
 do que for interrompido. A fila persistente foi avaliada e não introduzida (justificativa em
 `Docs/EMAILS_TRANSACIONAIS.md`).
 
@@ -103,6 +106,15 @@ esgotado e conexão caída depois do envio não são repetidos e aparecem ao adm
 ter sido enviado"; `Retry-After` acima do teto não é atropelado; a janela de 30 min do aviso só
 conta quando ele foi gravado; o aviso tem selo "Aberto" no sininho.
 
+**Segunda rodada da revisão** (compatibilidade e requisitos, todos com teste): prazo esgotado
+ainda na conexão (o urllib o embrulha em `URLError`, antes de o pedido sair) passou a ser
+`conexao_sem_resposta`, falha certa com uma nova tentativa; `tempo_esgotado` ficou só para o
+prazo na leitura da resposta (incerto, sem repetição). Entre os 5xx, só 500 e 503 são repetidos:
+outro status (501, 507…) não prova que nada foi processado. No SMTP, uma queda ou prazo já
+dentro da transação (MAIL/RCPT/DATA) vira `conexao_interrompida` ("pode não ter sido enviado");
+antes dela (conexão, STARTTLS, login) continua falha certa. Tempo-limite do job com navegador no
+CI de 20 para 30 min; linha `PYTHON_VERSION` devolvida à tabela de `Docs/PREPARACAO_RENDER.md`.
+
 ## E. Testes realizados
 
 Ambiente: Python 3.12, dependências fixas do projeto (`tools/install_dependencies.py`),
@@ -118,7 +130,7 @@ Chromium do ambiente; rede bloqueada nos testes; nenhum envio real.
 | T04 E-mail inexistente | Aprovado | `test_t04_*` | Resposta genérica idêntica, sem envio, log sem o endereço |
 | T05 Sem chave Brevo e sem SMTP | Aprovado | `test_t05_*` (inclui subprocesso de configuração) | DESATIVADO, sem confirmação falsa; admin vê a pendência |
 | T06 Chave inválida | Aprovado | `test_t06_*` | 401 → `credencial_rejeitada`/`ip_nao_autorizado`; chave e mensagem do provedor fora do log |
-| T07 Falha de conexão | Aprovado | `test_t07_*` | Uma nova tentativa só quando seguro; dados intactos; prazo esgotado não é repetido |
+| T07 Falha de conexão | Aprovado | `test_t07_*`, `test_5xx_que_nao_garante_*`, `test_queda_na_transacao_smtp_*` | Uma nova tentativa só quando seguro (recusa de conexão, prazo na conexão, 429/500/503); prazo na resposta, 501/507 e queda na transação SMTP não são repetidos; dados intactos |
 | T08 Remetente inválido | Aprovado | `test_t08_*` | 400 de remetente → orientação; remetente mal configurado falha antes da rede |
 | T09 Token expirado | Aprovado | `test_t09_*` | Negado com orientação para pedir outro link |
 | T10 Token já utilizado | Aprovado | `test_t10_*` | Rejeitado; aviso de senha alterada sem token |
@@ -130,7 +142,7 @@ Chromium do ambiente; rede bloqueada nos testes; nenhum envio real.
 | T16 Estabilidade (regressão) | Aprovado | `discover` completo no commit final, com navegador e cópias da CDN conferidas por SRI: 1103 testes, OK, 5 ignorados; os 5 ignorados (dependem dos binários do PostgreSQL) rodados à parte no PostgreSQL 16: OK | Login, cadastro, recuperação, autenticação, sessões, contratos, ETL, PDF, NexoBot e telas sem regressão |
 | T17 Thread/processo | Aprovado | `AgendamentoEEncerramentoTests` | Falha ao iniciar a thread = FALHA; encerramento aguarda ou registra "interrompido" |
 | CSRF sob HTTPS nos links de token | Aprovado | `test_links_do_email_funcionam_sob_https_*` | Sem Referer → 400; com origem → nova senha aceita |
-| Suítes PostgreSQL do CI | Aprovado | 5 módulos: 37+14, 59, 15, 6, 9 testes | PostgreSQL 16 local |
+| Suítes PostgreSQL do CI | Aprovado | 5 módulos no commit final: `auth_tokens` 54 (inclui as variantes dos testes de e-mail), `session_revocation` 59, `company_restore_security` 15, `company_restore_migration` 6, `etl_resource_security` 9 — todos OK | PostgreSQL 16 local, ~2 min no total |
 | Varredura de segredos | Aprovado | `tools/varredura_segredos.py` | Nenhum padrão encontrado; padrões do Brevo adicionados |
 | Validação real no Render/Brevo | **Não executado** | — | Sem acesso autorizado; ver seção F |
 
@@ -160,9 +172,15 @@ Chromium do ambiente; rede bloqueada nos testes; nenhum envio real.
   posteriores listados no PR.
 - Pull Request: [Helio965/Nexo---Faturamento-Inteligente---Render#39](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/39)
   (rascunho, base `main`).
-- Verificações automáticas: workflow `NEXO Security CI` — `security-postgresql` e
-  `security-sca-sast` aprovados no primeiro push; o estado atual de `security-sqlite-browser`
-  está no PR.
+- Verificações automáticas: workflow `NEXO Security CI`.
+  - Primeiro push: `security-postgresql` e `security-sca-sast` aprovados;
+    `security-sqlite-browser` cancelado com o `apt-get update` travado num espelho do Ubuntu,
+    antes de qualquer teste (infraestrutura).
+  - Push de `c1723ee`: `security-sqlite-browser` cancelado pelo tempo-limite de 20 min com os
+    testes ainda rodando. A causa é o crescimento da suíte neste PR, e o limite passou para
+    30 min. `security-postgresql` ficou preso no `apt-get update` (infraestrutura). Localmente,
+    as cinco suítes PostgreSQL levam ~2 min.
+  - O resultado do último commit está no PR.
 
 ## H. Situação final
 

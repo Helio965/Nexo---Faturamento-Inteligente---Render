@@ -45,12 +45,12 @@ O build versionado prepara pip 26.2.2 verificado por SHA256 antes da aplicação
 | `PROXY_FIX_HOPS` | Sim | Definir como `1` (Render usa 1 proxy reverso) |
 | `BREVO_API_KEY` | Sim | Chave **de API** do Brevo (`xkeysib-…`, não a chave SMTP) para envio de e-mails via HTTPS (Render Free bloqueia SMTP). Sem valor no painel, o envio fica desativado |
 | `MAIL_DEFAULT_SENDER` | Sim | E-mail remetente verificado no Brevo |
+| `PYTHON_VERSION` | Sim | `3.12.10` |
 
 Antes de liberar o serviço, autorize no Brevo as faixas de IP de saída do Render
 (*serviço → Connect → Outbound*) e confira *Admin → Diagnóstico de e-mail* e o
 envio de teste. Procedimento completo e tabela de falhas em
 [EMAILS_TRANSACIONAIS.md](EMAILS_TRANSACIONAIS.md).
-| `PYTHON_VERSION` | Sim | `3.12.10` |
 
 ---
 
