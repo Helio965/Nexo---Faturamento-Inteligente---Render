@@ -127,7 +127,7 @@ Chromium do ambiente; rede bloqueada nos testes; nenhum envio real.
 | T13 Chamado resolvido | Aprovado | `test_t13_*` | Só após o commit; sem duplicar; conta sem vínculo e cancelada não recebem |
 | T14 Render Free | Aprovado | `RenderEConfiguracaoTests`, `test_t14_url_sem_https_*` | Brevo/HTTPS 443, links https; SMTP no Render e chave SMTP viram pendência bloqueante no log |
 | T15 Segurança de logs | Aprovado | `test_t15_*` | Nenhum token, senha, chave, destinatário ou mensagem do provedor em logs e avisos |
-| T16 Estabilidade (regressão) | PREENCHER | PREENCHER | PREENCHER |
+| T16 Estabilidade (regressão) | Aprovado | `discover` completo no commit final, com navegador e cópias da CDN conferidas por SRI: 1103 testes, OK, 5 ignorados; os 5 ignorados (dependem dos binários do PostgreSQL) rodados à parte no PostgreSQL 16: OK | Login, cadastro, recuperação, autenticação, sessões, contratos, ETL, PDF, NexoBot e telas sem regressão |
 | T17 Thread/processo | Aprovado | `AgendamentoEEncerramentoTests` | Falha ao iniciar a thread = FALHA; encerramento aguarda ou registra "interrompido" |
 | CSRF sob HTTPS nos links de token | Aprovado | `test_links_do_email_funcionam_sob_https_*` | Sem Referer → 400; com origem → nova senha aceita |
 | Suítes PostgreSQL do CI | Aprovado | 5 módulos: 37+14, 59, 15, 6, 9 testes | PostgreSQL 16 local |
@@ -156,9 +156,13 @@ Chromium do ambiente; rede bloqueada nos testes; nenhum envio real.
 ## G. GitHub
 
 - Branch: `claude/amazing-cannon-05671a`.
-- Commit e Pull Request: ver a descrição do PR.
-- Verificações automáticas: workflow `NEXO Security CI` (jobs `security-sqlite-browser`,
-  `security-postgresql`, `security-sca-sast`) dispara no PR.
+- Commits: `82ca010` (código e testes), `ae0f9fd` (documentação e evidências) e os ajustes
+  posteriores listados no PR.
+- Pull Request: [Helio965/Nexo---Faturamento-Inteligente---Render#39](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/39)
+  (rascunho, base `main`).
+- Verificações automáticas: workflow `NEXO Security CI` — `security-postgresql` e
+  `security-sca-sast` aprovados no primeiro push; o estado atual de `security-sqlite-browser`
+  está no PR.
 
 ## H. Situação final
 
