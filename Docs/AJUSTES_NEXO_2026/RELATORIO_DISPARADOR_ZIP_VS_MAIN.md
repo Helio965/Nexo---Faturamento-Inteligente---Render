@@ -188,7 +188,7 @@ descartável e Chromium; rede bloqueada nos testes; nenhum envio real.
 | T09 Envios duplicados | Aprovado | `test_t09_cadastro_repetido_*`, `test_t13_*`, `test_t11_destinatarios_*` | Cadastro repetido não gera 2ª ativação; chamado resolvido não duplica; destinatários deduplicados |
 | T10 PostgreSQL/Supabase | Aprovado | 5 suítes no PostgreSQL 16: 54 + 59 + 15 + 6 + 9 = **143 OK** | Inclui as variantes PostgreSQL de cadastro, recuperação e maiúsculas |
 | T11 Segurança | Aprovado | `test_t15_*`, consulta de entrega sem dados pessoais, varredura de segredos | Nenhum token, senha, chave, destinatário ou texto do provedor em log, tela ou aviso |
-| T12 Regressão | @@REGRESSAO@@ | `discover` completo com navegador e cópias da CDN conferidas por SRI | @@REGRESSAO_OBS@@ |
+| T12 Regressão | Aprovado | `discover` completo com navegador e cópias da CDN conferidas por SRI: **1138 testes OK** | 5 ignorados por exigirem os binários do PostgreSQL, rodados à parte no PostgreSQL 16: OK. Suítes afetadas: 326 OK; `test_disparador_emails`: 32 OK |
 | Testes novos contra o código anterior | Aprovado | 15 dos 17 primeiros testes de `test_disparador_emails` falham na `main` anterior; os 15 testes da revisão falham no código anterior às correções | Passam nos dois o T09 e o STARTTLS na 587 (protegem comportamentos que já existiam) |
 | Capturas no Chromium (390 px e 1440 px) | Aprovado | `Docs/INTEGRACOES/evidencias_disparador_emails/` | Sem rolagem horizontal |
 | Integração real (Render/Brevo/caixa) | **Não executado** | — | Sem acesso aos painéis e sem autorização de envio real (seção 7) |
@@ -237,7 +237,7 @@ separadamente:
 
 ## 9. Pull Request
 
-@@PR@@
+[Helio965/Nexo---Faturamento-Inteligente---Render#40](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/40) — rascunho, da branch `claude/amazing-cannon-05671a` para a `main`. Commits: `a1ad40e` (código e testes), `2da9b7b` (documentação e evidências), `cd57cf8` (correções da revisão adversarial) e o commit que completa este relatório. Nenhum force push; nenhum deploy.
 
 ## Situação final
 
@@ -248,7 +248,7 @@ RECUPERAÇÃO DE SENHA:     CORRIGIDO, AGUARDANDO CONFIGURAÇÃO
 INTEGRAÇÃO COM PROVEDOR:  CORRIGIDO, AGUARDANDO CONFIGURAÇÃO
 CONFIGURAÇÃO DO RENDER:   PENDENTE DE VALIDAÇÃO REAL
 ENTREGA REAL DE E-MAIL:   NÃO TESTADO
-TESTES DE REGRESSÃO:      @@SITUACAO_REGRESSAO@@
+TESTES DE REGRESSÃO:      CORRIGIDO E TESTADO
 ```
 
 Cadastro, recuperação e integração estão corrigidos e testados no código (com transporte
