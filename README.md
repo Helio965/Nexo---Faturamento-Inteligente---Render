@@ -176,7 +176,7 @@ nexo_mvp/
 | Autenticação | Flask-Login + `werkzeug.security` (hash de senha) + `itsdangerous` (tokens assinados) |
 | Segurança | Flask-WTF (CSRF) + Flask-Limiter (rate limiting) |
 | Tempo real | Flask-SocketIO (`async_mode="threading"`) + `simple-websocket` |
-| E-mail | Flask-Mail (SMTP) |
+| E-mail | API HTTPS do Brevo (produção) ou Flask-Mail/SMTP (dev) — ver [Docs/EMAILS_TRANSACIONAIS.md](Docs/EMAILS_TRANSACIONAIS.md) |
 | PDF | ReportLab (platypus) |
 | IA — devolutiva | SDK oficial `anthropic` (Claude) |
 | IA — suporte | NexoBot local (NLP próprio + BM25 sobre o Guia); redação opcional via Hugging Face Inference Providers |
@@ -254,7 +254,7 @@ Abra o `.env` e preencha pelo menos:
 - `SECRET_KEY` — string aleatória forte (`python -c "import secrets; print(secrets.token_hex(32))"`).
 - `ADMIN_EMAIL` / `ADMIN_NOME` / `ADMIN_SENHA` — credencial inicial do administrador master.
 
-Todo o resto é **opcional com fail-safe**: sem `ANTHROPIC_API_KEY` a devolutiva usa o gerador local; sem `HF_API_TOKEN` o NexoBot responde integralmente com o motor local; sem `MAIL_USERNAME`/`MAIL_PASSWORD` o envio de e-mail é apenas suprimido (logado, sem quebrar o fluxo). Veja a tabela completa de variáveis abaixo.
+Todo o resto é **opcional com fail-safe**: sem `ANTHROPIC_API_KEY` a devolutiva usa o gerador local; sem `HF_API_TOKEN` o NexoBot responde integralmente com o motor local; sem `BREVO_API_KEY` e sem `MAIL_USERNAME`/`MAIL_PASSWORD` o envio de e-mail é suprimido (estado `DESATIVADO` no log e no painel *Admin → Diagnóstico de e-mail*, sem quebrar o fluxo). Veja a tabela completa de variáveis abaixo.
 
 ### 6. Escolher e preparar o banco de dados
 
@@ -341,12 +341,12 @@ O Blueprint mantém o plano Free existente para avaliação. Consulte limites e 
 | E-mail | **Brevo** API transacional (300/dia) | o Render Free bloqueia SMTP (portas 25/465/587); a API usa HTTPS |
 | Monitoramento opcional | Monitor HTTP externo | `/healthz` verifica o processo e `/healthz/db` verifica uma consulta ao banco; não garantem disponibilidade contínua. |
 
-1. **Brevo:** crie a conta, verifique o remetente `nexofaturamentointeligente@gmail.com` (*Senders, Domains & Dedicated IPs → Senders*) e gere uma chave em *SMTP & API → API Keys*.
+1. **Brevo:** crie a conta, verifique o remetente `nexofaturamentointeligente@gmail.com` (*Senders, Domains & Dedicated IPs → Senders*) e gere uma chave **de API** (`xkeysib-…`, não a chave SMTP) em *SMTP & API → API Keys*. Autorize as faixas de IP de saída do Render (*serviço → Connect → Outbound*) em *Brevo → Settings → Security → Authorized IPs*: contas recentes bloqueiam IPs desconhecidos. Passo a passo e diagnóstico em [Docs/EMAILS_TRANSACIONAIS.md](Docs/EMAILS_TRANSACIONAIS.md).
 2. **Render, após autorização:** selecione o repositório em *New → Blueprint*. Preencha `DATABASE_URL`, `DIRECT_URL` e `BREVO_API_KEY`; confirme o remetente. O build instala somente dependências. Migrações e seeds precisam de execução manual revisada, antes de liberar o serviço. O start mantém `gunicorn -w 1 --threads 50 --timeout 180 -b 0.0.0.0:$PORT wsgi:app`. Deploy automático por commit está desabilitado.
 3. **UptimeRobot:** monitor HTTP(s) para `https://<seu-servico>.onrender.com/healthz/db`, intervalo de 5 minutos.
 4. **Uploads antigos:** na máquina com os arquivos originais, `python migrar_arquivos_para_db.py --dry-run` apenas inspeciona. Após revisar o resultado, as referências e o backup do banco, `python migrar_arquivos_para_db.py --apply` aplica a migração. Se faltar um arquivo ou divergir o hash de uma planilha, a transação é cancelada. Não incluir esses arquivos no GitHub.
 
-Limitações conhecidas do plano free: 512 MB de RAM e 0,1 CPU (ETL e PDF ficam mais lentos que localmente); se o monitor parar, o Render hiberna após 15 min sem acesso e o primeiro acesso leva ~1 min; qualquer reinício do servidor encerra as sessões abertas (proteção por `BOOT_ID`); o Brevo reescreve o endereço do remetente `@gmail.com` para um domínio próprio (o nome "NEXO" é mantido).
+Limitações conhecidas do plano free: 512 MB de RAM e 0,1 CPU (ETL e PDF ficam mais lentos que localmente); se o monitor parar, o Render hiberna após 15 min sem acesso e o primeiro acesso leva ~1 min; qualquer reinício do servidor encerra as sessões abertas (proteção por `BOOT_ID`); o Brevo reescreve o endereço do remetente `@gmail.com` para um domínio próprio (o nome "NEXO" é mantido) — domínios gratuitos não podem ser autenticados, o que favorece o spam; para produção, autentique um domínio próprio (SPF/DKIM/DMARC).
 
 ---
 
@@ -363,10 +363,11 @@ Limitações conhecidas do plano free: 512 MB de RAM e 0,1 CPU (ETL e PDF ficam 
 | `UPLOAD_FOLDER` / `MAX_CONTENT_LENGTH_MB` | Não | Diretório e limite de tamanho dos uploads. |
 | `SOCKETIO_CORS_ORIGINS` | Não | Origens permitidas no handshake WebSocket (CSV). |
 | `RATELIMIT_STORAGE_URI` | Não (default `memory://`) | Backend do rate limiting; use Redis em multi-instância. |
-| `MAIL_SERVER` / `MAIL_PORT` / `MAIL_USE_TLS` / `MAIL_USE_SSL` / `MAIL_USERNAME` / `MAIL_PASSWORD` / `MAIL_DEFAULT_SENDER` | Não (fail-safe) | SMTP para e-mails de ativação/recuperação/publicação. Sem credenciais, o envio é suprimido. |
+| `MAIL_SERVER` / `MAIL_PORT` / `MAIL_USE_TLS` / `MAIL_USE_SSL` / `MAIL_USERNAME` / `MAIL_PASSWORD` / `MAIL_DEFAULT_SENDER` | Não (fail-safe) | SMTP para e-mails de ativação/recuperação/publicação (fora do Render Free, que bloqueia SMTP). Sem credenciais, o envio é suprimido. `MAIL_DEFAULT_SENDER` é também o remetente do Brevo e precisa estar verificado nele; valores vazios valem como ausentes. |
 | `ANTHROPIC_API_KEY` / `ANTHROPIC_MODEL` | Não (fail-safe) | Geração da devolutiva por IA. Sem chave, usa o fallback determinístico. |
 | `HF_API_TOKEN` / `HF_MODEL` | Não (fail-safe) | Redação opcional das respostas do NexoBot via roteador da Hugging Face (uso cobrado pela HF). Sem token, o NexoBot funciona 100% local. |
-| `BREVO_API_KEY` / `BREVO_API_URL` | Não (fail-safe) | Envio de e-mail pela API HTTPS do Brevo. Com a chave definida, substitui o SMTP (necessário no Render Free, que bloqueia SMTP). |
+| `BREVO_API_KEY` / `BREVO_API_URL` | Não (fail-safe); **sim no Render** | Envio de e-mail pela API HTTPS do Brevo (porta 443). Com a chave definida, substitui o SMTP (necessário no Render Free, que bloqueia SMTP). Use a chave de API (`xkeysib-`), não a SMTP; a URL precisa ser `https`. |
+| `NEXO_EMAIL_TIMEOUT` / `NEXO_EMAIL_ALERTA_ADMIN` | Não (defaults `15` / `1` em produção) | Prazo, em segundos, de cada tentativa de envio (API e SMTP) e aviso no sininho dos administradores quando o provedor não aceita um e-mail. Ver [Docs/EMAILS_TRANSACIONAIS.md](Docs/EMAILS_TRANSACIONAIS.md). |
 | `PROXY_FIX_HOPS` | Não (default `0`) | Nº de proxies reversos confiáveis à frente da app (Render = `1`): IP real do cliente no rate limit e links `https://` nos e-mails. |
 | `RENDER_EXTERNAL_URL` | Automática no Render | URL pública do serviço; é adicionada às origens permitidas do WebSocket e, sem `NEXO_PUBLIC_URL`, é a origem canônica dos links sensíveis. |
 | `NEXO_PUBLIC_URL` | Sim em produção (ou `RENDER_EXTERNAL_URL`) | Origem pública canônica (`https://dominio`) usada para montar os links de ativação, recuperação de senha, chamados e publicação — nunca o cabeçalho `Host` da requisição. Em produção precisa ser `https`. |
