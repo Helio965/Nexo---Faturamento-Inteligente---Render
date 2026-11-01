@@ -97,8 +97,14 @@ class AuthEmailFlowTests(_TokenCase):
             "usuario_nome": "Synthetic New", "usuario_email": "new@example.invalid",
         })
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(len(self.jobs), 1)
-        self._deliver_to_fake_transport()
+        # O cadastro envia de forma SÍNCRONA (o admin vê se o provedor aceitou):
+        # nada fica enfileirado e a mensagem já chegou ao transporte simulado.
+        self.assertEqual(self.jobs, [])
+        self.assertEqual(len(self.sent), 1)
+        with client.session_transaction() as session:
+            flashes = " ".join(text for _category, text in session.get("_flashes", []))
+        self.assertIn("aceito pelo serviço de envio", flashes)
+        self.assertNotIn("/auth/primeiro-acesso/", flashes)
         message = self.sent[0]
         self.assertEqual(message.recipients, ["new@example.invalid"])
         self.assertIn("Bem-vindo", message.subject)

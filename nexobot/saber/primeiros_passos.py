@@ -66,7 +66,7 @@ REGISTROS = (
         ),
         passos=(
             "Aguarde o e-mail de boas-vindas enviado após o cadastro pela equipe NEXO.",
-            "Clique no link e defina uma senha com pelo menos 8 caracteres, confirmando-a.",
+            "Clique no link e defina uma senha com pelo menos 12 caracteres, confirmando-a.",
             "Volte à tela de login e entre com o e-mail cadastrado e a nova senha.",
             "Se o link expirou, abra a tela de login, clique em “Esqueci minha senha” e informe o e-mail para "
             "receber um novo link.",
@@ -94,11 +94,11 @@ REGISTROS = (
             "Contas novas são criadas sem senha utilizável; a definição acontece pelo link do e-mail de "
             "boas-vindas. Se a sua conta foi criada com uma senha temporária (contas antigas), o portal "
             "obriga a troca logo no primeiro login, antes de liberar a Visão Geral. A senha precisa ter ao "
-            "menos 8 caracteres e ser confirmada."
+            "menos 12 caracteres e ser confirmada."
         ),
         passos=(
             "Abra o link de definição de senha ou entre com a senha temporária, se foi esse o seu caso.",
-            "Digite a nova senha (mínimo de 8 caracteres) e repita no campo de confirmação.",
+            "Digite a nova senha (mínimo de 12 caracteres) e repita no campo de confirmação.",
             "Salve. Se você veio pelo link do e-mail, o portal volta à tela de login para você entrar com o e-mail e a nova senha; se entrou com a senha temporária, a Visão Geral e as demais páginas são liberadas na hora.",
         ),
         perguntas=(

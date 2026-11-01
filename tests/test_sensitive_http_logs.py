@@ -119,7 +119,7 @@ class SensitiveHttpResponseTests(_TokenCase):
                 with self.subTest(purpose=purpose, valid=value == token):
                     response = self.client.get(self._path(value, purpose))
                     self.assertIn(response.status_code, (200, 302))
-                    self.assertEqual(response.headers["Referrer-Policy"], "no-referrer")
+                    self.assertEqual(response.headers["Referrer-Policy"], "strict-origin")
                     self.assertEqual(response.headers["Cache-Control"], "no-store")
 
     def test_token_post_success_and_csrf_error_keep_security_headers(self):
@@ -128,7 +128,7 @@ class SensitiveHttpResponseTests(_TokenCase):
         success = self._post(token)
         for response, status in ((missing_csrf, 400), (success, 302)):
             self.assertEqual(response.status_code, status)
-            self.assertEqual(response.headers["Referrer-Policy"], "no-referrer")
+            self.assertEqual(response.headers["Referrer-Policy"], "strict-origin")
             self.assertEqual(response.headers["Cache-Control"], "no-store")
 
     def test_real_flask_exception_log_redacts_request_path_and_exception(self):
@@ -155,5 +155,5 @@ class SensitiveHttpResponseTests(_TokenCase):
         self.assertIn("Traceback", stream.getvalue())
         self.assertIn("ValueError: [REDACTED]", stream.getvalue())
         self.assertIn("/auth/resetar-senha/[REDACTED]/synthetic-error", stream.getvalue())
-        self.assertEqual(response.headers["Referrer-Policy"], "no-referrer")
+        self.assertEqual(response.headers["Referrer-Policy"], "strict-origin")
         self.assertEqual(response.headers["Cache-Control"], "no-store")

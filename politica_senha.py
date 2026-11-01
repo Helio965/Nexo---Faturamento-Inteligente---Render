@@ -24,6 +24,7 @@ import logging
 import os
 import re
 import unicodedata
+from http.client import HTTPException
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -94,7 +95,7 @@ def senha_vazada(senha: str, *, timeout: float = 3.0):
                              headers={"User-Agent": "NEXO-politica-senha", "Add-Padding": "true"})
         with urlopen(requisicao, timeout=timeout) as resposta:  # noqa: S310  # nosec B310: URL https fixa
             corpo = resposta.read(1_000_000).decode("ascii", "replace")
-    except (URLError, OSError, ValueError) as erro:
+    except (URLError, OSError, ValueError, HTTPException) as erro:
         logger.warning("Verificação de senha vazada indisponível (%s).", type(erro).__name__)
         return None
     for linha in corpo.splitlines():

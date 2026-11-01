@@ -78,14 +78,14 @@ REGISTROS = (
         ),
         explicacao=(
             "Por segurança a resposta é sempre a mesma, exista ou não o e-mail no cadastro. O link só pode ser "
-            "usado uma vez e dentro do prazo. A nova senha precisa ter ao menos 8 caracteres. Depois de "
+            "usado uma vez e dentro do prazo. A nova senha precisa ter ao menos 12 caracteres. Depois de "
             "redefinir, as sessões antigas deixam de valer e é preciso entrar de novo."
         ),
         passos=(
             "Na tela de login, clique em “Esqueci minha senha”.",
             "Informe o e-mail cadastrado e envie.",
             "Abra o e-mail recebido e clique no link (válido por 15 minutos).",
-            "Digite a nova senha (mínimo de 8 caracteres), confirme e salve.",
+            "Digite a nova senha (mínimo de 12 caracteres), confirme e salve.",
             "Volte ao login e entre com a nova senha.",
         ),
         perguntas=(
@@ -227,7 +227,7 @@ REGISTROS = (
         categoria="Acesso e senha",
         tipo="regra",
         resumo=(
-            "Não compartilhe a senha, use uma senha pessoal com 8 caracteres ou mais e desconfie de pedidos de "
+            "Não compartilhe a senha, use uma senha pessoal com 12 caracteres ou mais e desconfie de pedidos de "
             "senha: nem a equipe NEXO nem o NexoBot pedem a sua senha ou códigos de acesso."
         ),
         explicacao=(
