@@ -81,6 +81,9 @@ class _TokenCase(unittest.TestCase):
         self.registration_mail = self.stack.enter_context(patch.object(
             admin, "email_boas_vindas", return_value=True,
         ))
+        # Com os gatilhos substituídos, o transporte também: a recuperação não
+        # para no aviso de "envio de e-mail indisponível" (MAIL_ATIVO=False).
+        self.stack.enter_context(patch.object(auth, "envio_disponivel", return_value=True))
         self.stack.enter_context(patch.object(auth.logger, "disabled", False))
         with self.app.app_context():
             self.engine = db.engine
@@ -356,7 +359,7 @@ class AuthTokenSecurityTests(_TokenCase):
             response = self._request_link(email, self.app.test_client())
             self.assertEqual(response.status_code, 200)
             texts.append(response.get_data(as_text=True))
-        generic = "Se o e-mail estiver cadastrado, enviamos um link de redefinição válido por 15 minutos."
+        generic = "Se o e-mail estiver cadastrado, enviaremos um link de redefinição válido por 15 minutos."
         for text in texts:
             self.assertIn(generic, text)
             self.assertNotIn("Modo simulação", text)

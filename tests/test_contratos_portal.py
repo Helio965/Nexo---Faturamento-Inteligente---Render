@@ -56,7 +56,7 @@ UM_MICRO = timedelta(microseconds=1)
 MENSAGEM_PDF_ENCERRADO = "Seu prazo para exportação de relatórios foi encerrado"
 MENSAGEM_GENERICA_LOGIN = "E-mail ou senha incorretos."
 MENSAGEM_DESATIVADA = "Esta conta está desativada"
-MENSAGEM_RECUPERACAO = "Se o e-mail estiver cadastrado, enviamos um link de redefinição"
+MENSAGEM_RECUPERACAO = "Se o e-mail estiver cadastrado, enviaremos um link de redefinição"
 
 # Perfis de análise. A SIGILOSA nunca pode aparecer quando o período não é
 # pago; as LIBERADAS servem de controle positivo (o que é pago aparece).
@@ -90,6 +90,9 @@ class PortalContratualCase(ContratosCase):
         self.mail_recuperacao = self.stack.enter_context(
             patch("blueprints.auth.email_recuperacao_senha", return_value=True))
         self.stack.enter_context(patch("blueprints.auth.email_boas_vindas", return_value=True))
+        # Gatilhos substituídos: o transporte também (a recuperação não para no
+        # aviso de envio de e-mail indisponível).
+        self.stack.enter_context(patch("blueprints.auth.envio_disponivel", return_value=True))
         self.mail_publicacao = self.stack.enter_context(
             patch("blueprints.admin.email_analise_publicada", return_value=True))
 

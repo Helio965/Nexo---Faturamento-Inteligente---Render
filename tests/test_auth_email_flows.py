@@ -103,7 +103,7 @@ class AuthEmailFlowTests(_TokenCase):
         self.assertEqual(len(self.sent), 1)
         with client.session_transaction() as session:
             flashes = " ".join(text for _category, text in session.get("_flashes", []))
-        self.assertIn("aceito pelo serviço de envio", flashes)
+        self.assertIn("aceito pelo serviço de e-mail", flashes)
         self.assertNotIn("/auth/primeiro-acesso/", flashes)
         message = self.sent[0]
         self.assertEqual(message.recipients, ["new@example.invalid"])
@@ -245,7 +245,7 @@ class AuthEmailFlowTests(_TokenCase):
         self.assertEqual(response.status_code, 302)
         with client.session_transaction() as session:
             messages = " ".join(text for category, text in session.get("_flashes", []))
-        self.assertIn("Não foi possível agendar", messages)
+        self.assertIn("não foi enviado: o envio de e-mails está indisponível no momento", messages)
         self.assertNotIn("/auth/primeiro-acesso/", messages)
         self.assertNotIn("Enviamos", messages)
         self.assertEqual(self.jobs, [])
