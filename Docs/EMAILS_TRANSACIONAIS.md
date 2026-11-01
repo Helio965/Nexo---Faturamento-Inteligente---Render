@@ -16,8 +16,12 @@ e-mail), `blueprints/auth.py` e `blueprints/admin.py` (gatilhos), templates em
 3. `emails.enviar_email` renderiza o template, cria a versão em texto simples e
    entrega a mensagem ao transporte:
    - **API HTTPS do Brevo** (porta 443) quando `BREVO_API_KEY` está definida;
-   - **SMTP do Flask-Mail** quando há apenas `MAIL_USERNAME`/`MAIL_PASSWORD`;
+   - **SMTP do Flask-Mail** quando há apenas `MAIL_USERNAME`/`MAIL_PASSWORD`
+     (por exemplo, o Gmail fora do Render Free: seção 10);
    - **nenhum** (envio desativado) quando não há credenciais.
+
+   Com a chave do Brevo **e** credenciais SMTP, vale o Brevo; o Diagnóstico de
+   e-mail avisa que as credenciais SMTP ficam sem uso.
 4. Cada solicitação devolve um `EnvioEmail` com um **estado operacional**:
 
 | Estado | Significado | O que NÃO significa |
@@ -38,8 +42,10 @@ e-mail), `blueprints/auth.py` e `blueprints/admin.py` (gatilhos), templates em
 6. **Confiabilidade**: cada tentativa tem prazo (`NEXO_EMAIL_TIMEOUT`, padrão
    15 s, também aplicado ao SMTP, que o Flask-Mail abria sem prazo). Uma única
    nova tentativa é feita quando o pedido comprovadamente não foi processado
-   (HTTP 429 dentro do `Retry-After`, 500/503 ou falha de conexão antes do
-   envio, inclusive prazo esgotado na conexão: `conexao_sem_resposta`). Prazo
+   (HTTP 429 com espera curta — até 5 s, lida do cabeçalho
+   `x-sib-ratelimit-reset` que o Brevo documenta, ou do `Retry-After` —,
+   500/503 ou falha de conexão antes do envio, inclusive prazo esgotado na
+   conexão: `conexao_sem_resposta`). Prazo
    esgotado na resposta, conexão caída **depois** do envio (na API ou já na
    transação SMTP) e 502/504 de gateway não são repetidos (evita e-mail
    duplicado): ficam como falha de resultado incerto (`tempo_esgotado`,
@@ -69,8 +75,9 @@ natural é uma tabela de envios pendentes com reprocessamento periódico.
 O **Render Free bloqueia a saída SMTP nas portas 25, 465 e 587** desde
 26/09/2025 ([changelog do Render](https://render.com/changelog/free-web-services-will-no-longer-allow-outbound-traffic-to-smtp-ports)).
 Em produção no Render use **somente a API HTTPS do Brevo** (porta 443). Se a
-aplicação subir com SMTP no Render, o log de inicialização e o painel do admin
-mostram uma pendência que **bloqueia o envio**.
+aplicação subir com SMTP no Render, o log de inicialização e o Diagnóstico de
+e-mail mostram uma pendência que **bloqueia o envio**. Instâncias pagas do
+Render liberam as portas 465 e 587 (a 25 continua bloqueada).
 
 ## 3. Variáveis de ambiente
 
@@ -78,11 +85,11 @@ mostram uma pendência que **bloqueia o envio**.
 | --- | --- | --- |
 | `BREVO_API_KEY` | **Sim** | Chave **de API** do Brevo (começa com `xkeysib-`). A chave **SMTP** (`xsmtpsib-`) não funciona na API e é recusada com HTTP 401. Espaços/quebra de linha nas pontas são ignorados; valor vazio = ausente. |
 | `MAIL_DEFAULT_SENDER` | **Sim** | Remetente **verificado** no Brevo, no formato `Nome <email@dominio>`. Vazio cai no padrão do projeto. |
-| `NEXO_PUBLIC_URL` | Recomendada | Origem `https://` dos links nos e-mails. Sem ela, vale `RENDER_EXTERNAL_URL` (injetada pelo Render). Produção exige `https`. |
+| `NEXO_PUBLIC_URL` | Recomendada | Origem `https://` dos links nos e-mails. Sem ela (ou em branco), vale `RENDER_EXTERNAL_URL` (injetada pelo Render). Produção exige `https`, sem caminho. |
 | `BREVO_API_URL` | Não | Padrão `https://api.brevo.com/v3/smtp/email`. Precisa ser `https` (a chave nunca é enviada sem TLS). |
 | `NEXO_EMAIL_TIMEOUT` | Não | Prazo, em segundos, de cada tentativa (1 a 60; padrão 15). |
-| `NEXO_EMAIL_ALERTA_ADMIN` | Não | `1` (padrão em produção) cria aviso no sininho dos administradores quando o provedor não aceita um e-mail; `0` desliga. No máximo um aviso por categoria a cada 30 minutos. O envio desativado não gera aviso (aparece no dashboard). |
-| `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USE_TLS`, `MAIL_USE_SSL`, `MAIL_USERNAME`, `MAIL_PASSWORD` | Não (só fora do Render Free) | Alternativa SMTP. O certificado TLS do servidor SMTP é verificado. |
+| `NEXO_EMAIL_ALERTA_ADMIN` | Não | `1` (padrão em produção) cria aviso no sininho dos administradores quando o provedor não aceita um e-mail; `0` desliga. No máximo um aviso por categoria a cada 30 minutos. O envio desativado não gera aviso (aparece no Diagnóstico de e-mail, no log de inicialização e na mensagem do cadastro). |
+| `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USE_TLS`, `MAIL_USE_SSL`, `MAIL_USERNAME`, `MAIL_PASSWORD` | Não (só fora do Render Free) | Alternativa SMTP (Gmail: seção 10). O certificado TLS do servidor SMTP é verificado. Com `MAIL_USE_SSL` ligado, vale o SSL direto e o STARTTLS é ignorado. |
 
 > Uma variável declarada no `render.yaml` com `sync: false` **não** tem valor
 > até alguém preenchê-la no painel. Confira em *Render → serviço → Environment*.
@@ -99,26 +106,44 @@ Estes passos dependem do painel do Brevo e não podem ser feitos pelo código.
    de 6 dígitos enviado a esse endereço. Remetente não verificado é recusado
    (categoria `remetente_nao_autorizado`).
 3. **Domínio (recomendado)**: o remetente atual do projeto é um endereço
-   `@gmail.com`. Domínios gratuitos **não podem ser autenticados** no Brevo; o
-   Brevo reescreve o remetente para um domínio próprio dele, o que favorece a
-   caixa de spam. Para entregabilidade, use um domínio próprio e autentique-o
-   em *Remetentes, domínios e IPs dedicados → Domínios* (registros DNS do
-   Brevo: código de verificação, DKIM e DMARC); depois troque
-   `MAIL_DEFAULT_SENDER` para um endereço desse domínio.
-4. **IPs autorizados**: contas criadas a partir de 16/05/2024 bloqueiam por
-   padrão chamadas de API vindas de IPs desconhecidos (resposta HTTP 401;
-   categoria `ip_nao_autorizado`). No Render, copie as faixas de saída em
-   *serviço → Connect → Outbound* e cadastre-as no Brevo em *Configurações →
-   Segurança → IPs autorizados* (aceita CIDR). Se o Brevo enviar ao dono da
-   conta um e-mail "Validate your IP address", confirme por ele. Desativar o
-   bloqueio funciona, mas reduz a segurança da chave.
+   `@gmail.com`. Domínios gratuitos **não podem ser autenticados** no Brevo:
+   segundo a central de ajuda do Brevo, ele envia mesmo assim, mas troca o
+   endereço do remetente por um endereço de domínio do próprio Brevo (nos
+   transacionais, algo como `…@<id>.t-sender-sib.com`), o que o destinatário
+   pode não reconhecer e favorece a caixa de spam. Para entregabilidade, use
+   um domínio próprio e autentique-o em *Remetentes, domínios e IPs dedicados →
+   Domínios* (registros DNS do Brevo: código de verificação, DKIM e DMARC);
+   depois troque `MAIL_DEFAULT_SENDER` para um endereço desse domínio. Se o
+   Brevo recusar o envio por DMARC, a categoria é `dominio_nao_autenticado`.
+4. **IPs autorizados**: com o bloqueio ativo, o Brevo recusa chamadas de API de
+   IPs não autorizados **mesmo com a chave válida** (HTTP 401; categoria
+   `ip_nao_autorizado`) — ver
+   [IP security](https://developers.brevo.com/docs/ip-security). A central de
+   ajuda do Brevo descreve uma fase de aprendizado: no primeiro uso da chave os
+   IPs de origem são autorizados (faixa /24) e, depois de 30 dias sem IPs
+   novos, o bloqueio liga sozinho; autorizar um IP manualmente também liga o
+   bloqueio para todos os outros. Os IPs de saída do Render são **faixas
+   compartilhadas** da região (*serviço → Connect → Outbound*), mudam de tempos
+   em tempos (houve troca entre 27/10 e 01/12/2025) e, em workspaces anteriores
+   a 23/01/2022, a região Oregon não tem faixa fixa. Escolha uma opção em
+   *Configurações → Segurança → IPs autorizados*:
+   - autorizar **todas** as faixas de saída do serviço de uma só vez (aceita
+     CIDR) e revisar quando o Render anunciar mudança; ou
+   - desativar o bloqueio só para a API (*Blocking unauthorized IP addresses →
+     Deactivate for API*). O próprio Brevo orienta dispensar a restrição de IP
+     quando o servidor não tem IP fixo; a proteção passa a ser o sigilo da
+     chave.
+   Se o Brevo enviar ao dono da conta um e-mail sobre IP desconhecido, use o
+   link de autorização dele.
 5. **Conta**: uma conta em validação ou sem créditos é recusada (categorias
    `conta_em_validacao`, `creditos_insuficientes`, `conta_sem_permissao`).
+   Contas novas podem precisar que o suporte do Brevo ative o envio
+   transacional. O plano gratuito permite 300 e-mails por dia.
 
 ## 5. Como identificar falhas
 
-- **Painel do admin → Dashboard**: faixa vermelha quando a configuração impede
-  qualquer envio, com link para o diagnóstico.
+- **Painel do admin → Dashboard**: não exibe alertas técnicos de
+  infraestrutura; o atalho *Diagnóstico de e-mail* fica no topo da página.
 - **Admin → Diagnóstico de e-mail** (`/admin/diagnostico-email`): transporte
   ativo, remetente, formato da chave (só pelo prefixo; o valor nunca é exibido),
   endpoint, origem dos links, pendências e os **envios recentes** deste processo
@@ -129,9 +154,11 @@ Estes passos dependem do painel do Brevo e não podem ser feitos pelo código.
   não aceita um e-mail, com a categoria e a referência (`Ref.`). O aviso é gravado
   pela thread de envio (ou pela ação do admin), nunca pela requisição pública de
   recuperação — assim o tempo de resposta não revela se a conta existe.
-- **Mensagens do cadastro de empresa e do reenvio**: dizem se o e-mail foi
-  aceito pelo serviço de envio, se o serviço está desativado ou qual foi a
-  falha, sempre com a referência.
+- **Mensagens do cadastro de empresa e do reenvio**: dizem, sem jargão técnico,
+  se o e-mail foi aceito pelo serviço de e-mail, se o envio está indisponível,
+  se o resultado é incerto ou se falhou (endereço do destinatário, instabilidade
+  ou ajuste de configuração), sempre com a referência. A causa técnica da mesma
+  referência aparece no Diagnóstico de e-mail e no log.
 - **Logs do Render** (*serviço → Logs*): uma linha por desfecho, por exemplo
 
 ```text
@@ -151,12 +178,15 @@ E-mail transacional não enviado (falha) | tipo=recuperacao_senha transporte=bre
 | `credencial_rejeitada` | Chave inválida, revogada, mascarada ou chave SMTP | Gerar chave de API (`xkeysib-`) |
 | `ip_nao_autorizado` | IP de saída do Render não autorizado no Brevo | Seção 4, passo 4 |
 | `remetente_nao_autorizado` / `remetente_invalido` | Remetente não verificado ou mal escrito | Seção 4, passo 2 |
+| `dominio_nao_autenticado` | O Brevo exige domínio autenticado (DMARC) | Seção 4, passo 3 |
 | `conta_em_validacao` / `creditos_insuficientes` / `conta_sem_permissao` | Situação da conta Brevo | Painel/suporte do Brevo |
-| `limite_excedido` | Cota diária (plano gratuito: 300/dia) ou rajada | Aguardar; revisar o plano |
+| `limite_excedido` | Cota diária (Brevo gratuito: 300/dia; Gmail: ~500/dia, código SMTP `550/5.4.5`) ou rajada | Aguardar; revisar o plano |
 | `provedor_indisponivel` / `rede` / `conexao_sem_resposta` | Instabilidade do Brevo ou da rede (pedido não processado) | Conferir status do Brevo; reenviar depois |
 | `tempo_esgotado` / `conexao_interrompida` / `gateway_sem_resposta` | Resposta perdida depois do envio: **o e-mail pode ter sido aceito** | Conferir o evento no Brevo antes de reenviar |
 | `configuracao_invalida` | `BREVO_API_URL` errada, sem https ou redirecionada | Voltar ao padrão `https://api.brevo.com/v3/smtp/email` |
 | `smtp_conexao` | SMTP bloqueado (Render Free) ou servidor fora | Usar o Brevo |
+| `smtp_senha_de_app` | Gmail exige senha de app (`534/5.7.9`) | Seção 10 |
+| `smtp_autenticacao` | Usuário ou senha SMTP recusados (Gmail: `535/5.7.8`) | Conferir `MAIL_USERNAME`/`MAIL_PASSWORD` |
 | `destinatario_invalido` / `sem_destinatario` | E-mail cadastrado inválido ou ninguém elegível | Corrigir o cadastro |
 
 ## 6. Aceite × entrega
@@ -171,22 +201,38 @@ destinatário. Para confirmar:
    evento: *Entregue*, *Adiado*, *Soft bounce*, *Hard bounce*, *Bloqueado*,
    *Spam*, *Inválido* ou *Erro*. Cada mensagem também leva o cabeçalho
    `X-Nexo-Correlacao` com a correlação do log.
-2. A API `GET https://api.brevo.com/v3/smtp/statistics/events?messageId=<id>`
-   devolve os mesmos eventos (uso administrativo, com a chave de API).
+2. **No próprio NEXO**: em *Diagnóstico de e-mail → Envios recentes*, cada envio
+   aceito pelo Brevo mostra o **ID no Brevo** (`messageId`) e o botão
+   **Consultar entrega**, que lê
+   `GET /v3/smtp/statistics/events?messageId=<id>` (somente leitura, só para
+   envios do histórico deste processo, limite de 20 consultas por hora por
+   admin). Aparecem só o tipo e o horário dos eventos — nunca destinatário,
+   motivo, IP ou assunto. "Entregue" quer dizer entregue ao **servidor** do
+   destinatário.
 3. Caixa de entrada **e pasta de spam** do destinatário.
 
 ## 7. Testes controlados
 
 Automatizados (sem rede e sem envio real): `python -B -m unittest
-tests.test_emails_transacionais tests.test_auth_email_flows
-tests.test_email_logging -v`.
+tests.test_emails_transacionais tests.test_disparador_emails
+tests.test_auth_email_flows tests.test_email_logging -v`.
 
-Teste real (somente com autorização e destinatário controlado):
+Teste real (somente com autorização e destinatário controlado). Antes, confirme
+que o deploy está na versão certa (seção 12). Registre cada etapa
+separadamente — uma não comprova a seguinte:
+
+| Etapa | Evidência |
+| --- | --- |
+| 1. A aplicação iniciou o envio | Linha em *Envios recentes* e, no log, `correlacao=<Ref.>` |
+| 2. O provedor aceitou a mensagem | Estado *Aceito pelo provedor* e o *ID no Brevo*; no log, `estado=ACEITO_PELO_PROVEDOR id_mensagem=<id>` |
+| 3. O provedor registrou a entrega | *Consultar entrega* com o evento *Entregue ao servidor do destinatário* (ou Brevo → Transacional → Logs, filtrando pelo ID) |
+| 4. O destinatário recebeu | O próprio destinatário abre a caixa de entrada (ou o spam) e confirma |
 
 1. **Configuração**: Admin → Diagnóstico de e-mail sem pendências bloqueantes.
 2. **Envio de teste**: botão "Enviar e-mail de teste para mim" (vai apenas para
    o e-mail do administrador logado; limite de 5 por hora). A mensagem mostra o
-   resultado do provedor e a referência.
+   resultado do provedor e a referência; depois de um ou dois minutos, use
+   *Consultar entrega* na linha do envio e confira a sua caixa de entrada.
 3. **Recuperação de senha**: com uma conta de teste controlada, use "Esqueci
    minha senha" uma única vez; confira nos logs a linha `tipo=recuperacao_senha`
    (`estado=ACEITO_PELO_PROVEDOR`), no Brevo o evento da etiqueta
@@ -227,3 +273,79 @@ FROM usuario GROUP BY lower(email) HAVING count(*) > 1;
 Se houver resultado, decida manualmente qual conta manter: enquanto o conflito
 existir, o pedido de recuperação com uma grafia diferente das gravadas não
 envia nada (e registra um aviso no log).
+
+## 10. Gmail SMTP fora do Render Free
+
+O projeto original (versão anterior ao Render) enviava pelo Gmail SMTP com
+Flask-Mail, e esse caminho continua disponível onde a saída SMTP é permitida:
+máquina local, servidor próprio ou instância **paga** do Render. No Render Free
+ele não funciona (seção 2).
+
+```dotenv
+MAIL_SERVER=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USE_TLS=true
+MAIL_USE_SSL=false
+MAIL_USERNAME=<conta>@gmail.com
+MAIL_PASSWORD=<senha de app de 16 caracteres>
+MAIL_DEFAULT_SENDER=          # vazio = a própria conta
+BREVO_API_KEY=                # vazio, senão o Brevo tem prioridade
+```
+
+- A conta precisa da **verificação em duas etapas** e de uma **senha de app**
+  (Conta Google → Segurança → Senhas de app). A senha normal da conta é
+  recusada: código `534/5.7.9` → categoria `smtp_senha_de_app`. Usuário ou senha
+  errados: `535/5.7.8` → `smtp_autenticacao`. Trocar a senha da conta Google
+  revoga as senhas de app.
+- Use STARTTLS na 587 (como acima) ou SSL direto na 465 (`MAIL_PORT=465`,
+  `MAIL_USE_SSL=true`). O Diagnóstico aponta combinações trocadas de porta e
+  modo.
+- O remetente deve ser a própria conta (ou um alias verificado dela).
+- Limite do Gmail pessoal: cerca de 500 e-mails por dia; acima disso, código
+  `550/5.4.5` → `limite_excedido`.
+- O log mostra só o código numérico da recusa (`codigo=534/5.7.9`), nunca o
+  texto do servidor.
+
+## 11. Gmail pela API HTTPS (avaliado, não implementado)
+
+A API do Gmail (`users.messages.send`, HTTPS 443) funcionaria no Render Free e
+manteria o remetente `@gmail.com` autenticado pelo próprio Gmail. Ela **não foi
+implementada** porque o Brevo já resolve o bloqueio de SMTP e a API do Gmail
+traria custos operacionais e riscos:
+
+- **Autorização OAuth 2.0 com refresh token da conta pessoal**, obtido uma vez
+  num navegador (Cloud Console: projeto, API do Gmail ativada, tela de
+  consentimento *External* publicada *In production*, cliente OAuth e OAuth
+  Playground ou script local). Senha de app não serve para a API.
+- O token **para de funcionar** com a troca de senha da conta, revogação, 6
+  meses sem uso ou após 7 dias se o app ficar em *Testing*; o cliente OAuth
+  ocioso por 6 meses é apagado. Até alguém refazer o consentimento,
+  recuperação e ativação param — o servidor não resolve sozinho.
+- `gmail.send` é escopo **sensível**: sem verificação do Google, o app fica
+  restrito a uso pessoal (até 100 usuários, aviso de app não verificado). A
+  verificação exige domínio próprio, política de privacidade e vídeo.
+- Limite de ~500 envios por dia, dividido com o uso manual da caixa, e sem
+  registros de entrega, webhooks ou lista de supressão como os do Brevo.
+
+Se o dono decidir manter o remetente `@gmail.com` sem domínio próprio, esta é a
+alternativa documentada, como transporte opcional (variáveis próprias, nunca no
+lugar do Brevo sem configuração explícita). A recomendação continua sendo um
+domínio próprio autenticado no Brevo.
+
+## 12. Antes de testar em produção: confirme o deploy
+
+O `render.yaml` publica a `main` com **deploy automático desligado**
+(`autoDeployTrigger: 'off'`): uma correção mesclada só entra no ar depois de um
+*Manual Deploy*.
+
+1. *Render → serviço → Events*: o último deploy deve estar **live** com o commit
+   esperado da `main`.
+2. `GET https://<serviço>/healthz` devolve `versao`; compare com o commit da
+   `main`.
+3. Se houver **domínio próprio verificado** no Render, ele precisa constar de
+   `NEXO_PUBLIC_URL` ou `NEXO_TRUSTED_HOSTS` (com e sem `www`, se os dois
+   existirem). O health check do Render usa esse domínio no cabeçalho `Host`;
+   um host não confiável recebe 400, o deploy é cancelado e a versão anterior
+   continua no ar.
+4. Depois, *Admin → Diagnóstico de e-mail* sem pendências bloqueantes e o teste
+   real da seção 7.
