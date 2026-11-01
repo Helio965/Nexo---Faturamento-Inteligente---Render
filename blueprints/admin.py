@@ -409,10 +409,17 @@ def _desconectar_revogados(revogacoes, operacao: str) -> None:
         current_app.logger.warning("Revogação Socket.IO após %s indisponível (%s).", operacao, type(erro).__name__)
 
 
-# Falhas que o próprio admin resolve no cadastro ou esperando um pouco; as demais
-# são de configuração do serviço e têm o detalhe no Diagnóstico de e-mail.
+# Grupos de falha para as telas de operação. Só se afirma "ajuste de
+# configuração" quando a causa é mesmo de configuração; o resto é neutro e
+# aponta o Diagnóstico de e-mail (a causa técnica fica lá e no log).
 _FALHAS_DO_DESTINATARIO = frozenset({"sem_destinatario", "destinatario_invalido", "smtp_destinatario_recusado"})
-_FALHAS_TEMPORARIAS = frozenset({"limite_excedido", "provedor_indisponivel", "rede", "conexao_sem_resposta"})
+_FALHAS_TEMPORARIAS = frozenset({"provedor_indisponivel", "rede", "conexao_sem_resposta"})
+_FALHAS_DE_CONFIGURACAO = frozenset({
+    "transporte_desativado", "remetente_invalido", "configuracao_invalida", "credencial_rejeitada",
+    "ip_nao_autorizado", "conta_em_validacao", "conta_sem_permissao", "creditos_insuficientes",
+    "remetente_nao_autorizado", "dominio_nao_autenticado", "tls", "smtp_autenticacao", "smtp_senha_de_app",
+    "smtp_remetente_recusado", "smtp_conexao",
+})
 
 
 def _flash_envio_email(envio, descricao: str, *, orientar_reenvio: bool = False, tecnico: bool = False) -> None:
@@ -442,9 +449,9 @@ def _flash_envio_email(envio, descricao: str, *, orientar_reenvio: bool = False,
         flash(f"{inicial} entrou na fila de envio; a confirmação do serviço de e-mail ainda não chegou "
               f"(acompanhe no Diagnóstico de e-mail).{ref}", "info")
     elif estado == EstadoEnvio.DESATIVADO:
-        detalhe = f": {causa}" if tecnico else " (detalhes no Diagnóstico de e-mail)"
-        flash(f"{inicial} não foi enviado: o envio de e-mails está indisponível no momento{detalhe}.{ref}",
-              "warning")
+        motivo = causa if tecnico else ("o envio de e-mails está indisponível no momento (detalhes no "
+                                        "Diagnóstico de e-mail)")
+        flash(f"{inicial} não foi enviado: {motivo}.{ref}", "warning")
     elif categoria in CATEGORIAS_RESULTADO_INCERTO:
         # Pode ter sido aceito: não afirmar "não enviado" nem induzir duplicata.
         detalhe = f": {causa}" if tecnico else (
@@ -453,14 +460,20 @@ def _flash_envio_email(envio, descricao: str, *, orientar_reenvio: bool = False,
     elif tecnico:
         flash(f"{inicial} não foi enviado: {causa}.{ref}", "danger")
     elif categoria in _FALHAS_DO_DESTINATARIO:
-        flash(f"{inicial} não foi enviado: o endereço de e-mail do destinatário é inválido ou não foi aceito. "
-              f"Confira o cadastro do usuário.{ref}", "danger")
+        flash(f"{inicial} não foi enviado: o endereço de e-mail do destinatário é inválido ou não foi aceito "
+              f"(confira o endereço cadastrado).{ref}", "danger")
+        return
+    elif categoria == "limite_excedido":
+        flash(f"{inicial} não foi enviado: o limite de envios do serviço de e-mail foi atingido. Tente "
+              f"novamente mais tarde.{ref}", "danger")
     elif categoria in _FALHAS_TEMPORARIAS:
-        flash(f"{inicial} não foi enviado: o serviço de e-mail está temporariamente indisponível ou no limite "
-              f"de envios. Tente novamente em alguns minutos.{ref}", "danger")
-    else:
+        flash(f"{inicial} não foi enviado: o serviço de e-mail está temporariamente indisponível. Tente "
+              f"novamente em alguns minutos.{ref}", "danger")
+    elif categoria in _FALHAS_DE_CONFIGURACAO:
         flash(f"{inicial} não foi enviado: o serviço de e-mail precisa de ajuste de configuração (detalhes no "
               f"Diagnóstico de e-mail).{ref}", "danger")
+    else:
+        flash(f"{inicial} não foi enviado (a causa está no Diagnóstico de e-mail).{ref}", "danger")
     if orientar_reenvio and estado != EstadoEnvio.ACEITO_PELO_PROVEDOR:
         flash("Quando o envio estiver normalizado, reenvie o link em Detalhes da empresa → Acesso ao portal, ou "
               "peça ao cliente que use “Esqueci minha senha” na tela de login.", "info")
@@ -1722,8 +1735,14 @@ def diagnostico_email_entrega(correlacao):
     resultado = consultar_entrega_brevo(envio)
     ref = f"Ref. {envio.correlacao}"
     if not resultado["ok"]:
-        motivo = CATEGORIAS.get(resultado["categoria"]) or "erro inesperado na consulta"
-        flash(f"Não foi possível consultar a entrega no Brevo ({ref}): {motivo}.", "warning")
+        # A chave e o IP valem para a consulta como para o envio; nos demais
+        # casos a consulta só não foi concluída — o aceite do envio não muda.
+        if resultado["categoria"] in ("credencial_rejeitada", "ip_nao_autorizado"):
+            motivo = CATEGORIAS[resultado["categoria"]]
+        else:
+            motivo = "o Brevo não concluiu a consulta agora (o aceite do envio continua valendo)"
+        flash(f"Não foi possível consultar a entrega no Brevo ({ref}): {motivo}. Tente de novo em instantes.",
+              "warning")
     elif not resultado["eventos"]:
         flash(f"O Brevo ainda não registrou eventos para este envio ({ref}). Os registros podem levar alguns "
               "minutos: consulte de novo em instantes.", "info")

@@ -116,7 +116,9 @@
                         <ul class="list-unstyled mb-0 mt-1" aria-label="Eventos registrados pelo Brevo">
                             {% for ev in e.eventos_provedor %}<li>{{ ev.rotulo }}{% if ev.data %} — {{ ev.data|horario_brasilia }}{% endif %}</li>{% endfor %}
                         </ul>
-                        {% elif e.eventos_consultados_em %}<br>Nenhum evento registrado pelo Brevo na última consulta.{% endif %}
+                        {% endif %}
+                        {% if e.eventos_consultados_em and e.eventos_consulta_ok == false %}<br>A última consulta ao Brevo não foi concluída; tente de novo.
+                        {% elif e.eventos_consultados_em and not e.eventos_provedor %}<br>Nenhum evento registrado pelo Brevo na última consulta.{% endif %}
                         {% if e.id_mensagem and e.transporte == 'brevo' %}
                         <form method="post" action="{{ url_for('admin.diagnostico_email_entrega', correlacao=e.correlacao) }}" class="mt-1">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

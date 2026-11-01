@@ -174,6 +174,9 @@ class Config:
     # Execução no Render (a plataforma injeta RENDER=true): o diagnóstico de
     # e-mail avisa que o plano Free bloqueia SMTP (emails.py).
     NEXO_RENDER = bool(os.environ.get("RENDER") or os.environ.get("RENDER_EXTERNAL_URL"))
+    # Instância PAGA do Render (libera as portas 465/587): com SMTP configurado,
+    # o diagnóstico deixa de tratar o SMTP como bloqueado. No plano Free, não use.
+    SMTP_PERMITIDO = _env_booleano("NEXO_SMTP_PERMITIDO", False)
     # Hosts adicionais aceitos nas requisições (CSV; ".exemplo.com" aceita os
     # subdomínios). O host da origem pública e o da plataforma entram sempre
     # em produção; em desenvolvimento, sem a variável, não há restrição.
@@ -253,8 +256,9 @@ class Config:
     # do SMTP (o Flask-Mail, sozinho, abriria o SMTP sem prazo nenhum).
     EMAIL_TIMEOUT_SEGUNDOS = _env_segundos("NEXO_EMAIL_TIMEOUT", 15.0, 1.0, 60.0)
     # Alerta no sininho dos administradores quando o provedor não aceita um
-    # e-mail (credencial, IP, remetente, rede...). Ligado em produção
-    # (ProductionConfig). Envio desativado aparece no dashboard, não no sininho.
+    # e-mail (credencial, IP, remetente, rede...) ou quando o envio está
+    # desativado — no máximo 1 aviso por categoria a cada 30 min. Ligado em
+    # produção (ProductionConfig); o dashboard não exibe alertas técnicos.
     EMAIL_ALERTA_ADMIN = _env_texto("NEXO_EMAIL_ALERTA_ADMIN", "0") == "1"
     # Quando não há credenciais, o envio é suprimido pela camada emails.py
     # (sem quebrar fluxos). Flag derivada para checagem rápida nos gatilhos.

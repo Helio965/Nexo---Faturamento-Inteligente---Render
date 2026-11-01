@@ -101,6 +101,8 @@ TRANSPORTES = {
 # Categoria -> explicação segura (sem valores de configuração) para o admin.
 CATEGORIAS = {
     "transporte_desativado": "o serviço de e-mail não está configurado (defina BREVO_API_KEY no ambiente do servidor)",
+    "envio_bloqueado": ("a configuração atual impede qualquer envio (veja as pendências que impedem o envio no "
+                        "Diagnóstico de e-mail)"),
     "sem_destinatario": "não há destinatário elegível para esta mensagem",
     "destinatario_invalido": "o endereço de e-mail do destinatário é inválido",
     "remetente_invalido": "o remetente configurado em MAIL_DEFAULT_SENDER é inválido",
@@ -170,8 +172,10 @@ _CODIGOS_TEXTO_BREVO = frozenset({
     "request already processed", "invalid parameters passed", "returned when invalid data posted",
     "domain does not exist",
 })
-# Status estendido da resposta SMTP (RFC 3463, ex.: 5.7.9): só números, sem o texto.
-_STATUS_SMTP_ESTENDIDO = re.compile(rb"\b([245]\.\d{1,3}\.\d{1,3})\b")
+# Status estendido da resposta SMTP (RFC 3463, ex.: 5.7.9): só no INÍCIO do
+# texto (onde o RFC o coloca) e só os números — nunca dígitos de um IP ou de um
+# endereço citado mais adiante na resposta.
+_STATUS_SMTP_ESTENDIDO = re.compile(rb"\s*([245])(\.\d{1,3}\.\d{1,3})(?=\s|$)")
 _ID_MENSAGEM = re.compile(r"<?[A-Za-z0-9._%+=@-]{1,200}>?")
 _TIPO = re.compile(r"[a-z_]{1,32}")
 
@@ -221,6 +225,7 @@ class EnvioEmail:
         self.id_mensagem = None       # messageId devolvido pelo Brevo (não sensível)
         self.eventos_provedor = None  # eventos de entrega consultados no Brevo (tipo e horário)
         self.eventos_consultados_em = None
+        self.eventos_consulta_ok = None   # a última consulta foi concluída?
         self.tentativas = 0
         self.criado_em = datetime.now(timezone.utc)
         self.atualizado_em = self.criado_em
@@ -386,9 +391,13 @@ def diagnostico_configuracao(config=None) -> dict:
     if transporte is None:
         pendencia("Envio de e-mail DESATIVADO: nenhuma credencial configurada. No Render, defina "
                   "BREVO_API_KEY (chave de API do Brevo).", True)
-    elif transporte == "smtp" and render:
+    elif transporte == "smtp" and render and not config.get("SMTP_PERMITIDO"):
         pendencia("O transporte ativo é SMTP, mas o Render Free bloqueia as portas SMTP 25/465/587: "
-                  "defina BREVO_API_KEY para usar a API HTTPS do Brevo.", True)
+                  "defina BREVO_API_KEY para usar a API HTTPS do Brevo. Em instância paga do Render "
+                  "(que libera 465/587), defina NEXO_SMTP_PERMITIDO=1.", True)
+    elif transporte == "smtp" and render:
+        pendencia("SMTP liberado no Render por NEXO_SMTP_PERMITIDO=1: confirme que a instância é paga "
+                  "(o plano Free bloqueia as portas SMTP).", False)
     if transporte == "brevo":
         if chave == "smtp":
             pendencia("BREVO_API_KEY parece ser uma chave SMTP (prefixo xsmtpsib-). Gere uma chave de "
@@ -400,8 +409,13 @@ def diagnostico_configuracao(config=None) -> dict:
             pendencia("BREVO_API_URL precisa ser uma URL https (padrão: "
                       "https://api.brevo.com/v3/smtp/email).", True)
     if transporte == "brevo" and config.get("MAIL_USERNAME") and config.get("MAIL_PASSWORD"):
-        pendencia("As credenciais SMTP (MAIL_USERNAME/MAIL_PASSWORD) também estão definidas, mas não são "
-                  "usadas: com BREVO_API_KEY, o envio sai pela API HTTPS do Brevo.", False)
+        if remetente.lower() == str(config.get("MAIL_USERNAME")).strip().lower():
+            pendencia("Com BREVO_API_KEY, o envio sai pela API HTTPS do Brevo e MAIL_PASSWORD fica sem uso; "
+                      "MAIL_USERNAME continua sendo o remetente. Antes de remover MAIL_USERNAME, defina "
+                      "MAIL_DEFAULT_SENDER com o remetente verificado no Brevo.", False)
+        else:
+            pendencia("As credenciais SMTP (MAIL_USERNAME/MAIL_PASSWORD) também estão definidas, mas não são "
+                      "usadas: com BREVO_API_KEY, o envio sai pela API HTTPS do Brevo.", False)
     if transporte == "smtp":
         porta = config.get("MAIL_PORT")
         if config.get("MAIL_USE_SSL") and config.get("MAIL_USE_TLS"):
@@ -557,8 +571,7 @@ def _categoria_http(status: int, codigo: str | None, mensagem: str) -> str:
     """Categoria a partir do status, do código (enum do Brevo) e de palavras da
     mensagem do provedor. A mensagem serve só para esta classificação: pode
     conter IP, endereço ou outros dados e nunca é registrada."""
-    if (codigo in ("dmarc_policy_requires_domain_authentication", "dns_records_not_properly_configured")
-            or "dmarc" in mensagem or "domain authentication" in mensagem):
+    if codigo in ("dmarc_policy_requires_domain_authentication", "dns_records_not_properly_configured"):
         return "dominio_nao_autenticado"
     if codigo == "account_under_validation":
         return "conta_em_validacao"
@@ -588,8 +601,13 @@ def _categoria_http(status: int, codigo: str | None, mensagem: str) -> str:
         # ou endpoint errado: confira BREVO_API_URL.
         return "configuracao_invalida"
     if status == 400:
+        if "dmarc" in mensagem or "domain authentication" in mensagem:
+            return "dominio_nao_autenticado"
         if "sender" in mensagem or "remetente" in mensagem:
             return "remetente_nao_autorizado"
+        if any(p in mensagem for p in (" in to", "recipient", "email is not valid", "invalid email",
+                                       "destinat")):
+            return "destinatario_invalido"
         return "requisicao_rejeitada"
     return "desconhecida"
 
@@ -729,14 +747,11 @@ EVENTOS_PROVEDOR = {
     "bounces": "Devolvido",
     "blocked": "Bloqueado pelo Brevo",
     "invalid": "Endereço inválido",
-    "spam": "Denunciado como spam",
     "error": "Erro no Brevo",
-    "unsubscribed": "Descadastrado",
-    "opened": "Aberto",
-    "clicks": "Link clicado",
-    "loadedByProxy": "Aberto por proxy de privacidade",
 }
-EVENTOS_FALHA_ENTREGA = frozenset({"softBounces", "hardBounces", "bounces", "blocked", "invalid", "error", "spam"})
+# Abertura, clique, descadastro e denúncia de spam são comportamento do
+# destinatário, não entrega: ficam fora (nem guardados, nem exibidos, nem no log).
+EVENTOS_FALHA_ENTREGA = frozenset({"softBounces", "hardBounces", "bounces", "blocked", "invalid", "error"})
 _LIMITE_RESPOSTA_EVENTOS = 64 * 1024
 
 
@@ -745,9 +760,11 @@ def _data_evento(valor):
         return None
     try:
         data = datetime.fromisoformat(valor.strip().replace("Z", "+00:00"))
-    except ValueError:
+        data = (data if data.tzinfo else data.replace(tzinfo=timezone.utc)).astimezone(timezone.utc)
+    except (ValueError, OverflowError):
         return None
-    return data if data.tzinfo else data.replace(tzinfo=timezone.utc)
+    # Faixa plausível: uma data extrema quebraria a conversão de fuso na página.
+    return data if 2000 <= data.year <= 2100 else None
 
 
 def consultar_entrega_brevo(envio: EnvioEmail, app=None) -> dict:
@@ -785,30 +802,39 @@ def consultar_entrega_brevo(envio: EnvioEmail, app=None) -> dict:
         resultado["categoria"] = _categoria_excecao(e, "brevo")[0]
     else:
         dados = None
-        if (status == 200 and not (isinstance(url_final, str) and url_final != url)
-                and isinstance(corpo, bytes) and len(corpo) <= _LIMITE_RESPOSTA_EVENTOS):
-            try:
+        try:
+            if (status == 200 and not (isinstance(url_final, str) and url_final != url)
+                    and isinstance(corpo, bytes) and len(corpo) <= _LIMITE_RESPOSTA_EVENTOS):
                 dados = json.loads(corpo.decode("utf-8")) if corpo else {}
-            except ValueError:
-                dados = None
-        if not isinstance(dados, dict):
+            if isinstance(dados, dict):
+                alvo = envio.id_mensagem.strip("<>")
+                itens = dados.get("events")
+                if itens is None:
+                    itens = []           # o Brevo omite "events" quando não há nenhum
+                if not isinstance(itens, list):
+                    raise ValueError("lista de eventos fora do formato documentado")
+                eventos = []
+                for item in itens[:100]:
+                    nome = item.get("event") if isinstance(item, dict) else None
+                    if not isinstance(nome, str):
+                        raise ValueError("evento fora do formato documentado")
+                    if nome not in EVENTOS_PROVEDOR:
+                        continue         # abertura, clique etc. ficam de fora
+                    id_item = item.get("messageId")
+                    if isinstance(id_item, str) and id_item.strip("<>") != alvo:
+                        continue
+                    eventos.append({"evento": nome, "rotulo": EVENTOS_PROVEDOR[nome],
+                                    "data": _data_evento(item.get("date"))})
+                resultado.update(ok=True, eventos=eventos)
+        except Exception:  # noqa: BLE001 — corpo malformado (JSON profundo, tipos inesperados)
+            resultado["ok"], resultado["eventos"] = False, []
+        if not resultado["ok"]:
             resultado.update(categoria="configuracao_invalida", http_status=status if isinstance(status, int) else None)
-        else:
-            alvo = envio.id_mensagem.strip("<>")
-            itens = dados.get("events")
-            eventos = []
-            for item in (itens if isinstance(itens, list) else [])[:100]:
-                if not isinstance(item, dict) or item.get("event") not in EVENTOS_PROVEDOR:
-                    continue
-                id_item = item.get("messageId")
-                if isinstance(id_item, str) and id_item.strip("<>") != alvo:
-                    continue
-                eventos.append({"evento": item["event"], "rotulo": EVENTOS_PROVEDOR[item["event"]],
-                                "data": _data_evento(item.get("date"))})
-            resultado.update(ok=True, eventos=eventos)
     with _TRAVA:
+        # Uma consulta que falhou não apaga eventos já obtidos nem vira "nenhum evento".
         if resultado["ok"]:
             envio.eventos_provedor = resultado["eventos"]
+        envio.eventos_consulta_ok = resultado["ok"]
         envio.eventos_consultados_em = datetime.now(timezone.utc)
     logger.info("Consulta de entrega no provedor | correlacao=%s ok=%s eventos=%s categoria=%s http=%s",
                 envio.correlacao, resultado["ok"], ",".join(e["evento"] for e in resultado["eventos"]) or "-",
@@ -830,8 +856,10 @@ def _resposta_smtp(erro) -> tuple[int | None, str | None]:
         return None, None
     if isinstance(texto, str):
         texto = texto.encode("utf-8", "replace")
-    achado = _STATUS_SMTP_ESTENDIDO.search(texto) if isinstance(texto, bytes) else None
-    return codigo, (achado.group(1).decode("ascii") if achado else None)
+    achado = _STATUS_SMTP_ESTENDIDO.match(texto) if isinstance(texto, bytes) else None
+    if achado is None or achado.group(1) != str(codigo)[0].encode("ascii"):
+        return codigo, None
+    return codigo, (achado.group(1) + achado.group(2)).decode("ascii")
 
 
 def _codigo_smtp(erro) -> str | None:
@@ -1032,12 +1060,13 @@ def enviar_email(destinatarios, assunto: str, template: str, *, tipo: str = "gen
             return envio
         transporte = transporte_configurado(app.config)
         if transporte is None:
-            # Sem aviso no sininho aqui: esta linha roda na requisição (inclusive
-            # na recuperação anônima) e gravar o aviso só para contas existentes
-            # criaria um oráculo de tempo. O dashboard, o Diagnóstico de e-mail e
-            # o log de inicialização já mostram o envio desativado.
+            # Aviso no sininho (thread própria, no máx. 1 a cada 30 min): sem a
+            # faixa no dashboard, é o sinal proativo ao admin. A recuperação
+            # anônima não chega aqui (auth.recuperar_senha para antes, igual
+            # para qualquer endereço), então o aviso não revela contas.
             nivel = logging.WARNING if app.config.get("PRODUCAO_HTTP") else logging.INFO
             _registrar(envio, EstadoEnvio.DESATIVADO, nivel=nivel, categoria="transporte_desativado")
+            _alertar_administradores(app, envio)
             return envio
         envio.transporte = transporte
         if not validos:
@@ -1050,7 +1079,7 @@ def enviar_email(destinatarios, assunto: str, template: str, *, tipo: str = "gen
                       extra_headers={"X-Nexo-Correlacao": envio.correlacao})
         msg.nexo_envio = envio
         if not email_valido(_remetente(msg.sender)[1]):
-            # Pendência de configuração (bloqueante no dashboard/diagnóstico).
+            # Pendência de configuração (bloqueante no Diagnóstico de e-mail).
             _registrar(envio, EstadoEnvio.FALHA_NO_ENVIO, nivel=logging.WARNING, categoria="remetente_invalido")
             return envio
     except Exception as erro:  # noqa: BLE001
@@ -1082,6 +1111,26 @@ def enviar_email(destinatarios, assunto: str, template: str, *, tipo: str = "gen
                    erro=type(erro).__name__)
         return envio
     logger.info(*linha_agendado)
+    return envio
+
+
+def envio_disponivel(config) -> bool:
+    """Há transporte e nenhuma pendência que impeça qualquer envio (chave SMTP
+    no lugar da de API, URL sem https, remetente inválido, SMTP no Render sem
+    NEXO_SMTP_PERMITIDO...). Só lê a configuração: nunca depende de conta."""
+    return transporte_configurado(config) is not None and not diagnostico_configuracao(config)["bloqueante"]
+
+
+def registrar_envio_suprimido(tipo: str) -> EnvioEmail:
+    """Registra um e-mail que não pôde sair porque a configuração do sistema
+    impede o envio (histórico, log e aviso aos admins). Não depende de conta:
+    usado pela recuperação de senha antes de qualquer consulta ao banco."""
+    app = current_app._get_current_object()
+    envio = EnvioEmail(tipo)
+    categoria = "transporte_desativado" if transporte_configurado(app.config) is None else "envio_bloqueado"
+    nivel = logging.WARNING if app.config.get("PRODUCAO_HTTP") else logging.INFO
+    _registrar(envio, EstadoEnvio.DESATIVADO, nivel=nivel, categoria=categoria)
+    _alertar_administradores(app, envio)
     return envio
 
 

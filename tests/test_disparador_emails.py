@@ -68,7 +68,9 @@ class _Subprocesso(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # T05 — Gmail SMTP em ambiente que permite SMTP (fora do Render Free)
 # ---------------------------------------------------------------------------
-class GmailSMTPTests(_Subprocesso):
+class _GmailBase(_Subprocesso):
+    """App mínima com Flask-Mail apontado para o Gmail (SMTP simulado)."""
+
     def setUp(self):
         self.stack = contextlib.ExitStack()
         self.addCleanup(self.stack.close)
@@ -117,6 +119,8 @@ class GmailSMTPTests(_Subprocesso):
     def _mensagem(self):
         return Message(subject="Assunto", recipients=["cliente@example.invalid"], html="<p>x</p>", body="x")
 
+
+class GmailSMTPTests(_GmailBase):
     def test_t05_variaveis_do_projeto_original_selecionam_o_gmail_smtp(self):
         codigo = (
             "import emails\n"
@@ -270,7 +274,9 @@ class BrevoErrosTests(_EmailCase):
 # ---------------------------------------------------------------------------
 # Teste controlado: confirmação de entrega no provedor (etapa 3 de 4)
 # ---------------------------------------------------------------------------
-class ConfirmacaoDeEntregaTests(_EmailCase):
+class _EntregaBase(_EmailCase):
+    """Admin logado e um envio de teste aceito pelo Brevo (com messageId)."""
+
     def setUp(self):
         super().setUp()
         self.app.config["BREVO_API_KEY"] = CHAVE_API
@@ -292,6 +298,8 @@ class ConfirmacaoDeEntregaTests(_EmailCase):
             emails.logger.info("fim da consulta")  # garante ao menos uma linha
         return resposta, http, self._flashes(client), "\n".join(logs.output)
 
+
+class ConfirmacaoDeEntregaTests(_EntregaBase):
     def test_consulta_registra_a_entrega_sem_dados_pessoais(self):
         privado = {"email": "admin@example.invalid", "subject": "PRIVATE_SUBJECT", "ip": "203.0.113.9",
                    "reason": "PRIVATE_REASON", "link": "https://privado.example.invalid/x"}
@@ -340,7 +348,7 @@ class ConfirmacaoDeEntregaTests(_EmailCase):
         self.assertIn("recusou a chave de API", mensagens)
         self.assertIn("ok=False", saida)
         _r, _h, mensagens, _s = self._consultar([URLError(OSError("PRIVATE"))])
-        self.assertIn("falha de rede", mensagens)
+        self.assertIn("o Brevo não concluiu a consulta agora (o aceite do envio continua valendo)", mensagens)
         # Corpo que não é o da API de eventos não vira "sem eventos".
         _r, _h, mensagens, _s = self._consultar([_RespostaBrevo(corpo=b"<html>", status=200)])
         self.assertIn("Não foi possível consultar a entrega no Brevo", mensagens)
@@ -415,7 +423,7 @@ class TelasDeOperacaoTests(_EmailCase):
             ([_erro_http(400, {"code": "DMARC policy requires domain authentication"})],
              "precisa de ajuste de configuração"),
             ([_erro_http(429, {"code": "too_many_requests"}, {"x-sib-ratelimit-reset": "60"})],
-             "temporariamente indisponível ou no limite de envios"),
+             "o limite de envios do serviço de e-mail foi atingido. Tente novamente mais tarde"),
             ([URLError(OSError("PRIVATE")), URLError(OSError("PRIVATE"))], "temporariamente indisponível"),
             ([_erro_http(504)], "pode não ter sido enviado"),
         )
@@ -476,6 +484,246 @@ class ConfiguracaoDeProducaoTests(_Subprocesso):
         self.assertFalse(diagnostico["bloqueante"])
         self.assertTrue(any("não são usadas" in p["texto"] for p in diagnostico["pendencias"]))
         self.assertNotIn("PRIVATE", json.dumps(diagnostico, default=str))
+
+
+
+# ---------------------------------------------------------------------------
+# Achados da revisão adversarial (cada um reproduzido antes da correção)
+# ---------------------------------------------------------------------------
+class RevisaoConsultaDeEntregaTests(_EntregaBase):
+    def _pagina(self):
+        return self.client.get("/admin/diagnostico-email").get_data(as_text=True)
+
+    def test_consulta_que_falha_nao_vira_nenhum_evento_nem_apaga_os_obtidos(self):
+        self._consultar([_erro_http(401, {"code": "unauthorized"})])
+        pagina = self._pagina()
+        self.assertIn("A última consulta ao Brevo não foi concluída", pagina)
+        self.assertNotIn("Nenhum evento registrado pelo Brevo", pagina)
+        self._consultar([_eventos({"event": "delivered", "date": "2026-11-01T10:00:05Z", "messageId": ID_MENSAGEM})])
+        self.assertIn("Entregue ao servidor do destinatário", self._pagina())
+        self._consultar([TimeoutError("PRIVATE")])
+        pagina = self._pagina()
+        self.assertIn("Entregue ao servidor do destinatário", pagina)       # o obtido continua
+        self.assertIn("A última consulta ao Brevo não foi concluída", pagina)
+        self._consultar([_eventos()])
+        self.assertIn("Nenhum evento registrado pelo Brevo na última consulta", self._pagina())
+
+    def test_comportamento_do_destinatario_nao_e_guardado_exibido_nem_registrado(self):
+        base = {"date": "2026-11-01T10:00:00Z", "messageId": ID_MENSAGEM, "email": "admin@example.invalid"}
+        _r, _h, mensagens, saida = self._consultar([_eventos(
+            dict(base, event="requests"), dict(base, event="delivered"), dict(base, event="opened"),
+            dict(base, event="clicks"), dict(base, event="unsubscribed"), dict(base, event="loadedByProxy"),
+            dict(base, event="spam"))])
+        self.assertEqual([e["evento"] for e in self.envio.eventos_provedor], ["requests", "delivered"])
+        pagina = self._pagina()
+        for comportamento in ("Aberto", "clicado", "Descadastrado", "Denunciado", "opened", "clicks",
+                              "unsubscribed", "loadedByProxy", ",spam"):
+            self.assertNotIn(comportamento, mensagens + saida)
+        for rotulo in ("<li>Aberto", "Link clicado", "Descadastrado", "Denunciado como spam", "proxy de privacidade"):
+            self.assertNotIn(rotulo, pagina)
+        self.assertIn("<li>Entregue ao servidor do destinatário", pagina)
+        self.assertIn("eventos=requests,delivered ", saida)
+
+    def test_resposta_malformada_ou_data_extrema_nao_derrubam_a_pagina(self):
+        for corpo in (b"[" * 30000 + b"]" * 30000,
+                      json.dumps({"events": [{"event": ["delivered"], "messageId": ID_MENSAGEM}]}).encode(),
+                      json.dumps({"events": {"event": "delivered"}}).encode()):
+            with self.subTest(tamanho=len(corpo)):
+                resposta, _h, mensagens, _s = self._consultar([_RespostaBrevo(corpo=corpo, status=200)])
+                self.assertEqual(resposta.status_code, 302)
+                self.assertIn("o Brevo não concluiu a consulta agora", mensagens)
+        resposta, _h, _m, _s = self._consultar([_eventos(
+            {"event": "delivered", "date": "0001-01-01T00:00:00Z", "messageId": ID_MENSAGEM},
+            {"event": "requests", "date": "9999-12-31T23:59:59-03:00", "messageId": ID_MENSAGEM})])
+        self.assertEqual(resposta.status_code, 302)
+        self.assertEqual([e["data"] for e in self.envio.eventos_provedor], [None, None])
+        pagina = self.client.get("/admin/diagnostico-email")
+        self.assertEqual(pagina.status_code, 200)
+        self.assertIn("Entregue ao servidor do destinatário", pagina.get_data(as_text=True))
+
+    def test_falha_da_consulta_nao_contradiz_o_aceite_do_envio(self):
+        for efeito in (_erro_http(504), TimeoutError("PRIVATE"), _erro_http(429, {"code": "too_many_requests"}),
+                       _erro_http(403, {"code": "permission_denied"}), ConnectionResetError("PRIVATE")):
+            with self.subTest(efeito=type(efeito).__name__):
+                _r, _h, mensagens, _s = self._consultar([efeito])
+                self.assertIn("o Brevo não concluiu a consulta agora (o aceite do envio continua valendo)", mensagens)
+                for enganoso in ("aceite não foi confirmado", "limite de envios", "envio transacional", "reenviar"):
+                    self.assertNotIn(enganoso, mensagens)
+        _r, _h, mensagens, _s = self._consultar([_erro_http(401, {"code": "unauthorized"})])
+        self.assertIn("recusou a chave de API", mensagens)   # a chave vale para a consulta também
+
+
+class RevisaoClassificacaoTests(_EmailCase):
+    def setUp(self):
+        super().setUp()
+        self.app.config["BREVO_API_KEY"] = CHAVE_API
+
+    def test_destinatario_recusado_pelo_brevo_e_endereco_invalido_no_cadastro(self):
+        client = self._admin()
+        with patch.object(emails.urllib.request, "urlopen", side_effect=[_erro_http(400, {
+                "code": "invalid_parameter", "message": "email is not valid in to"})]):
+            self._cadastrar(client)
+        envio = self._ultimo("boas_vindas")
+        self.assertEqual((envio.categoria, envio.http_status), ("destinatario_invalido", 400))
+        mensagens = self._flashes(client)
+        self.assertIn("o endereço de e-mail do destinatário é inválido ou não foi aceito", mensagens)
+        self.assertNotIn("ajuste de configuração", mensagens)
+        self.assertNotIn("reenvie o link", mensagens)         # reenviar ao mesmo endereço não adianta
+        self._assert_mensagem_de_operacao(mensagens)
+
+    def test_causa_desconhecida_nao_vira_ajuste_de_configuracao(self):
+        client = self._admin()
+        with patch.object(emails.urllib.request, "urlopen", side_effect=[_erro_http(400, {
+                "code": "invalid_parameter", "message": "PRIVATE_SENTINEL"})]):
+            self._cadastrar(client)
+        self.assertEqual(self._ultimo("boas_vindas").categoria, "requisicao_rejeitada")
+        mensagens = self._flashes(client)
+        self.assertIn("não foi enviado (a causa está no Diagnóstico de e-mail)", mensagens)
+        self.assertNotIn("ajuste de configuração", mensagens)
+        self._assert_mensagem_de_operacao(mensagens)
+
+    def test_dmarc_num_429_ou_5xx_mantem_o_significado_do_status(self):
+        with patch.object(emails.urllib.request, "urlopen", side_effect=[
+                _erro_http(503, {"message": "temporary failure while checking DMARC record"}), _RespostaBrevo()]) as http:
+            self._request_link("active@example.invalid")
+            self._entregar()
+        self.assertEqual(http.call_count, 2)
+        self.assertEqual(self._ultimo("recuperacao_senha").estado, EstadoEnvio.ACEITO_PELO_PROVEDOR)
+        with patch.object(emails.urllib.request, "urlopen", side_effect=[
+                _erro_http(429, {"message": "domain authentication rate exceeded"}, {"x-sib-ratelimit-reset": "60"})]):
+            self._request_link("active@example.invalid")
+            self._entregar()
+        self.assertEqual(self._ultimo("recuperacao_senha").categoria, "limite_excedido")
+
+    def test_cota_diaria_do_gmail_pede_para_tentar_mais_tarde(self):
+        self.app.config.update(BREVO_API_KEY=None, MAIL_USERNAME="conta.teste@gmail.com", MAIL_PASSWORD="PRIVATE")
+        client = self._admin()
+        self.transport.side_effect = smtplib.SMTPSenderRefused(
+            550, b"5.4.5 Daily user sending limit exceeded. PRIVATE", "conta.teste@gmail.com")
+        self._cadastrar(client)
+        envio = self._ultimo("boas_vindas")
+        self.assertEqual((envio.categoria, envio.codigo_provedor), ("limite_excedido", "550/5.4.5"))
+        mensagens = self._flashes(client)
+        self.assertIn("o limite de envios do serviço de e-mail foi atingido. Tente novamente mais tarde", mensagens)
+        self.assertNotIn("em alguns minutos", mensagens)
+
+
+class RevisaoSMTPTests(_GmailBase):
+    """Status estendido só no início da resposta (nunca dígitos de IP ou endereço)."""
+
+    def test_status_estendido_so_vale_no_inicio_da_resposta(self):
+        casos = (
+            (smtplib.SMTPRecipientsRefused({"x@example.invalid": (550, b"<maria.2.10.85@example.invalid>: "
+                                                                        b"Recipient address rejected")}),
+             "550", "smtp_destinatario_recusado"),
+            (smtplib.SMTPDataError(554, b"rejected: 10.5.4.5 listed at zen.spamhaus.org"), "554", "smtp_erro"),
+            (smtplib.SMTPSenderRefused(550, b"see https://help.example.invalid/codes/5.4.5 for details",
+                                       "x@example.invalid"), "550", "smtp_remetente_recusado"),
+            (smtplib.SMTPDataError(550, b"4.7.0 classe diferente do codigo"), "550", "smtp_erro"),
+            (smtplib.SMTPAuthenticationError(534, b"5.7.9 Application-specific password required. Learn more "
+                                                  b"at\n5.7.9  https://support.google.com/mail/?p=x"),
+             "534/5.7.9", "smtp_senha_de_app"),
+        )
+        for erro, codigo, categoria in casos:
+            with self.subTest(codigo=codigo, categoria=categoria):
+                envio = emails.EnvioEmail("recuperacao_senha")
+                with self.app.app_context(), patch.object(emails.mail, "send", side_effect=erro), \
+                        self.assertLogs(emails.logger, level="WARNING") as logs:
+                    emails._executar_envio(self.app, self._mensagem(), envio)
+                self.assertEqual((envio.codigo_provedor, envio.categoria), (codigo, categoria))
+                saida = "\n".join(logs.output)
+                for privado in ("2.10.85", "10.5.4.5", "help.example", "maria"):
+                    self.assertNotIn(privado, saida)
+
+
+class RevisaoRecuperacaoTests(_EmailCase):
+    def test_configuracao_que_bloqueia_todo_envio_nao_promete_link(self):
+        casos = (
+            ("chave SMTP no lugar da de API", dict(BREVO_API_KEY="xsmtpsib-" + "synthetic-smtp-key")),
+            ("URL da API sem https", dict(BREVO_API_KEY=CHAVE_API,
+                                          BREVO_API_URL="http://api.brevo-test.example.invalid/v3/smtp/email")),
+            ("SMTP no Render Free", dict(BREVO_API_KEY=None, NEXO_RENDER=True, MAIL_USERNAME="c@example.invalid",
+                                         MAIL_PASSWORD="PRIVATE")),
+        )
+        for nome, config in casos:
+            with self.subTest(nome):
+                self.app.config.update({"BREVO_API_KEY": None, "BREVO_API_URL": URL_BREVO, "NEXO_RENDER": False,
+                                        "SMTP_PERMITIDO": False, **config})
+                with patch.object(emails.urllib.request, "urlopen") as http:
+                    pagina = self._request_link("active@example.invalid").get_data(as_text=True)
+                    self._entregar()
+                http.assert_not_called()
+                self.assertIn("No momento não é possível enviar o link de redefinição", pagina)
+                self.assertNotIn("Se o e-mail estiver cadastrado", pagina)
+                self.assertEqual(self._ultimo("recuperacao_senha").categoria, "envio_bloqueado")
+        # Remetente inválido também bloqueia (verificado antes de qualquer conta).
+        self.app.config.update(BREVO_API_KEY=CHAVE_API, NEXO_RENDER=False)
+        self.app.config["MAIL_DEFAULT_SENDER"] = "NEXO sem endereco"
+        pagina = self._request_link("active@example.invalid").get_data(as_text=True)
+        self.assertIn("No momento não é possível enviar o link de redefinição", pagina)
+
+    def test_smtp_em_instancia_paga_do_render_com_nexo_smtp_permitido(self):
+        self.app.config.update(BREVO_API_KEY=None, NEXO_RENDER=True, SMTP_PERMITIDO=True,
+                               MAIL_USERNAME="c@example.invalid", MAIL_PASSWORD="PRIVATE")
+        pagina = self._request_link("active@example.invalid").get_data(as_text=True)
+        self.assertIn("Se o e-mail estiver cadastrado, enviaremos um link", pagina)
+        self.assertEqual(len(self.jobs), 1)
+        diagnostico = emails.diagnostico_configuracao(self.app.config)
+        self.assertFalse(diagnostico["bloqueante"])
+        self.assertTrue(any("NEXO_SMTP_PERMITIDO=1" in p["texto"] and not p["bloqueante"]
+                            for p in diagnostico["pendencias"]))
+
+    def test_envio_suprimido_avisa_os_admins_no_sininho_sem_dados_da_conta(self):
+        from models import Notificacao
+        from sqlalchemy import select
+        self.app.config.update(MAIL_ATIVO=False, EMAIL_ALERTA_ADMIN=True)
+        for endereco in ("active@example.invalid", "nao-existe@example.invalid"):
+            self._request_link(endereco)
+            self._entregar()
+        with self.app.app_context():
+            avisos = db.session.scalars(select(Notificacao.texto).where(
+                Notificacao.id_usuario == self.ids["admin"])).all()
+        self.assertEqual(len(avisos), 1, avisos)              # no máximo 1 por categoria a cada 30 min
+        self.assertIn("o serviço de e-mail não está configurado", avisos[0])
+        for privado in ("active@example.invalid", "nao-existe@example.invalid", "usuario:"):
+            self.assertNotIn(privado, avisos[0])
+
+
+class RevisaoDiagnosticoTests(unittest.TestCase):
+    BASE = {"MAIL_ATIVO": True, "BREVO_API_URL": URL_BREVO, "PUBLIC_URL": "https://nexo.example.invalid",
+            "MAIL_USERNAME": "conta.teste@gmail.com", "MAIL_PASSWORD": "PRIVATE"}
+
+    def test_mail_username_que_e_o_remetente_nao_e_descrito_como_sem_uso(self):
+        com_fallback = emails.diagnostico_configuracao(dict(
+            self.BASE, BREVO_API_KEY="xkeysib-synthetic", MAIL_DEFAULT_SENDER="conta.teste@gmail.com"))
+        textos = " ".join(p["texto"] for p in com_fallback["pendencias"])
+        self.assertIn("MAIL_USERNAME continua sendo o remetente", textos)
+        self.assertNotIn("não são usadas", textos)
+        explicito = emails.diagnostico_configuracao(dict(
+            self.BASE, BREVO_API_KEY="xkeysib-synthetic", MAIL_DEFAULT_SENDER="NEXO <nexo@example.invalid>"))
+        self.assertIn("não são usadas", " ".join(p["texto"] for p in explicito["pendencias"]))
+
+    def test_smtp_no_render_so_deixa_de_bloquear_com_nexo_smtp_permitido(self):
+        smtp = dict(self.BASE, BREVO_API_KEY=None, MAIL_DEFAULT_SENDER="conta.teste@gmail.com", NEXO_RENDER=True)
+        self.assertTrue(emails.diagnostico_configuracao(smtp)["bloqueante"])
+        self.assertFalse(emails.envio_disponivel(smtp))
+        liberado = dict(smtp, SMTP_PERMITIDO=True)
+        self.assertFalse(emails.diagnostico_configuracao(liberado)["bloqueante"])
+        self.assertTrue(emails.envio_disponivel(liberado))
+
+
+class RevisaoConfiguracaoTests(_Subprocesso):
+    def test_nexo_smtp_permitido_e_lido_do_ambiente(self):
+        resultado = self._executar(
+            "from config import DevelopmentConfig as C\n"
+            "print('PERMITIDO=' + str(C.SMTP_PERMITIDO))\n",
+            FLASK_ENV="development", NEXO_SMTP_PERMITIDO="1")
+        self.assertIn("PERMITIDO=True", resultado.stdout)
+        resultado = self._executar(
+            "from config import DevelopmentConfig as C\n"
+            "print('PERMITIDO=' + str(C.SMTP_PERMITIDO))\n",
+            FLASK_ENV="development")
+        self.assertIn("PERMITIDO=False", resultado.stdout)
 
 
 if __name__ == "__main__":

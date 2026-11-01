@@ -15,7 +15,10 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from extensions import chave_limite_conta, db, limiter
 from models import Empresa, Usuario
 from contas_email import buscar_usuario_por_email
-from emails import email_recuperacao_senha, email_boas_vindas, email_senha_alterada, transporte_configurado
+from emails import (
+    email_boas_vindas, email_recuperacao_senha, email_senha_alterada, envio_disponivel,
+    registrar_envio_suprimido,
+)
 from contract_policy import obter_situacao_contratual
 from origem_publica import url_publica
 from politica_senha import validar_nova_senha
@@ -463,13 +466,15 @@ def recuperar_senha():
     A resposta é genérica mesmo em DEBUG e não expõe o link ao solicitante.
     """
     if request.method == "POST":
-        if transporte_configurado(current_app.config) is None:
-            # Envio de e-mail desligado no sistema todo: o estado não depende da
+        if not envio_disponivel(current_app.config):
+            # Envio de e-mail impossível no sistema todo (sem transporte ou com
+            # pendência que bloqueia qualquer envio): o estado não depende da
             # conta (mesma resposta para qualquer endereço, sem consulta ao
             # banco), então dizê-lo não revela cadastros, e prometer um link
             # que nunca sai seria uma confirmação falsa.
-            logger.warning("Recuperação de senha sem envio: o envio de e-mails está desativado "
-                           "(nenhum transporte configurado).")
+            logger.warning("Recuperação de senha sem envio: a configuração atual não permite enviar e-mails "
+                           "(veja as pendências no Diagnóstico de e-mail).")
+            registrar_envio_suprimido("recuperacao_senha")  # histórico e aviso aos admins
             flash("No momento não é possível enviar o link de redefinição por e-mail. Tente novamente mais "
                   "tarde ou fale com o suporte NEXO.", "warning")
             return redirect(url_for("auth.recuperar_senha"))

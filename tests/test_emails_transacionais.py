@@ -101,7 +101,7 @@ class _EmailCase(_TokenCase):
         super().setUp()
         # Os testes de tokens substituem os gatilhos; aqui valem os reais.
         for alvo, nome in ((auth, "email_recuperacao_senha"), (auth, "email_boas_vindas"),
-                           (admin, "email_boas_vindas"), (auth, "transporte_configurado")):
+                           (admin, "email_boas_vindas"), (auth, "envio_disponivel")):
             self.stack.enter_context(patch.object(alvo, nome, getattr(emails, nome)))
         self.app.config.update(
             MAIL_ATIVO=True, BREVO_API_KEY=None, BREVO_API_URL=URL_BREVO,
@@ -361,14 +361,18 @@ class RecuperacaoSenhaTests(_EmailCase):
         for endereco in ("active@example.invalid", "nao-existe@example.invalid"):
             with self.assertLogs(auth.logger, level="WARNING") as logs:
                 paginas.append(self._request_link(endereco).get_data(as_text=True))
-            self.assertIn("o envio de e-mails está desativado", "\n".join(logs.output))
+            self.assertIn("a configuração atual não permite enviar e-mails", "\n".join(logs.output))
             self.assertNotIn(endereco, "\n".join(logs.output))
         # Estado do sistema, não da conta: a mesma resposta para qualquer endereço,
         # sem prometer um link que não sai.
         for pagina in paginas:
             self.assertIn("No momento não é possível enviar o link de redefinição por e-mail", pagina)
             self.assertNotIn("Se o e-mail estiver cadastrado", pagina)
-        self.assertEqual((self.jobs, self.sent, emails.historico_envios()), ([], [], []))
+        self.assertEqual((self.jobs, self.sent), ([], []))
+        # O pedido entra no histórico como suprimido, sem nenhum dado da conta.
+        suprimidos = emails.historico_envios()
+        self.assertEqual([(e.tipo, e.estado, e.categoria, e.referencia) for e in suprimidos],
+                         [("recuperacao_senha", EstadoEnvio.DESATIVADO, "transporte_desativado", None)] * 2)
         self.assertEqual(self._account(), (FIXTURE_HASH, False, True))  # nenhum token emitido
         diagnostico = emails.diagnostico_configuracao(self.app.config)
         self.assertFalse(diagnostico["ativo"])
@@ -664,12 +668,19 @@ class FalhasDoProvedorTests(_EmailCase):
 
     def test_t14_url_sem_https_nunca_recebe_a_chave(self):
         self.app.config["BREVO_API_URL"] = "http://api.brevo-test.example.invalid/v3/smtp/email"
-        with patch.object(emails.urllib.request, "urlopen") as http:
-            self._request_link("active@example.invalid")
-            self._entregar()
-        http.assert_not_called()
-        self.assertEqual(self._ultimo("recuperacao_senha").categoria, "configuracao_invalida")
         self.assertTrue(emails.diagnostico_configuracao(self.app.config)["bloqueante"])
+        client = self._admin()
+        with patch.object(emails.urllib.request, "urlopen") as http:
+            # Recuperação: a configuração bloqueia qualquer envio, então nada é
+            # prometido nem tentado (igual para qualquer endereço).
+            pagina = self._request_link("active@example.invalid").get_data(as_text=True)
+            self._entregar()
+            self.assertIn("No momento não é possível enviar o link", pagina)
+            self.assertEqual(self._ultimo("recuperacao_senha").categoria, "envio_bloqueado")
+            # Cadastro (ação do admin): a tentativa falha antes da rede.
+            self._cadastrar(client)
+        http.assert_not_called()
+        self.assertEqual(self._ultimo("boas_vindas").categoria, "configuracao_invalida")
 
     def test_t15_logs_e_aviso_ao_admin_sem_token_senha_ou_segredo(self):
         self.app.config.update(EMAIL_ALERTA_ADMIN=True, MAIL_PASSWORD="PRIVATE_SMTP_PASSWORD")

@@ -92,7 +92,7 @@ class PortalContratualCase(ContratosCase):
         self.stack.enter_context(patch("blueprints.auth.email_boas_vindas", return_value=True))
         # Gatilhos substituídos: o transporte também (a recuperação não para no
         # aviso de envio de e-mail indisponível).
-        self.stack.enter_context(patch("blueprints.auth.transporte_configurado", return_value="smtp"))
+        self.stack.enter_context(patch("blueprints.auth.envio_disponivel", return_value=True))
         self.mail_publicacao = self.stack.enter_context(
             patch("blueprints.admin.email_analise_publicada", return_value=True))
 

@@ -187,7 +187,7 @@ class SensitiveLogTests(unittest.TestCase):
             # Esta fixture isola somente o sigilo dos logs; os testes de
             # autenticação/SEC-004 exercitam a elegibilidade com banco real.
             with patch.object(auth, "db", fake_db), patch.object(auth, "usuario_pode_acessar", return_value=True), \
-                    patch.object(auth, "transporte_configurado", return_value="smtp"), \
+                    patch.object(auth, "envio_disponivel", return_value=True), \
                     patch.object(auth, "email_recuperacao_senha", return_value=True) as enviar:
                 with patch.object(auth.logger, "disabled", False), self.assertLogs(auth.logger, level="INFO") as logs:
                     response = inspect.unwrap(auth.recuperar_senha)()

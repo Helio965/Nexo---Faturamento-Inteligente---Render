@@ -20,8 +20,10 @@ e-mail), `blueprints/auth.py` e `blueprints/admin.py` (gatilhos), templates em
      (por exemplo, o Gmail fora do Render Free: seção 10);
    - **nenhum** (envio desativado) quando não há credenciais.
 
-   Com a chave do Brevo **e** credenciais SMTP, vale o Brevo; o Diagnóstico de
-   e-mail avisa que as credenciais SMTP ficam sem uso.
+   Com a chave do Brevo **e** credenciais SMTP, vale o Brevo e `MAIL_PASSWORD`
+   fica sem uso; com `MAIL_DEFAULT_SENDER` vazio, porém, `MAIL_USERNAME`
+   continua sendo o **remetente** — defina `MAIL_DEFAULT_SENDER` antes de
+   removê-la (o Diagnóstico de e-mail avisa).
 4. Cada solicitação devolve um `EnvioEmail` com um **estado operacional**:
 
 | Estado | Significado | O que NÃO significa |
@@ -76,8 +78,11 @@ O **Render Free bloqueia a saída SMTP nas portas 25, 465 e 587** desde
 26/09/2025 ([changelog do Render](https://render.com/changelog/free-web-services-will-no-longer-allow-outbound-traffic-to-smtp-ports)).
 Em produção no Render use **somente a API HTTPS do Brevo** (porta 443). Se a
 aplicação subir com SMTP no Render, o log de inicialização e o Diagnóstico de
-e-mail mostram uma pendência que **bloqueia o envio**. Instâncias pagas do
-Render liberam as portas 465 e 587 (a 25 continua bloqueada).
+e-mail mostram uma pendência que **bloqueia o envio** — e a recuperação de
+senha mostra a todos que o envio está indisponível, em vez de prometer um link.
+Instâncias **pagas** do Render liberam as portas 465 e 587 (a 25 continua
+bloqueada); como o código não distingue o plano, nelas defina
+`NEXO_SMTP_PERMITIDO=1` para o SMTP deixar de ser tratado como bloqueado.
 
 ## 3. Variáveis de ambiente
 
@@ -88,7 +93,8 @@ Render liberam as portas 465 e 587 (a 25 continua bloqueada).
 | `NEXO_PUBLIC_URL` | Recomendada | Origem `https://` dos links nos e-mails. Sem ela (ou em branco), vale `RENDER_EXTERNAL_URL` (injetada pelo Render). Produção exige `https`, sem caminho. |
 | `BREVO_API_URL` | Não | Padrão `https://api.brevo.com/v3/smtp/email`. Precisa ser `https` (a chave nunca é enviada sem TLS). |
 | `NEXO_EMAIL_TIMEOUT` | Não | Prazo, em segundos, de cada tentativa (1 a 60; padrão 15). |
-| `NEXO_EMAIL_ALERTA_ADMIN` | Não | `1` (padrão em produção) cria aviso no sininho dos administradores quando o provedor não aceita um e-mail; `0` desliga. No máximo um aviso por categoria a cada 30 minutos. O envio desativado não gera aviso (aparece no Diagnóstico de e-mail, no log de inicialização e na mensagem do cadastro). |
+| `NEXO_EMAIL_ALERTA_ADMIN` | Não | `1` (padrão em produção) cria aviso no sininho dos administradores quando o provedor não aceita um e-mail; `0` desliga. No máximo um aviso por categoria a cada 30 minutos. O envio desativado (ou bloqueado pela configuração) também gera aviso, sem dados de conta. |
+| `NEXO_SMTP_PERMITIDO` | Não | `1` só em instância **paga** do Render com SMTP: o Diagnóstico deixa de tratar o SMTP no Render como bloqueado. No plano Free, não use (as portas SMTP estão fechadas). |
 | `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USE_TLS`, `MAIL_USE_SSL`, `MAIL_USERNAME`, `MAIL_PASSWORD` | Não (só fora do Render Free) | Alternativa SMTP (Gmail: seção 10). O certificado TLS do servidor SMTP é verificado. Com `MAIL_USE_SSL` ligado, vale o SSL direto e o STARTTLS é ignorado. |
 
 > Uma variável declarada no `render.yaml` com `sync: false` **não** tem valor
@@ -156,9 +162,16 @@ Estes passos dependem do painel do Brevo e não podem ser feitos pelo código.
   recuperação — assim o tempo de resposta não revela se a conta existe.
 - **Mensagens do cadastro de empresa e do reenvio**: dizem, sem jargão técnico,
   se o e-mail foi aceito pelo serviço de e-mail, se o envio está indisponível,
-  se o resultado é incerto ou se falhou (endereço do destinatário, instabilidade
-  ou ajuste de configuração), sempre com a referência. A causa técnica da mesma
-  referência aparece no Diagnóstico de e-mail e no log.
+  se o resultado é incerto ou se falhou (endereço do destinatário, limite de
+  envios, instabilidade, ajuste de configuração ou "a causa está no
+  Diagnóstico"), sempre com a referência. A causa técnica da mesma referência
+  aparece no Diagnóstico de e-mail e no log.
+- **Recuperação de senha (tela pública)**: quando a configuração impede
+  qualquer envio (sem chave, chave SMTP no lugar da de API, URL sem https,
+  remetente inválido, SMTP no Render sem `NEXO_SMTP_PERMITIDO`), todos veem
+  "No momento não é possível enviar o link…", sem consulta ao banco (não revela
+  contas). O pedido entra em *Envios recentes* como suprimido e gera aviso no
+  sininho.
 - **Logs do Render** (*serviço → Logs*): uma linha por desfecho, por exemplo
 
 ```text
@@ -179,6 +192,8 @@ E-mail transacional não enviado (falha) | tipo=recuperacao_senha transporte=bre
 | `ip_nao_autorizado` | IP de saída do Render não autorizado no Brevo | Seção 4, passo 4 |
 | `remetente_nao_autorizado` / `remetente_invalido` | Remetente não verificado ou mal escrito | Seção 4, passo 2 |
 | `dominio_nao_autenticado` | O Brevo exige domínio autenticado (DMARC) | Seção 4, passo 3 |
+| `requisicao_rejeitada` | O Brevo recusou outro parâmetro do pedido (HTTP 400) | Conferir o evento no Brevo e o código no Diagnóstico |
+| `envio_bloqueado` | A configuração impede qualquer envio (pendência bloqueante) | Corrigir a pendência apontada no Diagnóstico |
 | `conta_em_validacao` / `creditos_insuficientes` / `conta_sem_permissao` | Situação da conta Brevo | Painel/suporte do Brevo |
 | `limite_excedido` | Cota diária (Brevo gratuito: 300/dia; Gmail: ~500/dia, código SMTP `550/5.4.5`) ou rajada | Aguardar; revisar o plano |
 | `provedor_indisponivel` / `rede` / `conexao_sem_resposta` | Instabilidade do Brevo ou da rede (pedido não processado) | Conferir status do Brevo; reenviar depois |
@@ -206,9 +221,11 @@ destinatário. Para confirmar:
    **Consultar entrega**, que lê
    `GET /v3/smtp/statistics/events?messageId=<id>` (somente leitura, só para
    envios do histórico deste processo, limite de 20 consultas por hora por
-   admin). Aparecem só o tipo e o horário dos eventos — nunca destinatário,
-   motivo, IP ou assunto. "Entregue" quer dizer entregue ao **servidor** do
-   destinatário.
+   admin). Aparecem só o tipo e o horário dos eventos **de entrega** (recebido,
+   entregue, adiado, devolvido, bloqueado, inválido, erro) — nunca abertura,
+   clique, descadastro, destinatário, motivo, IP ou assunto. "Entregue" quer
+   dizer entregue ao **servidor** do destinatário. Se a consulta falhar, a linha
+   diz que ela não foi concluída (o aceite do envio continua valendo).
 3. Caixa de entrada **e pasta de spam** do destinatário.
 
 ## 7. Testes controlados
@@ -299,7 +316,7 @@ BREVO_API_KEY=                # vazio, senão o Brevo tem prioridade
   revoga as senhas de app.
 - Use STARTTLS na 587 (como acima) ou SSL direto na 465 (`MAIL_PORT=465`,
   `MAIL_USE_SSL=true`). O Diagnóstico aponta combinações trocadas de porta e
-  modo.
+  modo. Numa instância paga do Render, defina também `NEXO_SMTP_PERMITIDO=1`.
 - O remetente deve ser a própria conta (ou um alias verificado dela).
 - Limite do Gmail pessoal: cerca de 500 e-mails por dia; acima disso, código
   `550/5.4.5` → `limite_excedido`.
@@ -334,9 +351,12 @@ domínio próprio autenticado no Brevo.
 
 ## 12. Antes de testar em produção: confirme o deploy
 
-O `render.yaml` publica a `main` com **deploy automático desligado**
-(`autoDeployTrigger: 'off'`): uma correção mesclada só entra no ar depois de um
-*Manual Deploy*.
+O `render.yaml` declara **deploy automático desligado** (`autoDeployTrigger:
+'off'`), mas o painel pode estar diferente ([PREPARACAO_RENDER.md](PREPARACAO_RENDER.md),
+seção do Auto-Deploy): confirme a configuração efetiva antes de mesclar. Com o
+deploy automático desligado, a correção mesclada só entra no ar depois de um
+*Manual Deploy*. Para conferir a versão no ar (o `/healthz` é a fonte de
+verdade):
 
 1. *Render → serviço → Events*: o último deploy deve estar **live** com o commit
    esperado da `main`.

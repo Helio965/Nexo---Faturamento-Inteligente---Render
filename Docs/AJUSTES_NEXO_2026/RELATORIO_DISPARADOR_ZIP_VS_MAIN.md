@@ -26,6 +26,9 @@ ao Supabase/Render/Brevo ou envio de e-mail real foi feito.
   tratados como genéricos; espera do limite 429 ignorando o cabeçalho do Brevo; STARTTLS sobre
   SSL e recusas sem código no Gmail SMTP; `NEXO_PUBLIC_URL` em branco impedindo o boot. E prepara
   o **teste real controlado** com confirmação da entrega no próprio NEXO.
+- Uma **revisão adversarial independente** (correção, segurança e requisitos, com cada achado
+  reproduzido) encontrou 2 problemas médios e vários baixos no próprio diff; todos foram
+  corrigidos e cobertos por testes (seção 5.1).
 
 ## 1. Como o disparador funciona no ZIP original
 
@@ -99,8 +102,8 @@ link montado pelo cabeçalho `Host`, confirmação falsa e busca de conta por gr
 |---|---|
 | `emails.py` | Códigos de erro do Brevo em texto livre (lista oficial, normalizados no log) e categoria `dominio_nao_autenticado` (DMARC); espera do 429 por `x-sib-ratelimit-reset`; código numérico das recusas SMTP (`534/5.7.9`) e categorias `smtp_senha_de_app` e `limite_excedido` (Gmail `5.4.5`); `consultar_entrega_brevo` (eventos de entrega por `messageId`, somente leitura); diagnóstico: SSL+TLS não bloqueia, porta × modo do Gmail, credenciais SMTP sem uso com o Brevo, remetente gratuito por transporte. |
 | `extensions.py` | STARTTLS só sem SSL. |
-| `config.py` | `PUBLIC_URL`/`PUBLIC_URL_PLATAFORMA` com `_env_texto` (em branco = ausente). |
-| `blueprints/auth.py` | Recuperação: com o envio desativado no sistema, mensagem neutra igual para qualquer endereço e sem consulta ao banco; mensagem genérica no futuro ("enviaremos"). |
+| `config.py` | `PUBLIC_URL`/`PUBLIC_URL_PLATAFORMA` com `_env_texto` (em branco = ausente); `SMTP_PERMITIDO` (`NEXO_SMTP_PERMITIDO`, instância paga do Render). |
+| `blueprints/auth.py` | Recuperação: quando a configuração impede qualquer envio (sem transporte ou com pendência bloqueante), mensagem neutra igual para qualquer endereço, sem consulta ao banco, com registro no histórico e aviso aos admins; mensagem genérica no futuro ("enviaremos"). |
 | `blueprints/admin.py` | Mensagens das telas de operação verdadeiras e profissionais (causa técnica no Diagnóstico); dashboard sem a faixa técnica; rota `POST /admin/diagnostico-email/entrega/<correlacao>`. |
 | `templates/admin/dashboard.html` | Remoção da faixa técnica de e-mail. |
 | `templates/admin/diagnostico_email.html` | Etapas do teste controlado; ID no Brevo, eventos e botão "Consultar entrega". |
@@ -117,8 +120,9 @@ Sem mudança de esquema do banco, sem dependência nova, sem alteração no `ren
    verdadeiras — aceito pelo serviço de e-mail, na fila, envio indisponível, resultado incerto
    ou falha (endereço do destinatário, instabilidade ou ajuste de configuração) — sempre com a
    referência, sem variáveis de ambiente, nome do provedor ou chave. A causa técnica da mesma
-   referência fica no Diagnóstico de e-mail, no log e no sininho dos admins. O dashboard não tem
-   mais a faixa técnica (o atalho "Diagnóstico de e-mail" continua no topo).
+   referência fica no Diagnóstico de e-mail e no log (e, em produção, no sininho dos admins quando
+   o provedor recusa ou o envio está desativado). O dashboard não tem mais a faixa técnica (o atalho
+   "Diagnóstico de e-mail" continua no topo).
 2. **Recuperação de senha**: com o envio de e-mail desligado no sistema todo, a página diz
    "No momento não é possível enviar o link de redefinição por e-mail…" para **qualquer**
    endereço, sem consultar o banco (não revela contas); com o envio ligado, a resposta genérica
@@ -136,7 +140,28 @@ Sem mudança de esquema do banco, sem dependência nova, sem alteração no `ren
    o botão **Consultar entrega** (somente leitura, só para envios recentes deste processo, 20
    consultas/hora por admin), que mostra os eventos do Brevo (recebido, entregue, devolvido,
    bloqueado…) com horário — nunca destinatário, motivo, IP ou assunto.
-6. **Configuração**: `NEXO_PUBLIC_URL` em branco vale como ausente.
+6. **Configuração**: `NEXO_PUBLIC_URL` em branco vale como ausente. `NEXO_SMTP_PERMITIDO=1`
+   (só em instância paga do Render) faz o SMTP no Render deixar de ser tratado como bloqueado.
+
+### 5.1 Revisão adversarial do diff
+
+Três leituras independentes (correção, segurança e requisitos), com verificadores que tentaram
+refutar cada achado médio por reprodução. Todos os achados abaixo foram reproduzidos, corrigidos
+e ganharam teste (`tests/test_disparador_emails.py`, classes `Revisao*`; os 15 testes novos
+falham no código anterior às correções):
+
+| Achado | Correção |
+|---|---|
+| (médio) Consulta de entrega que falhava aparecia depois como "Nenhum evento registrado" | A linha diz "A última consulta ao Brevo não foi concluída"; eventos já obtidos não são apagados |
+| (médio) Destinatário recusado pelo Brevo (`email is not valid in to`) virava "ajuste de configuração" | Vira `destinatario_invalido` ("endereço do destinatário inválido ou não aceito", sem sugerir reenvio); causa desconhecida tem texto neutro |
+| (médio) Recuperação prometia link com configuração que bloqueia todo envio (chave SMTP, URL sem https, remetente inválido, SMTP no Render) | Mesma mensagem neutra do envio desativado, para qualquer endereço; `NEXO_SMTP_PERMITIDO=1` para instância paga |
+| (baixo) Abertura, clique e descadastro do cliente apareciam na consulta e no log | Só eventos de entrega são guardados, mostrados e registrados |
+| (baixo) Data extrema ou JSON malformado do provedor derrubava a página/rota | Leitura à prova de falhas; data fora de 2000–2100 é descartada |
+| (baixo) Status estendido SMTP lido em qualquer ponto do texto (dígitos de IP/endereço) | Só no início da resposta e da mesma classe do código |
+| (baixo) "DMARC" num 429/5xx tirava a nova tentativa | Palavras de DMARC só valem na resposta 400 |
+| (baixo) Cota diária pedia "tente em alguns minutos"; falha da consulta usava textos do envio | Texto próprio ("tente mais tarde"); a consulta tem mensagens próprias |
+| (baixo) Sem a faixa do dashboard, o envio desativado ficou sem aviso proativo | Aviso no sininho dos admins (máx. 1 por categoria a cada 30 min, sem dados de conta) |
+| (baixo) Diagnóstico dizia que `MAIL_USERNAME` ficava sem uso, mas ela pode ser o remetente; docs davam o deploy automático como desligado | Texto corrigido; docs mandam confirmar o Auto-Deploy no painel (o `render.yaml` declara desligado, o painel pode diferir) |
 
 **Avaliada e não implementada — API do Gmail por HTTPS.** Funcionaria no Render Free e manteria o
 remetente `@gmail.com` autenticado, mas exige OAuth 2.0 com refresh token da conta pessoal (que
@@ -164,7 +189,7 @@ descartável e Chromium; rede bloqueada nos testes; nenhum envio real.
 | T10 PostgreSQL/Supabase | Aprovado | 5 suítes no PostgreSQL 16: 54 + 59 + 15 + 6 + 9 = **143 OK** | Inclui as variantes PostgreSQL de cadastro, recuperação e maiúsculas |
 | T11 Segurança | Aprovado | `test_t15_*`, consulta de entrega sem dados pessoais, varredura de segredos | Nenhum token, senha, chave, destinatário ou texto do provedor em log, tela ou aviso |
 | T12 Regressão | @@REGRESSAO@@ | `discover` completo com navegador e cópias da CDN conferidas por SRI | @@REGRESSAO_OBS@@ |
-| Testes novos contra o código anterior | Aprovado | 16 dos 17 testes de `test_disparador_emails` falham na `main` anterior | O T09 passa nos dois (protege um comportamento que já existia) |
+| Testes novos contra o código anterior | Aprovado | 15 dos 17 primeiros testes de `test_disparador_emails` falham na `main` anterior; os 15 testes da revisão falham no código anterior às correções | Passam nos dois o T09 e o STARTTLS na 587 (protegem comportamentos que já existiam) |
 | Capturas no Chromium (390 px e 1440 px) | Aprovado | `Docs/INTEGRACOES/evidencias_disparador_emails/` | Sem rolagem horizontal |
 | Integração real (Render/Brevo/caixa) | **Não executado** | — | Sem acesso aos painéis e sem autorização de envio real (seção 7) |
 
@@ -192,11 +217,13 @@ separadamente:
   vale a `RENDER_EXTERNAL_URL`.
 - `BREVO_API_URL`: deixar vazio (padrão `https://api.brevo.com/v3/smtp/email`).
 - `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USE_TLS`, `MAIL_USE_SSL`, `MAIL_USERNAME`, `MAIL_PASSWORD`:
-  **não** usar no Render Free (portas bloqueadas); se existirem junto com a chave do Brevo,
-  ficam sem uso.
-- Depois de salvar: *Manual Deploy* e conferir `GET /healthz` → `versao` igual ao commit da
-  `main`. Se houver domínio próprio verificado no Render, incluí-lo em `NEXO_PUBLIC_URL` ou
-  `NEXO_TRUSTED_HOSTS` (o health check usa esse domínio).
+  **não** usar no Render Free (portas bloqueadas). Junto com a chave do Brevo, `MAIL_PASSWORD`
+  fica sem uso; com `MAIL_DEFAULT_SENDER` vazio, `MAIL_USERNAME` continua sendo o remetente.
+  `NEXO_SMTP_PERMITIDO` fica vazio no plano Free.
+- Depois de salvar: confirmar o deploy — o `render.yaml` declara o deploy automático desligado,
+  mas o painel pode diferir (ver `Docs/PREPARACAO_RENDER.md`) — e conferir `GET /healthz` →
+  `versao` igual ao commit da `main`. Se houver domínio próprio verificado no Render, incluí-lo em
+  `NEXO_PUBLIC_URL` ou `NEXO_TRUSTED_HOSTS` (o health check usa esse domínio).
 
 **Brevo:**
 
