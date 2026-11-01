@@ -15,7 +15,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from extensions import chave_limite_conta, db, limiter
 from models import Empresa, Usuario
 from contas_email import buscar_usuario_por_email
-from emails import email_recuperacao_senha, email_boas_vindas, email_senha_alterada
+from emails import email_recuperacao_senha, email_boas_vindas, email_senha_alterada, transporte_configurado
 from contract_policy import obter_situacao_contratual
 from origem_publica import url_publica
 from politica_senha import validar_nova_senha
@@ -463,6 +463,16 @@ def recuperar_senha():
     A resposta é genérica mesmo em DEBUG e não expõe o link ao solicitante.
     """
     if request.method == "POST":
+        if transporte_configurado(current_app.config) is None:
+            # Envio de e-mail desligado no sistema todo: o estado não depende da
+            # conta (mesma resposta para qualquer endereço, sem consulta ao
+            # banco), então dizê-lo não revela cadastros, e prometer um link
+            # que nunca sai seria uma confirmação falsa.
+            logger.warning("Recuperação de senha sem envio: o envio de e-mails está desativado "
+                           "(nenhum transporte configurado).")
+            flash("No momento não é possível enviar o link de redefinição por e-mail. Tente novamente mais "
+                  "tarde ou fale com o suporte NEXO.", "warning")
+            return redirect(url_for("auth.recuperar_senha"))
         email = request.form.get("email", "")
         try:
             # Texto exato e, se não houver, a única conta com o mesmo e-mail sem
@@ -506,7 +516,10 @@ def recuperar_senha():
             logger.warning("Solicitação de recuperação de senha não processada (%s).", type(erro).__name__)
 
         # Mensagem genérica sempre (anti-enumeração de e-mails).
-        flash("Se o e-mail estiver cadastrado, enviamos um link de redefinição válido por 15 minutos.", "success")
+        # Futuro, não passado: o envio sai em segundo plano e, neste instante,
+        # está só agendado (o desfecho fica no log e no Diagnóstico de e-mail).
+        flash("Se o e-mail estiver cadastrado, enviaremos um link de redefinição válido por 15 minutos. "
+              "Confira também a caixa de spam.", "success")
         return redirect(url_for("auth.recuperar_senha"))
 
     return render_template("auth/recuperar_senha.html")

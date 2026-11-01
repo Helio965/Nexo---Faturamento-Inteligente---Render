@@ -101,7 +101,7 @@ class _EmailCase(_TokenCase):
         super().setUp()
         # Os testes de tokens substituem os gatilhos; aqui valem os reais.
         for alvo, nome in ((auth, "email_recuperacao_senha"), (auth, "email_boas_vindas"),
-                           (admin, "email_boas_vindas")):
+                           (admin, "email_boas_vindas"), (auth, "transporte_configurado")):
             self.stack.enter_context(patch.object(alvo, nome, getattr(emails, nome)))
         self.app.config.update(
             MAIL_ATIVO=True, BREVO_API_KEY=None, BREVO_API_URL=URL_BREVO,
@@ -195,6 +195,12 @@ class _EmailCase(_TokenCase):
         for proibido in (CHAVE_API, "PRIVATE_", *extras):
             self.assertNotIn(proibido, texto)
 
+    def _assert_mensagem_de_operacao(self, texto):
+        """Tela de operação: verdadeira e com referência, sem jargão de infraestrutura."""
+        self.assertRegex(texto, _REF)
+        for tecnico in ("BREVO_", "MAIL_", "xkeysib", "Render", "SMTP", "Brevo", "IPs autorizados", "HTTP "):
+            self.assertNotIn(tecnico, texto)
+
 
 class CadastroEmpresaTests(_EmailCase):
     def test_t01_cadastro_persiste_empresa_e_usuario_e_solicita_ativacao(self):
@@ -231,7 +237,8 @@ class CadastroEmpresaTests(_EmailCase):
                          (EstadoEnvio.ACEITO_PELO_PROVEDOR, "smtp", f"usuario:{id_usuario}"))
         mensagens = self._flashes(client)
         self.assertIn("cadastrada", mensagens)
-        self.assertIn("aceito pelo serviço de envio", mensagens)
+        self.assertIn("O e-mail de ativação foi aceito pelo serviço de e-mail.", mensagens)
+        self._assert_mensagem_de_operacao(mensagens)
         self.assertIn("não confirma a chegada à caixa de entrada", mensagens)
         self.assertRegex(mensagens, _REF)
         self.assertNotIn("/auth/primeiro-acesso/", mensagens)
@@ -289,7 +296,11 @@ class CadastroEmpresaTests(_EmailCase):
                          (EstadoEnvio.ACEITO_PELO_PROVEDOR, "brevo", ID_MENSAGEM, 1))
         self.assertTrue(envio.aceito)
         mensagens = self._flashes(client)
-        self.assertIn("aceito pelo serviço de envio (API HTTPS do Brevo (porta 443))", mensagens)
+        self.assertIn("O e-mail de ativação foi aceito pelo serviço de e-mail.", mensagens)
+        self._assert_mensagem_de_operacao(mensagens)
+        diagnostico = client.get("/admin/diagnostico-email").get_data(as_text=True)
+        self.assertIn(f"ID no Brevo: {html_lib.escape(ID_MENSAGEM)}", diagnostico)
+        self.assertIn("Consultar entrega", diagnostico)
         self.assertIn(f"Ref. {envio.correlacao}.", mensagens)
         saida = "\n".join(logs.output)
         self.assertIn("aceito pelo transporte", saida)
@@ -335,7 +346,7 @@ class RecuperacaoSenhaTests(_EmailCase):
         with self.assertLogs(auth.logger, level="INFO") as logs:
             existente = self._request_link("active@example.invalid", self.app.test_client())
             inexistente = self._request_link("ninguem@example.invalid", self.app.test_client())
-        generica = "Se o e-mail estiver cadastrado, enviamos um link de redefinição válido por 15 minutos."
+        generica = "Se o e-mail estiver cadastrado, enviaremos um link de redefinição válido por 15 minutos."
         self.assertIn(generica, existente.get_data(as_text=True))
         self.assertIn(generica, inexistente.get_data(as_text=True))
         self.assertEqual(len(self.jobs), 1)  # só a conta existente
@@ -346,27 +357,36 @@ class RecuperacaoSenhaTests(_EmailCase):
 
     def test_t05_sem_chave_brevo_e_sem_smtp_o_envio_e_suprimido_sem_falsa_confirmacao(self):
         self.app.config["MAIL_ATIVO"] = False
-        with self.assertLogs(emails.logger, level="INFO") as logs:
-            pagina = self._request_link("active@example.invalid")
-        self.assertIn("Se o e-mail estiver cadastrado", pagina.get_data(as_text=True))
-        self.assertEqual((self.jobs, self.sent), ([], []))
-        envio = self._ultimo("recuperacao_senha")
-        self.assertEqual((envio.estado, envio.categoria), (EstadoEnvio.DESATIVADO, "transporte_desativado"))
-        self.assertFalse(envio)
-        saida = "\n".join(logs.output)
-        self.assertIn("suprimido: transporte de e-mail desativado", saida)
-        self.assertNotIn("aceito", saida)
+        paginas = []
+        for endereco in ("active@example.invalid", "nao-existe@example.invalid"):
+            with self.assertLogs(auth.logger, level="WARNING") as logs:
+                paginas.append(self._request_link(endereco).get_data(as_text=True))
+            self.assertIn("o envio de e-mails está desativado", "\n".join(logs.output))
+            self.assertNotIn(endereco, "\n".join(logs.output))
+        # Estado do sistema, não da conta: a mesma resposta para qualquer endereço,
+        # sem prometer um link que não sai.
+        for pagina in paginas:
+            self.assertIn("No momento não é possível enviar o link de redefinição por e-mail", pagina)
+            self.assertNotIn("Se o e-mail estiver cadastrado", pagina)
+        self.assertEqual((self.jobs, self.sent, emails.historico_envios()), ([], [], []))
+        self.assertEqual(self._account(), (FIXTURE_HASH, False, True))  # nenhum token emitido
         diagnostico = emails.diagnostico_configuracao(self.app.config)
         self.assertFalse(diagnostico["ativo"])
         self.assertTrue(diagnostico["bloqueante"])
-        # O administrador vê a pendência no cadastro, sem confirmação falsa.
+        # O administrador vê no cadastro que nada saiu, sem confirmação falsa.
         client = self._admin()
-        self._cadastrar(client)
+        with self.assertLogs(emails.logger, level="INFO") as logs:
+            self._cadastrar(client)
+        self.assertIn("suprimido: transporte de e-mail desativado", "\n".join(logs.output))
+        envio = self._ultimo("boas_vindas")
+        self.assertEqual((envio.estado, envio.categoria), (EstadoEnvio.DESATIVADO, "transporte_desativado"))
+        self.assertFalse(envio)
         mensagens = self._flashes(client)
-        self.assertIn("Não foi possível agendar o e-mail de ativação: o serviço de e-mail não está configurado",
+        self.assertIn("O e-mail de ativação não foi enviado: o envio de e-mails está indisponível no momento",
                       mensagens)
         self.assertIn("reenvie o link", mensagens)
         self.assertNotIn("aceito", mensagens)
+        self._assert_mensagem_de_operacao(mensagens)
 
     def test_t05_variaveis_vazias_ou_com_espacos_valem_como_ausentes(self):
         codigo = (
@@ -469,9 +489,15 @@ class FalhasDoProvedorTests(_EmailCase):
         with patch.object(emails.urllib.request, "urlopen", side_effect=[_erro_http(401, {"code": "unauthorized"})]):
             self._cadastrar(client)
         mensagens = self._flashes(client)
-        self.assertIn("O e-mail de ativação não foi enviado: o Brevo recusou a chave de API", mensagens)
-        self.assertRegex(mensagens, _REF)
+        self.assertIn("O e-mail de ativação não foi enviado: o serviço de e-mail precisa de ajuste de configuração",
+                      mensagens)
+        self._assert_mensagem_de_operacao(mensagens)
         self._assert_sem_segredos(mensagens)
+        envio = self._ultimo("boas_vindas")
+        self.assertIn(f"Ref. {envio.correlacao}.", mensagens)
+        diagnostico = client.get("/admin/diagnostico-email").get_data(as_text=True)
+        self.assertIn(envio.correlacao, diagnostico)
+        self.assertIn("o Brevo recusou a chave de API", diagnostico)
 
     def test_t06_ip_nao_autorizado_no_brevo_tem_categoria_propria(self):
         mensagem = ("We have detected you are using an unrecognised IP address 203.0.113.77. If you performed "
@@ -483,11 +509,12 @@ class FalhasDoProvedorTests(_EmailCase):
         self.assertNotIn("203.0.113.77", saida)
         self.assertNotIn("unrecognised", saida)
 
-    def test_smtp_com_ssl_e_tls_ao_mesmo_tempo_e_pendencia(self):
-        config = dict(self.app.config, BREVO_API_KEY=None, MAIL_USE_SSL=True, MAIL_USE_TLS=True)
+    def test_smtp_com_ssl_e_tls_ao_mesmo_tempo_vale_o_ssl(self):
+        config = dict(self.app.config, BREVO_API_KEY=None, MAIL_USE_SSL=True, MAIL_USE_TLS=True, MAIL_PORT=465)
         diagnostico = emails.diagnostico_configuracao(config)
-        self.assertTrue(diagnostico["bloqueante"])
-        self.assertTrue(any("MAIL_USE_SSL e MAIL_USE_TLS" in p["texto"] for p in diagnostico["pendencias"]))
+        self.assertFalse(diagnostico["bloqueante"])
+        self.assertTrue(any("vale o SSL direto" in p["texto"] and not p["bloqueante"]
+                            for p in diagnostico["pendencias"]))
 
     def test_t06_chave_smtp_no_lugar_da_chave_de_api_e_apontada_no_diagnostico(self):
         self.app.config["BREVO_API_KEY"] = "xsmtpsib-" + "synthetic-smtp-key"
@@ -512,7 +539,9 @@ class FalhasDoProvedorTests(_EmailCase):
                           side_effect=[URLError(OSError("PRIVATE")), URLError(OSError("PRIVATE"))]):
             resposta = self._cadastrar(client)
         self.assertEqual(resposta.status_code, 302)
-        self.assertIn("falha de rede", self._flashes(client))
+        mensagens = self._flashes(client)
+        self.assertIn("o serviço de e-mail está temporariamente indisponível", mensagens)
+        self._assert_mensagem_de_operacao(mensagens)
         self.assertEqual(len(self._usuario_por_email("novo@example.invalid")), 1)
         # Com o provedor de volta, a própria recuperação reemite a ativação.
         with patch.object(emails.urllib.request, "urlopen", return_value=_RespostaBrevo()):
@@ -863,7 +892,7 @@ class TelasDoAdministradorTests(_EmailCase):
         self.assertTrue(resposta.headers["Location"].endswith("/admin/diagnostico-email"))
         self.assertEqual([m.recipients for m in self.sent], [["admin@example.invalid"]])
         self.assertNotIn("/auth/", self.sent[0].html)  # sem link de acesso nem token
-        self.assertIn("aceito pelo serviço de envio", self._flashes(client))
+        self.assertIn("aceito pelo serviço de e-mail (SMTP (Flask-Mail))", self._flashes(client))
         anonimo = self.app.test_client()
         sem_login = anonimo.post("/admin/diagnostico-email/teste", data={"csrf_token": self._csrf(anonimo)})
         self.assertEqual(sem_login.status_code, 302)
@@ -886,7 +915,9 @@ class TelasDoAdministradorTests(_EmailCase):
         self.assertTrue(resposta.headers["Location"].endswith(f"/admin/empresas/{self.empresa_id}/detalhes"))
         self.assertEqual([m.recipients for m in self.sent], [["pending@example.invalid"]])
         link = self._link(self.sent[0].html, "/auth/primeiro-acesso/")
-        self.assertIn("aceito pelo serviço de envio", self._flashes(client))
+        mensagens = self._flashes(client)
+        self.assertIn("O e-mail de ativação foi aceito pelo serviço de e-mail.", mensagens)
+        self._assert_mensagem_de_operacao(mensagens)
         self._assert_success(self._post(self._token(link), "activation", client=self.app.test_client()))
         # Conta já ativa, ADMIN ou empresa cancelada: nada é enviado.
         for alvo, esperado in ((self.ids["active"], "já ativou o acesso"), (self.ids["admin"], "Usuário não encontrado")):
@@ -905,14 +936,16 @@ class TelasDoAdministradorTests(_EmailCase):
         self.assertEqual(cliente.post(f"/admin/usuarios/{pendente}/reenviar-ativacao",
                                       data={"csrf_token": self._csrf(cliente, "/auth/logout")}).status_code, 403)
 
-    def test_dashboard_mostra_pendencia_quando_o_envio_esta_desativado(self):
+    def test_dashboard_sem_faixa_tecnica_e_pendencia_no_diagnostico(self):
         client = self._admin()
         self.app.config["MAIL_ATIVO"] = False
-        self.assertIn("pendência de configuração", client.get("/admin/dashboard").get_data(as_text=True))
-        self.app.config.update(MAIL_ATIVO=True, BREVO_API_KEY=CHAVE_API)
-        texto = client.get("/admin/dashboard").get_data(as_text=True)
-        self.assertNotIn("pendência de configuração", texto)
-        self.assertIn("Diagnóstico de e-mail", texto)
+        painel = client.get("/admin/dashboard").get_data(as_text=True)
+        for tecnico in ("pendência de configuração", "BREVO_API_KEY", "envelope-exclamation"):
+            self.assertNotIn(tecnico, painel)
+        self.assertIn("Diagnóstico de e-mail", painel)  # o acesso ao mecanismo administrativo continua
+        diagnostico = client.get("/admin/diagnostico-email").get_data(as_text=True)
+        self.assertIn("Impede o envio", diagnostico)
+        self.assertIn("DESATIVADO", diagnostico)
 
 
 class LimitesDoAdministradorTests(_EmailCase):

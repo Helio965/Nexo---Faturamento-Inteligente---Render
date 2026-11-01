@@ -39,7 +39,7 @@
     <i class="bi bi-check-circle" aria-hidden="true"></i>
     <div>
         <strong>Nenhuma pendência detectada na configuração.</strong>
-        <p>Confirme o funcionamento real com o envio de teste abaixo e, no Brevo, em Transacional → Logs.</p>
+        <p>Configuração correta não prova a entrega: confirme com o envio de teste abaixo, etapa por etapa.</p>
     </div>
 </div>
 {% endif %}
@@ -78,7 +78,13 @@
         </div>
     </div>
     <div class="nexo-card-body">
-        <p class="t-mut">O resultado mostra se o provedor <strong>aceitou</strong> a mensagem. A chegada à caixa de entrada só é confirmada abrindo o e-mail (confira também o spam) ou nos registros do Brevo (Transacional → Logs, etiqueta <span class="t-mono">nexo-teste</span>).</p>
+        <p class="t-mut mb-2">Cada etapa tem a sua evidência; uma não comprova a seguinte:</p>
+        <ol class="t-mut">
+            <li><strong>O NEXO iniciou o envio</strong> — a linha aparece em “Envios recentes”, com a referência.</li>
+            <li><strong>O provedor aceitou</strong> — estado “Aceito pelo provedor” e, no Brevo, o ID da mensagem.</li>
+            <li><strong>O provedor registrou a entrega</strong> — “Consultar entrega” mostra os eventos do Brevo (ou Brevo → Transacional → Logs, etiqueta <span class="t-mono">nexo-teste</span>).</li>
+            <li><strong>A mensagem chegou</strong> — só você confirma, abrindo a sua caixa de entrada (confira também o spam).</li>
+        </ol>
         <form method="post" action="{{ url_for('admin.diagnostico_email_teste') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn-nexo"><i class="bi bi-send"></i> Enviar e-mail de teste para mim</button>
@@ -104,7 +110,20 @@
                     <td class="t-mut">{{ e.atualizado_em|horario_brasilia }}</td>
                     <td>{{ e.rotulo_tipo }}</td>
                     <td><span class="nexo-badge {{ r[1] }}">{{ r[0] }}</span></td>
-                    <td class="t-mut">{{ e.descricao_categoria or ('aceite não confirma a chegada à caixa de entrada' if e.aceito else '—') }}{% if e.http_status %} <span class="t-mono">(HTTP {{ e.http_status }}{% if e.codigo_provedor %} {{ e.codigo_provedor }}{% endif %})</span>{% endif %}</td>
+                    <td class="t-mut text-break">{{ e.descricao_categoria or ('aceite não confirma a chegada à caixa de entrada' if e.aceito else '—') }}{% if e.http_status %} <span class="t-mono">(HTTP {{ e.http_status }}{% if e.codigo_provedor %} {{ e.codigo_provedor }}{% endif %})</span>{% elif e.codigo_provedor %} <span class="t-mono">(SMTP {{ e.codigo_provedor }})</span>{% endif %}
+                        {% if e.id_mensagem %}<br><span class="t-mono">ID no Brevo: {{ e.id_mensagem }}</span>{% endif %}
+                        {% if e.eventos_provedor %}
+                        <ul class="list-unstyled mb-0 mt-1" aria-label="Eventos registrados pelo Brevo">
+                            {% for ev in e.eventos_provedor %}<li>{{ ev.rotulo }}{% if ev.data %} — {{ ev.data|horario_brasilia }}{% endif %}</li>{% endfor %}
+                        </ul>
+                        {% elif e.eventos_consultados_em %}<br>Nenhum evento registrado pelo Brevo na última consulta.{% endif %}
+                        {% if e.id_mensagem and e.transporte == 'brevo' %}
+                        <form method="post" action="{{ url_for('admin.diagnostico_email_entrega', correlacao=e.correlacao) }}" class="mt-1">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn-ghost btn-sm-x" aria-label="Consultar entrega do envio {{ e.correlacao }}"><i class="bi bi-search" aria-hidden="true"></i> Consultar entrega</button>
+                        </form>
+                        {% endif %}
+                    </td>
                     <td class="t-mut">{{ e.rotulo_transporte }}</td>
                     <td class="t-mono t-mut">{{ e.correlacao }}</td>
                 </tr>

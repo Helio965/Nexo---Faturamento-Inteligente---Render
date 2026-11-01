@@ -16,16 +16,6 @@
     </div>
 </div>
 
-{% if email_pendente %}
-<div class="aviso-contrato is-perigo" role="status">
-    <i class="bi bi-envelope-exclamation" aria-hidden="true"></i>
-    <div>
-        <strong>O envio de e-mails está com pendência de configuração.</strong>
-        <p>Links de ativação e de recuperação de senha não chegam aos clientes enquanto isso não for corrigido. <a href="{{ url_for('admin.diagnostico_email') }}">Abrir o diagnóstico de e-mail</a>.</p>
-    </div>
-</div>
-{% endif %}
-
 {# ---------------- KPI tiles (dados reais da rota) ---------------- #}
 <div class="row g-3 mb-4">
     <div class="col-12 col-sm-6 col-xl-3">

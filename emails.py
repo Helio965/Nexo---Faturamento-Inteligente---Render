@@ -59,7 +59,7 @@ from datetime import datetime, timezone
 from email.utils import parseaddr
 from enum import StrEnum
 from html.parser import HTMLParser
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 from flask import current_app, render_template
 from flask_mail import Message
@@ -116,8 +116,12 @@ CATEGORIAS = {
     "creditos_insuficientes": "a conta Brevo está sem créditos de envio ou aguarda ativação",
     "remetente_nao_autorizado": ("o Brevo recusou o remetente (valide o remetente em Remetentes e domínios "
                                  "ou autentique o domínio)"),
+    "dominio_nao_autenticado": ("o Brevo exige um domínio de envio autenticado (política DMARC): autentique "
+                                "um domínio próprio em Brevo → Remetentes, domínios e IPs → Domínios e use um "
+                                "remetente desse domínio em MAIL_DEFAULT_SENDER"),
     "requisicao_rejeitada": "o Brevo rejeitou a requisição (parâmetros inválidos)",
-    "limite_excedido": "o limite de envios do provedor foi excedido; tente novamente mais tarde",
+    "limite_excedido": ("o limite de envios do provedor foi excedido (cota diária ou muitos envios em pouco "
+                        "tempo); tente novamente mais tarde"),
     "provedor_indisponivel": "o provedor de e-mail está indisponível no momento",
     "gateway_sem_resposta": ("o gateway do provedor não respondeu (o aceite não foi confirmado; confira os "
                              "registros do provedor antes de reenviar)"),
@@ -130,6 +134,8 @@ CATEGORIAS = {
                              "enviado)"),
     "tls": "falha na verificação TLS da conexão com o provedor",
     "smtp_autenticacao": "o servidor SMTP recusou as credenciais (MAIL_USERNAME/MAIL_PASSWORD)",
+    "smtp_senha_de_app": ("o Gmail exige uma senha de app: ative a verificação em duas etapas na conta Google "
+                          "e use em MAIL_PASSWORD a senha de app de 16 caracteres, não a senha da conta"),
     "smtp_remetente_recusado": "o servidor SMTP recusou o remetente",
     "smtp_destinatario_recusado": "o servidor SMTP recusou o destinatário",
     "smtp_conexao": ("não foi possível conectar ao servidor SMTP (o Render Free bloqueia as portas SMTP: "
@@ -154,6 +160,18 @@ _dormir = time.sleep  # pausa antes da nova tentativa (substituível em teste)
 
 _EMAIL = re.compile(r"[^@\s<>()\[\],;:\"\\]+@[^@\s<>()\[\],;:\"\\]+\.[^@\s<>()\[\],;:\"\\.]+")
 _CODIGO_PROVEDOR = re.compile(r"[a-z][a-z_]{0,47}")
+# Códigos do Brevo em texto livre (enum oficial da resposta 400 de POST
+# /v3/smtp/email). Só os desta lista entram no log, normalizados (ex.:
+# dmarc_policy_requires_domain_authentication); outro texto do provedor serve
+# apenas para classificar e nunca é registrado.
+_CODIGOS_TEXTO_BREVO = frozenset({
+    "api-key not found", "authentication failed", "insufficient credits",
+    "dmarc policy requires domain authentication", "dns records not properly configured",
+    "request already processed", "invalid parameters passed", "returned when invalid data posted",
+    "domain does not exist",
+})
+# Status estendido da resposta SMTP (RFC 3463, ex.: 5.7.9): só números, sem o texto.
+_STATUS_SMTP_ESTENDIDO = re.compile(rb"\b([245]\.\d{1,3}\.\d{1,3})\b")
 _ID_MENSAGEM = re.compile(r"<?[A-Za-z0-9._%+=@-]{1,200}>?")
 _TIPO = re.compile(r"[a-z_]{1,32}")
 
@@ -201,6 +219,8 @@ class EnvioEmail:
         self.codigo_provedor = None
         self.erro = None              # nome da classe da exceção, nunca a mensagem
         self.id_mensagem = None       # messageId devolvido pelo Brevo (não sensível)
+        self.eventos_provedor = None  # eventos de entrega consultados no Brevo (tipo e horário)
+        self.eventos_consultados_em = None
         self.tentativas = 0
         self.criado_em = datetime.now(timezone.utc)
         self.atualizado_em = self.criado_em
@@ -379,16 +399,31 @@ def diagnostico_configuracao(config=None) -> dict:
         if not partes_url or partes_url.scheme != "https" or not partes_url.hostname:
             pendencia("BREVO_API_URL precisa ser uma URL https (padrão: "
                       "https://api.brevo.com/v3/smtp/email).", True)
-    if transporte == "smtp" and config.get("MAIL_USE_SSL") and config.get("MAIL_USE_TLS"):
-        pendencia("MAIL_USE_SSL e MAIL_USE_TLS estão ligados ao mesmo tempo: use SSL (porta 465) ou "
-                  "STARTTLS (porta 587), não os dois.", True)
+    if transporte == "brevo" and config.get("MAIL_USERNAME") and config.get("MAIL_PASSWORD"):
+        pendencia("As credenciais SMTP (MAIL_USERNAME/MAIL_PASSWORD) também estão definidas, mas não são "
+                  "usadas: com BREVO_API_KEY, o envio sai pela API HTTPS do Brevo.", False)
+    if transporte == "smtp":
+        porta = config.get("MAIL_PORT")
+        if config.get("MAIL_USE_SSL") and config.get("MAIL_USE_TLS"):
+            pendencia("MAIL_USE_SSL e MAIL_USE_TLS estão ligados ao mesmo tempo: vale o SSL direto e o "
+                      "STARTTLS é ignorado. Para o Gmail, use SSL na porta 465 ou STARTTLS na 587.", False)
+        if config.get("MAIL_USE_SSL") and porta == 587:
+            pendencia("MAIL_USE_SSL está ligado com a porta 587, que usa STARTTLS: para o Gmail, use "
+                      "MAIL_USE_TLS=true e MAIL_USE_SSL=false na 587, ou MAIL_USE_SSL=true na 465.", False)
+        elif config.get("MAIL_USE_TLS") and not config.get("MAIL_USE_SSL") and porta == 465:
+            pendencia("A porta 465 usa SSL direto: para o Gmail, defina MAIL_USE_SSL=true na 465, ou use a "
+                      "porta 587 com STARTTLS (MAIL_USE_TLS=true).", False)
     if transporte is not None and not email_valido(remetente):
         pendencia("MAIL_DEFAULT_SENDER não contém um endereço de e-mail válido.", True)
     elif transporte is not None and dominio in _DOMINIOS_GRATUITOS:
-        pendencia(f"O remetente usa um domínio gratuito ({dominio}): o Brevo não autentica domínios "
-                  "gratuitos e reescreve o remetente, o que favorece a caixa de spam. Recomenda-se um "
-                  "domínio próprio autenticado (SPF/DKIM/DMARC). Confira também se o remetente está "
-                  "verificado no Brevo.", False)
+        if transporte == "brevo":
+            pendencia(f"O remetente usa um domínio gratuito ({dominio}): o Brevo não autentica domínios "
+                      "gratuitos e troca o endereço do remetente por um endereço de domínio do próprio "
+                      "Brevo, o que favorece a caixa de spam. Recomenda-se um domínio próprio autenticado "
+                      "(SPF/DKIM/DMARC). Confira também se o remetente está verificado no Brevo.", False)
+        else:
+            pendencia(f"O remetente usa um domínio gratuito ({dominio}): pelo SMTP ele precisa ser a própria "
+                      "conta autenticada em MAIL_USERNAME (ou um alias verificado dela).", False)
     if origem and not origem.startswith("https://") and render:
         pendencia("A origem pública dos links (NEXO_PUBLIC_URL/RENDER_EXTERNAL_URL) não usa https.", False)
     return {
@@ -522,15 +557,18 @@ def _categoria_http(status: int, codigo: str | None, mensagem: str) -> str:
     """Categoria a partir do status, do código (enum do Brevo) e de palavras da
     mensagem do provedor. A mensagem serve só para esta classificação: pode
     conter IP, endereço ou outros dados e nunca é registrada."""
+    if (codigo in ("dmarc_policy_requires_domain_authentication", "dns_records_not_properly_configured")
+            or "dmarc" in mensagem or "domain authentication" in mensagem):
+        return "dominio_nao_autenticado"
     if codigo == "account_under_validation":
         return "conta_em_validacao"
-    if codigo == "not_enough_credits":
+    if codigo in ("not_enough_credits", "insufficient_credits"):
         return "creditos_insuficientes"
     if codigo == "permission_denied":
         return "conta_sem_permissao"
     if codigo == "duplicate_request":
         return "limite_excedido"
-    if status == 401 or codigo == "unauthorized":
+    if status == 401 or codigo in ("unauthorized", "api_key_not_found", "authentication_failed"):
         if any(p in mensagem for p in ("ip address", "authorised_ips", "authorized_ips", "unrecognised ip",
                                        "unrecognized ip", "not verified", "ip not authori")):
             return "ip_nao_autorizado"
@@ -556,24 +594,53 @@ def _categoria_http(status: int, codigo: str | None, mensagem: str) -> str:
     return "desconhecida"
 
 
+def _codigo_brevo(valor) -> str | None:
+    """Código do provedor seguro para o log: snake_case do enum ou um dos textos
+    oficiais (normalizado). Qualquer outro valor fica fora do log."""
+    if not isinstance(valor, str):
+        return None
+    if _CODIGO_PROVEDOR.fullmatch(valor):
+        return valor
+    texto = " ".join(valor.split()).lower()
+    if texto in _CODIGOS_TEXTO_BREVO:
+        return re.sub(r"[^a-z0-9]+", "_", texto).strip("_")
+    return None
+
+
+def _segundos(valor) -> float | None:
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return None
+    return numero if 0 <= numero < float("inf") else None
+
+
 def _ler_erro_http(erro: urllib.error.HTTPError) -> tuple[str | None, str, float | None]:
-    """(código do provedor validado, mensagem em minúsculas p/ classificação, Retry-After)."""
+    """(código do provedor seguro, texto em minúsculas p/ classificação, espera em s).
+
+    A espera vem do Retry-After ou, num 429, do x-sib-ratelimit-reset (o
+    cabeçalho que o Brevo documenta; o Retry-After ele não documenta).
+    """
     codigo, mensagem, espera = None, "", None
     try:
         bruto = erro.read(_LIMITE_CORPO_PROVEDOR)
         dados = json.loads(bruto.decode("utf-8", "replace")) if bruto else None
         if isinstance(dados, dict):
             valor = dados.get("code")
-            if isinstance(valor, str) and _CODIGO_PROVEDOR.fullmatch(valor):
-                codigo = valor
+            codigo = _codigo_brevo(valor)
+            partes = [valor[:120] if isinstance(valor, str) else ""]
             if isinstance(dados.get("message"), str):
-                mensagem = dados["message"][:500].lower()
+                partes.append(dados["message"][:500])
+            # Código e mensagem crus servem só para classificar; nunca vão ao log.
+            mensagem = " ".join(partes).strip().lower()
     except Exception:  # noqa: BLE001 — corpo ausente ou ilegível: só o status conta
         pass
     try:
-        bruto_espera = erro.headers.get("Retry-After") if erro.headers is not None else None
-        if bruto_espera is not None:
-            espera = float(bruto_espera)
+        cabecalhos = erro.headers
+        if cabecalhos is not None:
+            espera = _segundos(cabecalhos.get("Retry-After"))
+            if espera is None and erro.code == 429:
+                espera = _segundos(cabecalhos.get("x-sib-ratelimit-reset"))
     except Exception:  # noqa: BLE001
         espera = None
     try:
@@ -649,6 +716,132 @@ def _enviar_brevo(app, msg) -> str | None:
     return None
 
 
+# ---------------------------------------------------------------------
+# Confirmação de entrega no provedor (teste controlado, sob demanda do admin)
+# ---------------------------------------------------------------------
+# Eventos de GET /v3/smtp/statistics/events e o rótulo mostrado ao admin.
+EVENTOS_PROVEDOR = {
+    "requests": "Recebido pelo Brevo",
+    "delivered": "Entregue ao servidor do destinatário",
+    "deferred": "Entrega adiada (o Brevo tentará de novo)",
+    "softBounces": "Devolvido temporariamente (soft bounce)",
+    "hardBounces": "Devolvido (hard bounce)",
+    "bounces": "Devolvido",
+    "blocked": "Bloqueado pelo Brevo",
+    "invalid": "Endereço inválido",
+    "spam": "Denunciado como spam",
+    "error": "Erro no Brevo",
+    "unsubscribed": "Descadastrado",
+    "opened": "Aberto",
+    "clicks": "Link clicado",
+    "loadedByProxy": "Aberto por proxy de privacidade",
+}
+EVENTOS_FALHA_ENTREGA = frozenset({"softBounces", "hardBounces", "bounces", "blocked", "invalid", "error", "spam"})
+_LIMITE_RESPOSTA_EVENTOS = 64 * 1024
+
+
+def _data_evento(valor):
+    if not isinstance(valor, str) or len(valor) > 40:
+        return None
+    try:
+        data = datetime.fromisoformat(valor.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return data if data.tzinfo else data.replace(tzinfo=timezone.utc)
+
+
+def consultar_entrega_brevo(envio: EnvioEmail, app=None) -> dict:
+    """Eventos que o Brevo registrou para o messageId deste envio.
+
+    Sob demanda do admin (Diagnóstico de e-mail), somente leitura e na mesma
+    origem de BREVO_API_URL. Guarda só o tipo e o horário de cada evento —
+    nunca destinatário, motivo, IP, link ou assunto. "Entregue" é a entrega
+    ao servidor do destinatário: a caixa de entrada só o destinatário confirma.
+    Devolve {"ok", "eventos", "categoria", "http_status"} e nunca levanta.
+    """
+    app = app or current_app._get_current_object()
+    resultado = {"ok": False, "eventos": [], "categoria": None, "http_status": None}
+    chave = app.config.get("BREVO_API_KEY")
+    partes = urlsplit(app.config.get("BREVO_API_URL") or "")
+    if (envio.transporte != "brevo" or not isinstance(envio.id_mensagem, str) or not chave
+            or partes.scheme != "https" or not partes.hostname):
+        resultado["categoria"] = "configuracao_invalida"
+        return resultado
+    consulta = urlencode({"messageId": envio.id_mensagem, "days": 7, "limit": 100, "sort": "asc"})
+    url = urlunsplit((partes.scheme, partes.netloc, "/v3/smtp/statistics/events", consulta, ""))
+    req = urllib.request.Request(url, headers={"accept": "application/json", "user-agent": _USER_AGENT},
+                                 method="GET")
+    # Mesma proteção do envio: a chave nunca acompanha um redirecionamento.
+    req.add_unredirected_header("api-key", chave)
+    try:
+        with urllib.request.urlopen(req, timeout=app.config.get("EMAIL_TIMEOUT_SEGUNDOS", 15.0)) as resposta:
+            status = getattr(resposta, "status", None)
+            url_final = resposta.geturl() if callable(getattr(resposta, "geturl", None)) else None
+            corpo = resposta.read(_LIMITE_RESPOSTA_EVENTOS + 1)
+    except urllib.error.HTTPError as e:
+        codigo, mensagem, _espera = _ler_erro_http(e)
+        resultado.update(categoria=_categoria_http(e.code, codigo, mensagem), http_status=e.code)
+    except Exception as e:  # noqa: BLE001 — a consulta nunca derruba a página do admin
+        resultado["categoria"] = _categoria_excecao(e, "brevo")[0]
+    else:
+        dados = None
+        if (status == 200 and not (isinstance(url_final, str) and url_final != url)
+                and isinstance(corpo, bytes) and len(corpo) <= _LIMITE_RESPOSTA_EVENTOS):
+            try:
+                dados = json.loads(corpo.decode("utf-8")) if corpo else {}
+            except ValueError:
+                dados = None
+        if not isinstance(dados, dict):
+            resultado.update(categoria="configuracao_invalida", http_status=status if isinstance(status, int) else None)
+        else:
+            alvo = envio.id_mensagem.strip("<>")
+            itens = dados.get("events")
+            eventos = []
+            for item in (itens if isinstance(itens, list) else [])[:100]:
+                if not isinstance(item, dict) or item.get("event") not in EVENTOS_PROVEDOR:
+                    continue
+                id_item = item.get("messageId")
+                if isinstance(id_item, str) and id_item.strip("<>") != alvo:
+                    continue
+                eventos.append({"evento": item["event"], "rotulo": EVENTOS_PROVEDOR[item["event"]],
+                                "data": _data_evento(item.get("date"))})
+            resultado.update(ok=True, eventos=eventos)
+    with _TRAVA:
+        if resultado["ok"]:
+            envio.eventos_provedor = resultado["eventos"]
+        envio.eventos_consultados_em = datetime.now(timezone.utc)
+    logger.info("Consulta de entrega no provedor | correlacao=%s ok=%s eventos=%s categoria=%s http=%s",
+                envio.correlacao, resultado["ok"], ",".join(e["evento"] for e in resultado["eventos"]) or "-",
+                resultado["categoria"] or "-", resultado["http_status"] or "-")
+    return resultado
+
+
+def _resposta_smtp(erro) -> tuple[int | None, str | None]:
+    """(código SMTP, status estendido "x.y.z") de uma recusa do servidor.
+
+    Só números: o texto da resposta pode citar endereços e nunca é registrado.
+    """
+    codigo, texto = getattr(erro, "smtp_code", None), getattr(erro, "smtp_error", None)
+    if isinstance(erro, smtplib.SMTPRecipientsRefused):
+        recusas = list((getattr(erro, "recipients", None) or {}).values())
+        codigo, texto = recusas[0] if recusas and isinstance(recusas[0], tuple) and len(recusas[0]) == 2 \
+            else (None, None)
+    if type(codigo) is not int or not 200 <= codigo <= 599:
+        return None, None
+    if isinstance(texto, str):
+        texto = texto.encode("utf-8", "replace")
+    achado = _STATUS_SMTP_ESTENDIDO.search(texto) if isinstance(texto, bytes) else None
+    return codigo, (achado.group(1).decode("ascii") if achado else None)
+
+
+def _codigo_smtp(erro) -> str | None:
+    """Código da recusa SMTP para o log (ex.: 534/5.7.9), sem o texto do servidor."""
+    codigo, estendido = _resposta_smtp(erro)
+    if codigo is None:
+        return None
+    return f"{codigo}/{estendido}" if estendido else str(codigo)
+
+
 def _categoria_excecao(erro: BaseException, transporte: str) -> tuple[str, bool]:
     """(categoria, falhou antes de enviar a requisição) para erros não HTTP."""
     if isinstance(erro, urllib.error.URLError) and not isinstance(erro, urllib.error.HTTPError):
@@ -660,6 +853,14 @@ def _categoria_excecao(erro: BaseException, transporte: str) -> tuple[str, bool]
             # "tempo_esgotado" fica para o prazo na leitura da resposta.
             return "conexao_sem_resposta", True
         return "rede", True
+    if isinstance(erro, smtplib.SMTPException):
+        codigo_smtp, estendido = _resposta_smtp(erro)
+        if estendido == "5.4.5":
+            # Gmail: cota diária de envio da conta excedida.
+            return "limite_excedido", False
+        if isinstance(erro, smtplib.SMTPAuthenticationError) and (codigo_smtp, estendido) == (534, "5.7.9"):
+            # Gmail: a conta exige senha de app (verificação em duas etapas).
+            return "smtp_senha_de_app", False
     if isinstance(erro, smtplib.SMTPAuthenticationError):
         return "smtp_autenticacao", False
     if isinstance(erro, smtplib.SMTPSenderRefused):
@@ -725,7 +926,9 @@ def _executar_envio(app, msg, envio: EnvioEmail) -> EnvioEmail:
             _registrar(
                 envio, EstadoEnvio.FALHA_NO_ENVIO, nivel=logging.WARNING, categoria=categoria,
                 http_status=getattr(e, "nexo_http_status", None) or None,
-                codigo_provedor=getattr(e, "nexo_codigo", None), erro=type(e).__name__,
+                codigo_provedor=getattr(e, "nexo_codigo", None) or (
+                    _codigo_smtp(e) if transporte == "smtp" else None),
+                erro=type(e).__name__,
             )
             _alertar_administradores(app, envio)
             return envio

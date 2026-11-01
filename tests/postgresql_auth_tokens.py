@@ -74,6 +74,9 @@ class PostgreSQLAuthTokenSecurityTests(token_cases.AuthTokenSecurityTests):
             ("registration_mail", admin, "email_boas_vindas"),
         ):
             setattr(self, attribute, self.stack.enter_context(patch.object(module, name, return_value=True)))
+        # Gatilhos substituídos: o transporte também (a recuperação não para no
+        # aviso de envio de e-mail indisponível; MAIL_ATIVO=False).
+        self.stack.enter_context(patch.object(auth, "transporte_configurado", return_value="smtp"))
         self.stack.enter_context(patch.object(auth.logger, "disabled", False))
         with self.app.app_context():
             self.engine = db.engine

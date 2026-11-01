@@ -51,7 +51,10 @@ class _ConexaoSMTPComPrazo(Connection):
             host = smtplib.SMTP(self.mail.server, self.mail.port, timeout=prazo)
         try:
             host.set_debuglevel(int(self.mail.debug))
-            if self.mail.use_tls:
+            # STARTTLS só numa conexão ainda sem TLS. Sobre SMTP_SSL (porta 465)
+            # ele é inválido: com MAIL_USE_SSL e MAIL_USE_TLS ligados juntos (o
+            # padrão de MAIL_USE_TLS é ligado), vale o SSL e o envio segue.
+            if self.mail.use_tls and not self.mail.use_ssl:
                 host.starttls(context=contexto)
             if self.mail.username and self.mail.password:
                 host.login(self.mail.username, self.mail.password)

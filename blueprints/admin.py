@@ -25,8 +25,9 @@ from etl_limits import get_limits
 from etl_uploads import ler_upload_validado, limitar_upload, limitar_processamento
 from notifications import notificar_clientes_empresa
 from emails import (
-    CATEGORIAS_RESULTADO_INCERTO, EstadoEnvio, diagnostico_configuracao, email_analise_publicada,
-    email_boas_vindas, email_teste_configuracao, email_ticket_resolvido, historico_envios,
+    CATEGORIAS, CATEGORIAS_RESULTADO_INCERTO, EVENTOS_FALHA_ENTREGA, EstadoEnvio, consultar_entrega_brevo,
+    diagnostico_configuracao, email_analise_publicada, email_boas_vindas, email_teste_configuracao,
+    email_ticket_resolvido, historico_envios,
 )
 from contas_email import email_em_uso, email_valido, normalizar_email
 from sqlalchemy.exc import IntegrityError, DataError, SQLAlchemyError
@@ -197,13 +198,6 @@ def dashboard():
             "pronto": up_v is not None and up_c is not None,
         })
 
-    # Envio de e-mail desativado ou mal configurado aparece no painel: sem isto
-    # o cadastro "funciona" e o cliente simplesmente nunca recebe a ativação.
-    try:
-        email_pendente = diagnostico_configuracao()["bloqueante"]
-    except Exception:  # noqa: BLE001 — o painel nunca depende do diagnóstico
-        email_pendente = False
-
     return render_template(
         "admin/dashboard.html",
         stats=stats,
@@ -211,7 +205,6 @@ def dashboard():
         dashboard_data=dashboard_data,
         homologacoes=homologacoes,
         alertas_contratuais=alertas_contratuais,
-        email_pendente=email_pendente,
     )
 
 
@@ -416,37 +409,60 @@ def _desconectar_revogados(revogacoes, operacao: str) -> None:
         current_app.logger.warning("Revogação Socket.IO após %s indisponível (%s).", operacao, type(erro).__name__)
 
 
-def _flash_envio_email(envio, descricao: str, *, orientar_reenvio: bool = False) -> None:
+# Falhas que o próprio admin resolve no cadastro ou esperando um pouco; as demais
+# são de configuração do serviço e têm o detalhe no Diagnóstico de e-mail.
+_FALHAS_DO_DESTINATARIO = frozenset({"sem_destinatario", "destinatario_invalido", "smtp_destinatario_recusado"})
+_FALHAS_TEMPORARIAS = frozenset({"limite_excedido", "provedor_indisponivel", "rede", "conexao_sem_resposta"})
+
+
+def _flash_envio_email(envio, descricao: str, *, orientar_reenvio: bool = False, tecnico: bool = False) -> None:
     """Mensagem VERDADEIRA ao admin sobre um envio de e-mail.
 
-    Distingue aceite do provedor, agendamento, serviço desativado e falha (com
-    a categoria). Nunca mostra link, token, chave ou mensagem do provedor; a
-    referência é a mesma correlação das linhas de log de emails.py.
+    Distingue aceite do provedor, agendamento, serviço desativado, resultado
+    incerto e falha. Nas telas de operação (cadastro, reenvio) o texto é
+    profissional, sem variáveis de ambiente nem detalhes do provedor: a causa
+    técnica fica no Diagnóstico de e-mail e no log, ligados pela referência.
+    `tecnico=True` (envio de teste no próprio Diagnóstico) mostra a causa.
+    Nunca mostra link, token, chave ou mensagem do provedor.
     """
     estado = getattr(envio, "estado", None)
     if estado is None:  # retorno booleano legado (ex.: dublês de teste)
         estado = EstadoEnvio.AGENDADO if envio else EstadoEnvio.FALHA_NO_ENVIO
     correlacao = getattr(envio, "correlacao", None)
+    categoria = getattr(envio, "categoria", None)
     ref = f" Ref. {correlacao}." if correlacao else ""
     inicial = descricao[:1].upper() + descricao[1:]
+    causa = getattr(envio, "descricao_categoria", None) or "falha no envio"
     if estado == EstadoEnvio.ACEITO_PELO_PROVEDOR:
-        flash(f"{inicial} foi aceito pelo serviço de envio ({envio.rotulo_transporte}). O aceite não confirma a "
-              f"chegada à caixa de entrada: se a mensagem não aparecer, peça que o destinatário verifique a pasta "
-              f"de spam.{ref}", "success")
+        transporte = f" ({envio.rotulo_transporte})" if tecnico else ""
+        flash(f"{inicial} foi aceito pelo serviço de e-mail{transporte}. O aceite ainda não confirma a chegada "
+              f"à caixa de entrada: se a mensagem não aparecer em alguns minutos, peça que o destinatário "
+              f"verifique a pasta de spam.{ref}", "success")
     elif estado == EstadoEnvio.AGENDADO:
-        flash(f"{inicial} foi agendado; o resultado do envio ainda não foi confirmado (consulte o Diagnóstico de "
-              f"e-mail).{ref}", "info")
+        flash(f"{inicial} entrou na fila de envio; a confirmação do serviço de e-mail ainda não chegou "
+              f"(acompanhe no Diagnóstico de e-mail).{ref}", "info")
     elif estado == EstadoEnvio.DESATIVADO:
-        flash(f"Não foi possível agendar {descricao}: o serviço de e-mail não está configurado (defina "
-              f"BREVO_API_KEY no ambiente do servidor; veja o Diagnóstico de e-mail).{ref}", "warning")
-    elif getattr(envio, "categoria", None) in CATEGORIAS_RESULTADO_INCERTO:
+        detalhe = f": {causa}" if tecnico else " (detalhes no Diagnóstico de e-mail)"
+        flash(f"{inicial} não foi enviado: o envio de e-mails está indisponível no momento{detalhe}.{ref}",
+              "warning")
+    elif categoria in CATEGORIAS_RESULTADO_INCERTO:
         # Pode ter sido aceito: não afirmar "não enviado" nem induzir duplicata.
-        flash(f"{inicial} pode não ter sido enviado: {envio.descricao_categoria}.{ref}", "warning")
+        detalhe = f": {causa}" if tecnico else (
+            ": a confirmação do serviço de e-mail não chegou. Confira o Diagnóstico de e-mail antes de reenviar")
+        flash(f"{inicial} pode não ter sido enviado{detalhe}.{ref}", "warning")
+    elif tecnico:
+        flash(f"{inicial} não foi enviado: {causa}.{ref}", "danger")
+    elif categoria in _FALHAS_DO_DESTINATARIO:
+        flash(f"{inicial} não foi enviado: o endereço de e-mail do destinatário é inválido ou não foi aceito. "
+              f"Confira o cadastro do usuário.{ref}", "danger")
+    elif categoria in _FALHAS_TEMPORARIAS:
+        flash(f"{inicial} não foi enviado: o serviço de e-mail está temporariamente indisponível ou no limite "
+              f"de envios. Tente novamente em alguns minutos.{ref}", "danger")
     else:
-        motivo = getattr(envio, "descricao_categoria", None) or "falha no envio"
-        flash(f"{inicial} não foi enviado: {motivo}.{ref}", "danger")
+        flash(f"{inicial} não foi enviado: o serviço de e-mail precisa de ajuste de configuração (detalhes no "
+              f"Diagnóstico de e-mail).{ref}", "danger")
     if orientar_reenvio and estado != EstadoEnvio.ACEITO_PELO_PROVEDOR:
-        flash("Depois de corrigir a configuração, reenvie o link em Detalhes da empresa → Acesso ao portal, ou "
+        flash("Quando o envio estiver normalizado, reenvie o link em Detalhes da empresa → Acesso ao portal, ou "
               "peça ao cliente que use “Esqueci minha senha” na tela de login.", "info")
 
 
@@ -1688,5 +1704,39 @@ def diagnostico_email():
 def diagnostico_email_teste():
     """Envia, de forma síncrona, um e-mail de teste ao próprio administrador."""
     envio = email_teste_configuracao(current_user)
-    _flash_envio_email(envio, "o e-mail de teste")
+    _flash_envio_email(envio, "o e-mail de teste", tecnico=True)
+    return redirect(url_for("admin.diagnostico_email"))
+
+
+@admin_bp.route("/diagnostico-email/entrega/<correlacao>", methods=["POST"])
+@admin_required
+# Somente leitura no provedor, só para envios do histórico deste processo, com
+# limite por usuário (a API de eventos do Brevo aceita 300 consultas/hora).
+@limiter.limit("20 per hour", methods=["POST"], key_func=chave_limite_usuario)
+def diagnostico_email_entrega(correlacao):
+    """Consulta no Brevo os eventos de entrega de um envio recente (teste controlado)."""
+    envio = next((e for e in historico_envios() if e.correlacao == correlacao), None)
+    if envio is None or envio.transporte != "brevo" or not envio.id_mensagem:
+        flash("Este envio não está mais no histórico recente ou não tem identificação no Brevo.", "warning")
+        return redirect(url_for("admin.diagnostico_email"))
+    resultado = consultar_entrega_brevo(envio)
+    ref = f"Ref. {envio.correlacao}"
+    if not resultado["ok"]:
+        motivo = CATEGORIAS.get(resultado["categoria"]) or "erro inesperado na consulta"
+        flash(f"Não foi possível consultar a entrega no Brevo ({ref}): {motivo}.", "warning")
+    elif not resultado["eventos"]:
+        flash(f"O Brevo ainda não registrou eventos para este envio ({ref}). Os registros podem levar alguns "
+              "minutos: consulte de novo em instantes.", "info")
+    else:
+        nomes = {e["evento"] for e in resultado["eventos"]}
+        rotulos = ", ".join(dict.fromkeys(e["rotulo"] for e in resultado["eventos"]))
+        if "delivered" in nomes:
+            flash(f"O Brevo registrou a entrega ao servidor do destinatário ({ref}): {rotulos}. A chegada à "
+                  "caixa de entrada só o destinatário confirma (verifique também o spam).", "success")
+        elif nomes & EVENTOS_FALHA_ENTREGA:
+            flash(f"O Brevo registrou um problema na entrega ({ref}): {rotulos}. Veja o detalhe em Brevo → "
+                  "Transacional → Logs.", "danger")
+        else:
+            flash(f"O Brevo registrou o envio, mas ainda não a entrega ({ref}): {rotulos}. Consulte de novo em "
+                  "instantes.", "info")
     return redirect(url_for("admin.diagnostico_email"))

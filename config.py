@@ -166,8 +166,11 @@ class Config:
     # em NEXO_PUBLIC_URL; sem ela, vale a URL que o Render injeta. A factory
     # valida o valor (produção: https obrigatório) e, sem nenhuma das duas,
     # usa http://127.0.0.1:5000 apenas em desenvolvimento.
-    PUBLIC_URL = (os.environ.get("NEXO_PUBLIC_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "").strip()
-    PUBLIC_URL_PLATAFORMA = os.environ.get("RENDER_EXTERNAL_URL", "").strip()
+    # Vazio ou só com espaços vale como ausente (_env_texto): um NEXO_PUBLIC_URL
+    # em branco no painel não pode esconder a RENDER_EXTERNAL_URL e impedir o
+    # boot em produção.
+    PUBLIC_URL = _env_texto("NEXO_PUBLIC_URL") or _env_texto("RENDER_EXTERNAL_URL") or ""
+    PUBLIC_URL_PLATAFORMA = _env_texto("RENDER_EXTERNAL_URL") or ""
     # Execução no Render (a plataforma injeta RENDER=true): o diagnóstico de
     # e-mail avisa que o plano Free bloqueia SMTP (emails.py).
     NEXO_RENDER = bool(os.environ.get("RENDER") or os.environ.get("RENDER_EXTERNAL_URL"))
