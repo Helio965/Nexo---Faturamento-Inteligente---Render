@@ -65,6 +65,42 @@ def _resolve_database_uri() -> str:
     return _limpar_url_pg(raw)
 
 
+def _env_texto(nome: str, padrao=None):
+    """Valor textual do ambiente sem espaços nas pontas; vazio vale como ausente.
+
+    No painel do Render (e num .env copiado do .env.example) é comum a variável
+    existir com valor vazio ou com espaço/quebra de linha colada junto: tratar
+    isso como "não configurado" evita, por exemplo, remetente vazio, URL vazia
+    ou chave de API com espaço (que o provedor recusaria como credencial).
+    """
+    valor = os.environ.get(nome)
+    if valor is None:
+        return padrao
+    valor = valor.strip()
+    return valor or padrao
+
+
+def _env_booleano(nome: str, padrao: bool) -> bool:
+    """1/true/yes/on/sim liga; 0/false/no/off/nao desliga; vazio ou outro valor usa o padrão."""
+    valor = (_env_texto(nome) or "").lower()
+    if valor in ("1", "true", "yes", "on", "sim"):
+        return True
+    if valor in ("0", "false", "no", "off", "nao", "não"):
+        return False
+    return padrao
+
+
+def _env_segundos(nome: str, padrao: float, minimo: float, maximo: float) -> float:
+    """Prazo em segundos dentro de [minimo, maximo]; valor inválido usa o padrão."""
+    try:
+        valor = float(_env_texto(nome, padrao))
+    except (TypeError, ValueError):
+        return padrao
+    if valor != valor:  # NaN
+        return padrao
+    return min(max(valor, minimo), maximo)
+
+
 def _resolve_direct_uri() -> str:
     """
     URI de conexão DIRETA (porta 5432) usada para DDL/migrações (Alembic).
@@ -132,6 +168,9 @@ class Config:
     # usa http://127.0.0.1:5000 apenas em desenvolvimento.
     PUBLIC_URL = (os.environ.get("NEXO_PUBLIC_URL") or os.environ.get("RENDER_EXTERNAL_URL") or "").strip()
     PUBLIC_URL_PLATAFORMA = os.environ.get("RENDER_EXTERNAL_URL", "").strip()
+    # Execução no Render (a plataforma injeta RENDER=true): o diagnóstico de
+    # e-mail avisa que o plano Free bloqueia SMTP (emails.py).
+    NEXO_RENDER = bool(os.environ.get("RENDER") or os.environ.get("RENDER_EXTERNAL_URL"))
     # Hosts adicionais aceitos nas requisições (CSV; ".exemplo.com" aceita os
     # subdomínios). O host da origem pública e o da plataforma entram sempre
     # em produção; em desenvolvimento, sem a variável, não há restrição.
@@ -184,15 +223,16 @@ class Config:
     ) * 1024 * 1024  # MB → bytes
 
     # === E-mail (Flask-Mail / SMTP) ===
-    MAIL_SERVER = os.environ.get("MAIL_SERVER", "smtp.gmail.com")
-    MAIL_PORT = int(os.environ.get("MAIL_PORT", 587))
-    MAIL_USE_TLS = os.environ.get("MAIL_USE_TLS", "true").lower() == "true"
-    MAIL_USE_SSL = os.environ.get("MAIL_USE_SSL", "false").lower() == "true"
-    MAIL_USERNAME = os.environ.get("MAIL_USERNAME") or None
+    # Valores vazios ou só com espaços valem como ausentes (_env_texto): uma
+    # variável criada vazia no painel não pode virar remetente "" ou chave " ".
+    MAIL_SERVER = _env_texto("MAIL_SERVER", "smtp.gmail.com")
+    MAIL_PORT = int(_env_texto("MAIL_PORT", "587"))
+    MAIL_USE_TLS = _env_booleano("MAIL_USE_TLS", True)
+    MAIL_USE_SSL = _env_booleano("MAIL_USE_SSL", False)
+    MAIL_USERNAME = _env_texto("MAIL_USERNAME")
     MAIL_PASSWORD = os.environ.get("MAIL_PASSWORD") or None
-    MAIL_DEFAULT_SENDER = os.environ.get(
-        "MAIL_DEFAULT_SENDER",
-        os.environ.get("MAIL_USERNAME") or "nexofaturamentointeligente@gmail.com",
+    MAIL_DEFAULT_SENDER = (
+        _env_texto("MAIL_DEFAULT_SENDER") or MAIL_USERNAME or "nexofaturamentointeligente@gmail.com"
     )
     # SEGURANÇA: por padrão o Flask-Mail herda app.debug e, em modo debug, o
     # smtplib imprime toda a conversa SMTP no log — inclusive a linha AUTH em
@@ -201,9 +241,18 @@ class Config:
     # Envio por API HTTPS do Brevo (porta 443). Necessário em hosts gratuitos
     # que BLOQUEIAM SMTP (Render Free bloqueia as portas 25/465/587). Com a chave
     # definida, emails.py usa a API em vez do SMTP; sem ela, segue o SMTP acima.
-    # O remetente (MAIL_DEFAULT_SENDER) precisa estar verificado no Brevo.
-    BREVO_API_KEY = os.environ.get("BREVO_API_KEY") or None
-    BREVO_API_URL = os.environ.get("BREVO_API_URL", "https://api.brevo.com/v3/smtp/email")
+    # A chave é a de API (prefixo xkeysib-), não a chave SMTP (xsmtpsib-). O
+    # remetente (MAIL_DEFAULT_SENDER) precisa estar verificado no Brevo e o IP de
+    # saída do servidor autorizado (Docs/EMAILS_TRANSACIONAIS.md).
+    BREVO_API_KEY = _env_texto("BREVO_API_KEY")
+    BREVO_API_URL = _env_texto("BREVO_API_URL", "https://api.brevo.com/v3/smtp/email")
+    # Prazo (s) de cada tentativa no provedor: conexão e resposta da API HTTPS e
+    # do SMTP (o Flask-Mail, sozinho, abriria o SMTP sem prazo nenhum).
+    EMAIL_TIMEOUT_SEGUNDOS = _env_segundos("NEXO_EMAIL_TIMEOUT", 15.0, 1.0, 60.0)
+    # Alerta no sininho dos administradores quando o provedor não aceita um
+    # e-mail (credencial, IP, remetente, rede...). Ligado em produção
+    # (ProductionConfig). Envio desativado aparece no dashboard, não no sininho.
+    EMAIL_ALERTA_ADMIN = _env_texto("NEXO_EMAIL_ALERTA_ADMIN", "0") == "1"
     # Quando não há credenciais, o envio é suprimido pela camada emails.py
     # (sem quebrar fluxos). Flag derivada para checagem rápida nos gatilhos.
     MAIL_ATIVO = bool((MAIL_USERNAME and MAIL_PASSWORD) or BREVO_API_KEY)
@@ -253,6 +302,9 @@ class ProductionConfig(Config):
     SECRET_KEY = os.environ.get("SECRET_KEY")
     # HTTPS em produção: cookie de sessão só trafega em conexão segura.
     SESSION_COOKIE_SECURE = True
+    # Falha de e-mail em produção vira aviso no sininho dos administradores
+    # (desligável com NEXO_EMAIL_ALERTA_ADMIN=0).
+    EMAIL_ALERTA_ADMIN = _env_texto("NEXO_EMAIL_ALERTA_ADMIN", "1") == "1"
 
 
 # Dicionário usado pela factory para escolher config por nome.

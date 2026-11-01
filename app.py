@@ -142,12 +142,22 @@ def create_app(config_name: str = None) -> Flask:
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
     )
     install_token_log_redaction()
+    # Resumo da configuração de e-mail no log de inicialização (sem segredos);
+    # pendências como "envio desativado" ou "chave SMTP no lugar da de API"
+    # aparecem como WARNING nos logs do Render (emails.py).
+    from emails import registrar_diagnostico_inicial
+    registrar_diagnostico_inicial(app)
 
     @app.after_request
     def _proteger_resposta_token(resposta):
         # O bearer fica no caminho da URL: não propagar como Referer nem cachear.
+        # "strict-origin" envia SÓ a origem (https://host/), nunca o caminho com
+        # o token. Não usar "no-referrer": sob HTTPS o CSRF do Flask-WTF
+        # (WTF_CSRF_SSL_STRICT) exige o cabeçalho Referer, e sem ele o POST da
+        # nova senha era recusado — o cliente não conseguia ativar a conta nem
+        # redefinir a senha pelo link do e-mail.
         if request.path.startswith(("/auth/resetar-senha/", "/auth/primeiro-acesso/")):
-            resposta.headers["Referrer-Policy"] = "no-referrer"
+            resposta.headers["Referrer-Policy"] = "strict-origin"
             resposta.headers["Cache-Control"] = "no-store"
         return resposta
 

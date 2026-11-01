@@ -36,7 +36,12 @@ services:
       - key: DIRECT_URL
         sync: false
       # E-mail via API HTTPS do Brevo (o Render Free bloqueia SMTP).
+      # Chave DE API (xkeysib-), não a SMTP. "sync: false" = o valor precisa
+      # ser preenchido no painel; sem ele o envio fica DESATIVADO. Autorize os
+      # IPs de saída do serviço no Brevo (Docs/EMAILS_TRANSACIONAIS.md).
       - key: BREVO_API_KEY
         sync: false
+      # Remetente verificado no Brevo (Senders). Domínio gratuito não autentica:
+      # para entregabilidade, troque por um endereço de domínio próprio.
       - key: MAIL_DEFAULT_SENDER
         value: NEXO - Faturamento Inteligente <nexofaturamentointeligente@gmail.com>

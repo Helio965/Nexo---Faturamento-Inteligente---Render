@@ -37,6 +37,44 @@
     </div>
 </div>
 
+{% set usuarios_portal = empresa.usuarios|selectattr('role', 'equalto', 'CLIENTE')|list %}
+<div class="nexo-card mb-4">
+    <div class="nexo-card-head">
+        <div>
+            <h2><i class="bi bi-person-lock text-purple"></i> Acesso ao portal</h2>
+            <p class="sub">Usuários do cliente. Quem ainda não definiu a senha pode receber um novo link de ativação (validade de 15 minutos).</p>
+        </div>
+    </div>
+    {% if usuarios_portal %}
+    {# Lista (não tabela): quebra em linhas no celular sem rolagem horizontal. #}
+    <div class="nexo-card-body">
+        <ul class="list-unstyled mb-0" aria-label="Usuários de acesso ao portal">
+            {% for u in usuarios_portal %}
+            <li class="d-flex flex-wrap align-items-center justify-content-between gap-2 py-2{{ ' border-top' if not loop.first }}">
+                <div class="text-break">
+                    <span class="t-strong">{{ u.nome }}</span><br>
+                    <span class="t-mut">{{ m.email(u.email) }}</span>
+                </div>
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    {% if not u.ativo %}<span class="nexo-badge b-muted">DESATIVADO</span>
+                    {% elif u.primeiro_acesso %}<span class="nexo-badge b-amber">AGUARDANDO ATIVAÇÃO</span>
+                    {% else %}<span class="nexo-badge b-green">ATIVO</span>{% endif %}
+                    {% if u.ativo and u.primeiro_acesso and empresa.deletado_em is none and empresa.status_conta != 'CANCELADA' %}
+                    <form method="post" action="{{ url_for('admin.usuario_reenviar_ativacao', id_usuario=u.id_usuario) }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit" class="btn-ghost btn-sm-x" aria-label="Reenviar link de ativação para {{ u.nome }}"><i class="bi bi-envelope-arrow-up" aria-hidden="true"></i> Reenviar link de ativação</button>
+                    </form>
+                    {% endif %}
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% else %}
+    <div class="empty-state"><div class="es-icon"><i class="bi bi-person"></i></div><h3>Nenhum usuário de acesso cadastrado.</h3></div>
+    {% endif %}
+</div>
+
 {% if not esquema_disponivel %}
 <div class="aviso-contrato is-alerta" role="status">
     <i class="bi bi-database-exclamation" aria-hidden="true"></i>

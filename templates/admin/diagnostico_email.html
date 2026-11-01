@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+
+{% block title %}Diagnóstico de e-mail — NEXO Admin{% endblock %}
+{% block page_title %}Diagnóstico de e-mail{% endblock %}
+
+{% set d = diagnostico %}
+{% set rotulos_estado = {
+    'DESATIVADO': ('Desativado', 'b-muted'),
+    'SEM_DESTINATARIO': ('Sem destinatário', 'b-muted'),
+    'AGENDADO': ('Agendado', 'b-info'),
+    'ACEITO_PELO_PROVEDOR': ('Aceito pelo provedor', 'b-green'),
+    'FALHA_NO_ENVIO': ('Falha no envio', 'b-red'),
+} %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Diagnóstico de e-mail</h1>
+        <p class="sub">Configuração do envio de e-mails transacionais (ativação, recuperação de senha, avisos) e envios recentes. Nenhum segredo é exibido.</p>
+    </div>
+    <div class="page-head-actions">
+        <a href="{{ url_for('admin.dashboard') }}" class="btn-ghost"><i class="bi bi-arrow-left"></i> Dashboard</a>
+    </div>
+</div>
+
+{% if d.pendencias %}
+{% for p in d.pendencias %}
+<div class="aviso-contrato {{ 'is-perigo' if p.bloqueante else 'is-alerta' }}" role="status">
+    <i class="bi {{ 'bi-x-octagon' if p.bloqueante else 'bi-exclamation-triangle' }}" aria-hidden="true"></i>
+    <div>
+        <strong>{{ 'Impede o envio' if p.bloqueante else 'Atenção' }}</strong>
+        <p>{{ p.texto }}</p>
+    </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="aviso-contrato" role="status">
+    <i class="bi bi-check-circle" aria-hidden="true"></i>
+    <div>
+        <strong>Nenhuma pendência detectada na configuração.</strong>
+        <p>Confirme o funcionamento real com o envio de teste abaixo e, no Brevo, em Transacional → Logs.</p>
+    </div>
+</div>
+{% endif %}
+
+<div class="nexo-card mb-4">
+    <div class="nexo-card-head">
+        <div>
+            <h2><i class="bi bi-envelope-gear text-purple"></i> Configuração atual</h2>
+            <p class="sub">Lida do ambiente do servidor no momento desta página</p>
+        </div>
+    </div>
+    <div class="nexo-card-body">
+        <dl class="dados-contrato">
+            <div><dt>Envio de e-mail</dt><dd>{% if d.ativo %}<span class="nexo-badge b-green">ATIVO</span>{% else %}<span class="nexo-badge b-red">DESATIVADO</span>{% endif %}</dd></div>
+            <div><dt>Transporte</dt><dd>{{ d.transporte_rotulo }}{% if d.smtp_servidor %} — {{ d.smtp_servidor }}{% endif %}</dd></div>
+            <div><dt>Remetente (MAIL_DEFAULT_SENDER)</dt><dd>{% if d.remetente_email %}{{ d.remetente_nome or '' }} {{ m.email(d.remetente_email) }}{% else %}—{% endif %}</dd></div>
+            <div><dt>Chave do Brevo</dt><dd>
+                {% if not d.chave_presente %}Não definida
+                {% elif d.chave_formato == 'api' %}Definida — formato de chave de API (xkeysib-)
+                {% elif d.chave_formato == 'smtp' %}<span class="nexo-badge b-red">CHAVE SMTP</span> use uma chave de API
+                {% else %}Definida — formato não reconhecido{% endif %}
+            </dd></div>
+            <div><dt>Endpoint da API</dt><dd>{% if d.api_host %}{{ d.api_host }} {{ '(https)' if d.api_https else '(sem https)' }}{% else %}—{% endif %}</dd></div>
+            <div><dt>Origem dos links nos e-mails</dt><dd>{{ d.origem_publica or '—' }}</dd></div>
+            <div><dt>Prazo por tentativa</dt><dd>{{ d.prazo_segundos|round(1) }} s</dd></div>
+            <div><dt>Aviso de falha no sininho</dt><dd>{{ 'Ligado' if d.alerta_admin else 'Desligado' }}</dd></div>
+        </dl>
+    </div>
+</div>
+
+<div class="nexo-card mb-4">
+    <div class="nexo-card-head">
+        <div>
+            <h2><i class="bi bi-send-check text-purple"></i> Envio de teste</h2>
+            <p class="sub">Uma mensagem simples, sem link de acesso, para o seu próprio e-mail ({{ m.email(current_user.email) }})</p>
+        </div>
+    </div>
+    <div class="nexo-card-body">
+        <p class="t-mut">O resultado mostra se o provedor <strong>aceitou</strong> a mensagem. A chegada à caixa de entrada só é confirmada abrindo o e-mail (confira também o spam) ou nos registros do Brevo (Transacional → Logs, etiqueta <span class="t-mono">nexo-teste</span>).</p>
+        <form method="post" action="{{ url_for('admin.diagnostico_email_teste') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn-nexo"><i class="bi bi-send"></i> Enviar e-mail de teste para mim</button>
+        </form>
+    </div>
+</div>
+
+<div class="nexo-card mb-4">
+    <div class="nexo-card-head">
+        <div>
+            <h2><i class="bi bi-clock-history text-purple"></i> Envios recentes</h2>
+            <p class="sub">Desde o último início do servidor (memória do processo; reinícios e a hibernação do plano gratuito zeram a lista — os logs permanecem)</p>
+        </div>
+    </div>
+    {% if envios %}
+    <div class="table-responsive-x">
+        <table class="nexo-table">
+            <thead><tr><th>Quando</th><th>Tipo</th><th>Estado</th><th>Detalhe</th><th>Transporte</th><th>Referência</th></tr></thead>
+            <tbody>
+                {% for e in envios %}
+                {% set r = rotulos_estado.get(e.estado.value if e.estado else '', ('—', 'b-muted')) %}
+                <tr>
+                    <td class="t-mut">{{ e.atualizado_em|horario_brasilia }}</td>
+                    <td>{{ e.rotulo_tipo }}</td>
+                    <td><span class="nexo-badge {{ r[1] }}">{{ r[0] }}</span></td>
+                    <td class="t-mut">{{ e.descricao_categoria or ('aceite não confirma a chegada à caixa de entrada' if e.aceito else '—') }}{% if e.http_status %} <span class="t-mono">(HTTP {{ e.http_status }}{% if e.codigo_provedor %} {{ e.codigo_provedor }}{% endif %})</span>{% endif %}</td>
+                    <td class="t-mut">{{ e.rotulo_transporte }}</td>
+                    <td class="t-mono t-mut">{{ e.correlacao }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state"><div class="es-icon"><i class="bi bi-envelope"></i></div><h3>Nenhum envio desde o último início do servidor.</h3><p>Os próximos envios (e as falhas, com a categoria) aparecem aqui.</p></div>
+    {% endif %}
+</div>
+{% endblock %}

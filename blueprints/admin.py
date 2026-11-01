@@ -24,7 +24,11 @@ from etl_inputs import ETLInputError
 from etl_limits import get_limits
 from etl_uploads import ler_upload_validado, limitar_upload, limitar_processamento
 from notifications import notificar_clientes_empresa
-from emails import email_analise_publicada, email_ticket_resolvido, email_boas_vindas
+from emails import (
+    CATEGORIAS_RESULTADO_INCERTO, EstadoEnvio, diagnostico_configuracao, email_analise_publicada,
+    email_boas_vindas, email_teste_configuracao, email_ticket_resolvido, historico_envios,
+)
+from contas_email import email_em_uso, email_valido, normalizar_email
 from sqlalchemy.exc import IntegrityError, DataError, SQLAlchemyError
 from sqlalchemy.orm.exc import StaleDataError
 from company_security import (
@@ -193,6 +197,13 @@ def dashboard():
             "pronto": up_v is not None and up_c is not None,
         })
 
+    # Envio de e-mail desativado ou mal configurado aparece no painel: sem isto
+    # o cadastro "funciona" e o cliente simplesmente nunca recebe a ativação.
+    try:
+        email_pendente = diagnostico_configuracao()["bloqueante"]
+    except Exception:  # noqa: BLE001 — o painel nunca depende do diagnóstico
+        email_pendente = False
+
     return render_template(
         "admin/dashboard.html",
         stats=stats,
@@ -200,6 +211,7 @@ def dashboard():
         dashboard_data=dashboard_data,
         homologacoes=homologacoes,
         alertas_contratuais=alertas_contratuais,
+        email_pendente=email_pendente,
     )
 
 
@@ -404,6 +416,40 @@ def _desconectar_revogados(revogacoes, operacao: str) -> None:
         current_app.logger.warning("Revogação Socket.IO após %s indisponível (%s).", operacao, type(erro).__name__)
 
 
+def _flash_envio_email(envio, descricao: str, *, orientar_reenvio: bool = False) -> None:
+    """Mensagem VERDADEIRA ao admin sobre um envio de e-mail.
+
+    Distingue aceite do provedor, agendamento, serviço desativado e falha (com
+    a categoria). Nunca mostra link, token, chave ou mensagem do provedor; a
+    referência é a mesma correlação das linhas de log de emails.py.
+    """
+    estado = getattr(envio, "estado", None)
+    if estado is None:  # retorno booleano legado (ex.: dublês de teste)
+        estado = EstadoEnvio.AGENDADO if envio else EstadoEnvio.FALHA_NO_ENVIO
+    correlacao = getattr(envio, "correlacao", None)
+    ref = f" Ref. {correlacao}." if correlacao else ""
+    inicial = descricao[:1].upper() + descricao[1:]
+    if estado == EstadoEnvio.ACEITO_PELO_PROVEDOR:
+        flash(f"{inicial} foi aceito pelo serviço de envio ({envio.rotulo_transporte}). O aceite não confirma a "
+              f"chegada à caixa de entrada: se a mensagem não aparecer, peça que o destinatário verifique a pasta "
+              f"de spam.{ref}", "success")
+    elif estado == EstadoEnvio.AGENDADO:
+        flash(f"{inicial} foi agendado; o resultado do envio ainda não foi confirmado (consulte o Diagnóstico de "
+              f"e-mail).{ref}", "info")
+    elif estado == EstadoEnvio.DESATIVADO:
+        flash(f"Não foi possível agendar {descricao}: o serviço de e-mail não está configurado (defina "
+              f"BREVO_API_KEY no ambiente do servidor; veja o Diagnóstico de e-mail).{ref}", "warning")
+    elif getattr(envio, "categoria", None) in CATEGORIAS_RESULTADO_INCERTO:
+        # Pode ter sido aceito: não afirmar "não enviado" nem induzir duplicata.
+        flash(f"{inicial} pode não ter sido enviado: {envio.descricao_categoria}.{ref}", "warning")
+    else:
+        motivo = getattr(envio, "descricao_categoria", None) or "falha no envio"
+        flash(f"{inicial} não foi enviado: {motivo}.{ref}", "danger")
+    if orientar_reenvio and estado != EstadoEnvio.ACEITO_PELO_PROVEDOR:
+        flash("Depois de corrigir a configuração, reenvie o link em Detalhes da empresa → Acesso ao portal, ou "
+              "peça ao cliente que use “Esqueci minha senha” na tela de login.", "info")
+
+
 def _parse_decimal_opcional(valor: str):
     """Aceita string vazia / pt-BR / en-US para faturamento_base_mensal (opcional)."""
     if not valor or not valor.strip():
@@ -429,13 +475,34 @@ def empresa_nova():
             flash("Data de contratação inválida (use o seletor de data).", "danger")
             return redirect(url_for("admin.empresa_nova"))
 
+        # E-mails gravados na forma canônica (sem espaços, minúsculas): login e
+        # recuperação de senha encontram a conta com qualquer combinação de
+        # maiúsculas, e o mesmo endereço não vira duas contas.
+        email_contato = normalizar_email(form.get("email_contato"))
+        usuario_email = normalizar_email(form.get("usuario_email"))
+        if not email_valido(email_contato) or not email_valido(usuario_email):
+            flash("Informe e-mails válidos para o contato da empresa e para o usuário de acesso.", "danger")
+            return redirect(url_for("admin.empresa_nova"))
+        try:
+            ja_cadastrado = email_em_uso(db.session, usuario_email)
+        except SQLAlchemyError as erro:
+            db.session.rollback()
+            current_app.logger.warning("Falha ao conferir e-mail do novo usuário: %s", type(erro).__name__)
+            flash("Não foi possível salvar agora (indisponibilidade do banco). Tente novamente.", "danger")
+            return redirect(url_for("admin.empresa_nova"))
+        if ja_cadastrado:
+            db.session.rollback()
+            flash("Já existe um usuário com este e-mail de acesso (a comparação ignora maiúsculas e minúsculas). "
+                  "Use outro endereço.", "danger")
+            return redirect(url_for("admin.empresa_nova"))
+
         nova_emp = Empresa(
             id_segmento=int(form["id_segmento"]),
             id_plano_atual=int(form["id_plano_atual"]),
             cnpj=form["cnpj"].strip(),
             razao_social=form["razao_social"].strip(),
             nome_fantasia=(form.get("nome_fantasia") or "").strip() or None,
-            email_contato=form["email_contato"].strip(),
+            email_contato=email_contato,
             telefone_contato=(form.get("telefone_contato") or "").strip() or None,
             data_contratacao=data_contratacao,
             faturamento_base_mensal=_parse_decimal_opcional(form.get("faturamento_base_mensal", "")),
@@ -443,7 +510,7 @@ def empresa_nova():
         )
         novo_user = Usuario(
             nome=form["usuario_nome"].strip(),
-            email=form["usuario_email"].strip(),
+            email=usuario_email,
             role="CLIENTE",
             ativo=True,
         )
@@ -469,28 +536,31 @@ def empresa_nova():
             # NEXO-AJ-06.1: empresa CANCELADA não recebe token de ativação.
             flash(f"Empresa '{nova_emp.razao_social}' cadastrada como CANCELADA.", "success")
             flash("O e-mail de ativação não foi enviado: os usuários só poderão ativar o acesso depois "
-                  "que a empresa for reativada, solicitando um link pela recuperação de senha.", "info")
+                  "que a empresa for reativada, solicitando um link pela recuperação de senha ou pelo "
+                  "botão “Reenviar link de ativação” em Detalhes da empresa.", "info")
             return redirect(url_for("admin.empresas"))
 
         # Insert confirmado → e-mail de boas-vindas com LINK SEGURO de definição
         # de senha (token de 15 min), DIRETO pelo Flask (sem webhook externo).
-        # Envio assíncrono e fail-safe; nunca derruba o cadastro.
-        agendado = False
+        # Envio SÍNCRONO (com prazo): o admin vê na hora se o provedor aceitou,
+        # recusou ou se o serviço está desativado. Falha nunca desfaz o cadastro.
+        razao_social = nova_emp.razao_social
         try:
             from blueprints.auth import gerar_token_definir_senha
             token = gerar_token_definir_senha(novo_user)
             # SEC-005: origem canônica configurada, nunca o Host da requisição.
             link_definir = url_publica("auth.ativar_acesso", token=token)
-            current_app.logger.info("Link de ativação gerado para o novo cadastro.")
-            agendado = email_boas_vindas(novo_user, link_definir)
         except Exception as e:  # noqa: BLE001
-            current_app.logger.warning("Falha ao agendar e-mail de boas-vindas: %s", type(e).__name__)
+            current_app.logger.warning("Link de ativação não gerado para o novo cadastro: %s", type(e).__name__)
+            flash(f"Empresa '{razao_social}' cadastrada.", "success")
+            flash("O e-mail de ativação não foi enviado: não foi possível gerar o link seguro de definição de "
+                  "senha. O cliente pode solicitar um novo link em “Esqueci minha senha”.", "warning")
+            return redirect(url_for("admin.empresas"))
+        current_app.logger.info("Link de ativação gerado para o novo cadastro.")
+        envio = email_boas_vindas(novo_user, link_definir, sincrono=True)
 
-        flash(f"Empresa '{nova_emp.razao_social}' cadastrada.", "success")
-        if agendado:
-            flash("O e-mail de ativação foi agendado. A entrega depende do serviço de e-mail.", "info")
-        else:
-            flash("Não foi possível agendar o e-mail de ativação. O cliente pode solicitar um novo link pela recuperação de senha.", "warning")
+        flash(f"Empresa '{razao_social}' cadastrada.", "success")
+        _flash_envio_email(envio, "o e-mail de ativação", orientar_reenvio=True)
         return redirect(url_for("admin.empresas"))
 
     return render_template("admin/empresa_form.html", empresa=None, planos=planos, segmentos=segmentos)
@@ -530,12 +600,17 @@ def empresa_editar(id_empresa):
                 flash("Data de contratação inválida.", "danger")
                 return redirect(url_for("admin.empresa_editar", id_empresa=id_empresa))
 
+            email_contato = normalizar_email(form.get("email_contato"))
+            if not email_valido(email_contato):
+                db.session.rollback()
+                flash("Informe um e-mail de contato válido.", "danger")
+                return redirect(url_for("admin.empresa_editar", id_empresa=id_empresa))
             # CNPJ é readonly no formulário; ignoramos qualquer valor vindo dele.
             empresa.id_segmento = int(form["id_segmento"])
             empresa.id_plano_atual = int(form["id_plano_atual"])
             empresa.razao_social = form["razao_social"].strip()
             empresa.nome_fantasia = (form.get("nome_fantasia") or "").strip() or None
-            empresa.email_contato = form["email_contato"].strip()
+            empresa.email_contato = email_contato
             empresa.telefone_contato = (form.get("telefone_contato") or "").strip() or None
             empresa.data_contratacao = data_contratacao
             # NEXO-AJ-06.1: campo ausente preserva o status; valor fora do domínio
@@ -568,6 +643,49 @@ def empresa_editar(id_empresa):
         current_app.logger.warning("Falha ao editar empresa %s: %s", id_empresa, type(erro).__name__)
         flash("Não foi possível salvar as alterações (dados inválidos ou indisponibilidade do banco).", "danger")
         return redirect(url_for("admin.empresas"))
+
+
+@admin_bp.route("/usuarios/<int:id_usuario>/reenviar-ativacao", methods=["POST"])
+@admin_required
+# Um e-mail por clique, para um usuário específico: sem disparo em massa.
+@limiter.limit("10 per hour", methods=["POST"], key_func=chave_limite_usuario)
+def usuario_reenviar_ativacao(id_usuario):
+    """Reenvia o link de ativação a um CLIENTE que ainda não definiu a senha.
+
+    Mesmo token e mesma elegibilidade do cadastro (empresa fora da lixeira,
+    não cancelada e com vínculo contratual). Envio síncrono: o admin vê se o
+    provedor aceitou a mensagem. Útil depois de corrigir a configuração.
+    """
+    try:
+        usuario = db.session.get(Usuario, id_usuario, populate_existing=True)
+    except SQLAlchemyError as erro:
+        db.session.rollback()
+        current_app.logger.warning("Reenvio de ativação indisponível (%s).", type(erro).__name__)
+        flash("Não foi possível consultar o usuário agora. Tente novamente.", "danger")
+        return redirect(url_for("admin.empresas"))
+    if usuario is None or usuario.role != "CLIENTE" or usuario.id_empresa is None:
+        flash("Usuário não encontrado.", "danger")
+        return redirect(url_for("admin.empresas"))
+    destino = url_for("contratos.empresa_detalhe", id_empresa=usuario.id_empresa)
+    if not usuario.primeiro_acesso:
+        flash("Este usuário já ativou o acesso. Para trocar a senha, ele usa “Esqueci minha senha” no login.", "info")
+        return redirect(destino)
+    try:
+        from blueprints.auth import gerar_token_definir_senha
+        token = gerar_token_definir_senha(usuario)
+        link_definir = url_publica("auth.ativar_acesso", token=token)
+    except ValueError:
+        flash("O link de ativação não foi gerado: a conta não está elegível (usuário desativado ou empresa "
+              "cancelada, na lixeira ou sem contrato vigente).", "warning")
+        return redirect(destino)
+    except Exception as erro:  # noqa: BLE001
+        db.session.rollback()
+        current_app.logger.warning("Link de ativação não gerado no reenvio (%s).", type(erro).__name__)
+        flash("Não foi possível gerar o link de ativação agora. Tente novamente.", "danger")
+        return redirect(destino)
+    current_app.logger.info("Reenvio de ativação solicitado pelo administrador | usuario=%s", usuario.id_usuario)
+    _flash_envio_email(email_boas_vindas(usuario, link_definir, sincrono=True), "o e-mail de ativação")
+    return redirect(destino)
 
 
 @admin_bp.route("/empresa/excluir/<int:id_empresa>", methods=["POST"])
@@ -1042,8 +1160,21 @@ def analise_relatorio(id_analise):
         # Aviso só quando a política permite ao cliente abrir a análise: empresa
         # com acesso ao portal e, no regime contratual, período pago. Sem isso
         # o e-mail anunciaria conteúdo indisponível (ou a conta encerrada).
-        if acao == "publicar" and not pode_consultar_analise(
-                obter_situacao_contratual(analise.empresa), analise):
+        avisar_cliente = False
+        if acao == "publicar":
+            # A publicação já está confirmada: falha ao consultar a política não
+            # pode virar erro 500 (o cliente apenas não é avisado agora).
+            try:
+                avisar_cliente = pode_consultar_analise(obter_situacao_contratual(analise.empresa), analise)
+            except Exception as e:  # noqa: BLE001
+                db.session.rollback()
+                current_app.logger.warning("Acesso do cliente à análise %s não verificado após publicar: %s",
+                                           id_analise, type(e).__name__)
+                avisar_cliente = None
+        if acao == "publicar" and avisar_cliente is None:
+            flash("A devolutiva foi publicada, mas não foi possível confirmar agora o acesso do cliente; "
+                  "ele não foi avisado. Tente publicar novamente em instantes.", "warning")
+        elif acao == "publicar" and not avisar_cliente:
             flash("A devolutiva foi publicada, mas o cliente não foi avisado: a empresa está sem "
                   "acesso ao portal ou o período da análise não tem cobertura paga registrada.", "warning")
         elif acao == "publicar":
@@ -1335,11 +1466,15 @@ def ticket_detalhe(id_chamado):
             if novo not in STATUS_CHAMADO:
                 flash("Status inválido.", "danger")
                 return redirect(url_for("admin.ticket_detalhe", id_chamado=id_chamado))
+            status_anterior = chamado.status_chamado
             chamado.status_chamado = novo
             # Uma leitura do relógio: atualização e fechamento no mesmo instante.
             instante = agora_utc()
             chamado.data_atualizacao = instante
-            resolvido = novo == "RESOLVIDO"
+            # Só a TRANSIÇÃO para RESOLVIDO avisa o cliente (sininho e e-mail):
+            # salvar de novo um chamado já resolvido não duplica o aviso nem
+            # muda a data de fechamento registrada.
+            resolvido = novo == "RESOLVIDO" and status_anterior != "RESOLVIDO"
             if resolvido:
                 chamado.data_fechamento = instante
                 notificar_clientes_empresa(
@@ -1347,7 +1482,7 @@ def ticket_detalhe(id_chamado):
                     f"Seu chamado “{chamado.assunto}” foi marcado como resolvido.",
                     url_for("cliente.ticket_detalhe", id_chamado=id_chamado),
                 )
-            else:
+            elif novo != "RESOLVIDO":
                 chamado.data_fechamento = None
             try:
                 db.session.commit()
@@ -1356,12 +1491,17 @@ def ticket_detalhe(id_chamado):
                 current_app.logger.warning("Alteração de status do chamado não persistida (%s).", type(erro).__name__)
                 flash("Não foi possível alterar o status do chamado. Tente novamente.", "danger")
                 return redirect(url_for("admin.ticket_detalhe", id_chamado=id_chamado))
-            # O e-mail só sai depois de o status estar confirmado no banco.
+            # O e-mail só sai depois de o status estar confirmado no banco; uma
+            # falha no aviso nunca vira erro da operação já confirmada.
             if resolvido:
-                email_ticket_resolvido(
-                    chamado,
-                    url_publica("cliente.ticket_detalhe", id_chamado=id_chamado),
-                )
+                try:
+                    email_ticket_resolvido(
+                        chamado,
+                        url_publica("cliente.ticket_detalhe", id_chamado=id_chamado),
+                    )
+                except Exception as erro:  # noqa: BLE001
+                    current_app.logger.warning("Aviso por e-mail do chamado resolvido não preparado (%s).",
+                                               type(erro).__name__)
             flash("Status do chamado atualizado.", "success")
         else:
             flash("Ação inválida.", "danger")
@@ -1523,3 +1663,30 @@ def guia_deletar(id):
     db.session.commit()
     flash("Tópico removido da Base de Conhecimento.", "success")
     return redirect(url_for("admin.guia"))
+
+
+# =====================================================================
+# Diagnóstico de e-mail (configuração, envios recentes e teste controlado)
+# =====================================================================
+@admin_bp.route("/diagnostico-email")
+@admin_required
+def diagnostico_email():
+    """Situação do envio de e-mails sem segredos: transporte, remetente, formato
+    da chave (só pelo prefixo), origem dos links, pendências e os envios
+    recentes deste processo (estado, categoria, correlação)."""
+    return render_template(
+        "admin/diagnostico_email.html",
+        diagnostico=diagnostico_configuracao(), envios=historico_envios(),
+    )
+
+
+@admin_bp.route("/diagnostico-email/teste", methods=["POST"])
+@admin_required
+# Destinatário fixo (o próprio administrador) e limite por usuário: não é um
+# canal de disparo para terceiros nem em massa.
+@limiter.limit("5 per hour", methods=["POST"], key_func=chave_limite_usuario)
+def diagnostico_email_teste():
+    """Envia, de forma síncrona, um e-mail de teste ao próprio administrador."""
+    envio = email_teste_configuracao(current_user)
+    _flash_envio_email(envio, "o e-mail de teste")
+    return redirect(url_for("admin.diagnostico_email"))

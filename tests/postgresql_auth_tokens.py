@@ -160,3 +160,36 @@ class PostgreSQLIsolationSafetyTests(unittest.TestCase):
                 cluster.close()
             # Restaura o processo chamador apenas depois de fechar seu cluster.
             self.assertEqual(os.environ.get("PGSERVICE"), poisoned["PGSERVICE"])
+
+
+# ---------------------------------------------------------------------------
+# E-mails transacionais em PostgreSQL: os mesmos cenários de
+# tests/test_emails_transacionais.py (cadastro, recuperação e e-mails com
+# maiúsculas/minúsculas, inclusive registros legados conflitantes), com a
+# comparação lower(email) e a unicidade executadas pelo servidor real.
+# ---------------------------------------------------------------------------
+from . import test_emails_transacionais as email_cases  # noqa: E402
+
+
+class _TokenPostgreSQL(token_cases._TokenCase):
+    """Só a preparação PostgreSQL (sem herdar os testes de tokens)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.postgresql = PrivatePostgreSQL()
+        cls.addClassCleanup(cls.postgresql.close)
+
+    def setUp(self):
+        PostgreSQLAuthTokenSecurityTests.setUp(self)
+
+
+class PostgreSQLCadastroEmpresaTests(email_cases.CadastroEmpresaTests, _TokenPostgreSQL):
+    pass
+
+
+class PostgreSQLRecuperacaoSenhaTests(email_cases.RecuperacaoSenhaTests, _TokenPostgreSQL):
+    pass
+
+
+class PostgreSQLMaiusculasMinusculasTests(email_cases.MaiusculasMinusculasTests, _TokenPostgreSQL):
+    pass

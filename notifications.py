@@ -40,6 +40,11 @@ def classificar_notificacao(texto: str) -> dict:
       aberto    -> vermelho/rosa (ação pendente: novo chamado, resposta, upload)
     """
     t = (texto or "").lower()
+    # Aviso aos admins de e-mail recusado pelo provedor (emails.py): pendência
+    # que exige ação, mesmo quando o tipo do e-mail fala em "resolvido" ou o
+    # motivo em "indisponível".
+    if t.startswith("falha no envio de e-mail"):
+        return {"tipo": "aberto", "rotulo": "Aberto"}
     if "resolvid" in t:
         return {"tipo": "resolvido", "rotulo": "Resolvido"}
     if ("dispon" in t) or ("relatório estrat" in t) or ("relatorio estrat" in t) or ("processamos" in t):

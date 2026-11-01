@@ -14,6 +14,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from extensions import chave_limite_conta, db, limiter
 from models import Empresa, Usuario
+from contas_email import buscar_usuario_por_email
 from emails import email_recuperacao_senha, email_boas_vindas, email_senha_alterada
 from contract_policy import obter_situacao_contratual
 from origem_publica import url_publica
@@ -307,10 +308,14 @@ def login():
         email = request.form.get("email", "").strip()
         senha = request.form.get("senha", "")
 
-        # Procura o utilizador no banco de dados pelo e-mail
-        usuario = db.session.execute(
-            select(Usuario).where(Usuario.email == email)
-        ).scalar_one_or_none()
+        # Procura o utilizador pelo e-mail: texto exato e, se não houver, a
+        # única conta com o mesmo e-mail sem diferenciar maiúsculas
+        # (cadastros antigos guardavam o endereço como foi digitado).
+        busca = buscar_usuario_por_email(db.session, email)
+        if busca.ambigua:
+            logger.warning("Login sem conta escolhida: mais de um cadastro tem este e-mail com maiúsculas "
+                           "diferentes (resolver o cadastro duplicado).")
+        usuario = busca.usuario
 
         # Valida o utilizador e a senha (usando o método check_senha definido no Model)
         if usuario and usuario.check_senha(senha):
@@ -458,26 +463,47 @@ def recuperar_senha():
     A resposta é genérica mesmo em DEBUG e não expõe o link ao solicitante.
     """
     if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
+        email = request.form.get("email", "")
         try:
-            usuario = db.session.execute(
-                select(Usuario).where(Usuario.email == email)
-            ).scalar_one_or_none()
-            if usuario_pode_acessar(usuario):
+            # Texto exato e, se não houver, a única conta com o mesmo e-mail sem
+            # diferenciar maiúsculas: "Cliente@Empresa.com" cadastrado e
+            # "cliente@empresa.com" digitado agora encontram a mesma conta.
+            busca = buscar_usuario_por_email(db.session, email)
+            usuario = busca.usuario
+            if busca.ambigua:
+                logger.warning("Recuperação de senha sem envio: mais de um cadastro tem este e-mail com "
+                               "maiúsculas diferentes (resolver o cadastro duplicado).")
+            elif usuario is None:
+                logger.info("Recuperação de senha sem envio: nenhuma conta com o e-mail informado.")
+            elif not usuario_pode_acessar(usuario):
+                logger.info("Recuperação de senha sem envio: conta não elegível (usuário inativo ou empresa "
+                            "cancelada, na lixeira ou sem vínculo contratual) | usuario=%s", usuario.id_usuario)
+            else:
                 # SEC-005: o link sai da origem canônica configurada, nunca do
                 # cabeçalho Host recebido (um Host forjado levaria o token ao
                 # domínio do atacante).
                 if _permite_finalidade(usuario, _ATIVACAO):
                     token = gerar_token_definir_senha(usuario)
                     link = url_publica("auth.ativar_acesso", token=token)
-                    email_boas_vindas(usuario, link)
+                    envio = email_boas_vindas(usuario, link)
                 else:
                     token = gerar_token_recuperacao_senha(usuario)
                     link = url_publica("auth.resetar_senha", token=token)
-                    email_recuperacao_senha(usuario, link)
-                logger.info("Solicitação de recuperação de senha processada.")
+                    envio = email_recuperacao_senha(usuario, link)
+                # O resultado detalhado (agendado, aceito pelo provedor ou falha
+                # com a categoria) sai na linha de log de emails.py com a mesma
+                # correlação; a resposta pública continua genérica.
+                logger.info("Solicitação de recuperação de senha processada | usuario=%s estado=%s correlacao=%s",
+                            usuario.id_usuario, getattr(envio, "estado", None) or "-",
+                            getattr(envio, "correlacao", None) or "-")
         except SQLAlchemyError as erro:
             _falha_banco_senha(erro)
+        except Exception as erro:  # noqa: BLE001 — nunca um 500 que revele a existência da conta
+            try:
+                db.session.rollback()
+            except Exception:  # noqa: BLE001
+                pass
+            logger.warning("Solicitação de recuperação de senha não processada (%s).", type(erro).__name__)
 
         # Mensagem genérica sempre (anti-enumeração de e-mails).
         flash("Se o e-mail estiver cadastrado, enviamos um link de redefinição válido por 15 minutos.", "success")
@@ -510,7 +536,11 @@ def resetar_senha(token):
             return redirect(url_for("auth.recuperar_senha"))
         # Aviso ao dono da conta (sem link de token): uma redefinição que ele
         # não fez vira sinal de comprometimento, com o caminho para reagir.
-        email_senha_alterada(estado.usuario, url_publica("auth.recuperar_senha"))
+        # A senha já foi trocada: falha no aviso nunca vira erro 500.
+        try:
+            email_senha_alterada(estado.usuario, url_publica("auth.recuperar_senha"))
+        except Exception as erro:  # noqa: BLE001
+            logger.warning("Aviso de senha alterada não preparado (%s).", type(erro).__name__)
         flash("Senha redefinida com sucesso. Faça login com a nova senha.", "success")
         return redirect(url_for("auth.login"))
 

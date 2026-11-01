@@ -181,6 +181,8 @@ class SensitiveLogTests(unittest.TestCase):
         )
         fake_db = SimpleNamespace(session=MagicMock())
         fake_db.session.execute.return_value.scalar_one_or_none.return_value = usuario
+        # A busca por e-mail (contas_email.py) faz uma única consulta lower(email).
+        fake_db.session.execute.return_value.scalars.return_value.all.return_value = [usuario]
         with app.test_request_context("/auth/recuperar-senha", method="POST", data={"email": usuario.email}):
             # Esta fixture isola somente o sigilo dos logs; os testes de
             # autenticação/SEC-004 exercitam a elegibilidade com banco real.

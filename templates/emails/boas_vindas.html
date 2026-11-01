@@ -9,6 +9,10 @@
 
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#181824;border-radius:12px;border:1px solid rgba(255,255,255,0.07);margin-bottom:22px;">
   <tr><td style="padding:16px 20px;">
+    {% if nome_empresa %}
+    <div style="color:#9aa0b7;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;">Empresa</div>
+    <div style="color:#ffffff;font-size:15px;font-weight:600;margin-bottom:10px;">{{ nome_empresa }}</div>
+    {% endif %}
     <div style="color:#9aa0b7;font-size:12px;text-transform:uppercase;letter-spacing:0.04em;">E-mail de acesso</div>
     <div style="color:#ffffff;font-size:15px;font-weight:600;">{{ usuario.email }}</div>
   </td></tr>
@@ -28,6 +32,14 @@
     solicitar um novo na própria tela. Nunca enviamos senhas por e-mail.
   </td></tr>
 </table>
+
+{% if link_portal %}
+<p style="margin:18px 0 0;color:#c4c6d2;font-size:14px;line-height:1.6;">
+  <strong style="color:#ffffff;">Como acessar depois:</strong> com a senha definida, entre no portal em
+  <a href="{{ link_portal }}" style="color:#c4a5fd;">{{ link_portal }}</a> usando o e-mail de acesso acima.
+  No portal você envia seus relatórios, acompanha as análises publicadas e abre chamados de suporte.
+</p>
+{% endif %}
 
 <p style="margin:14px 0 0;color:#9aa0b7;font-size:12px;line-height:1.5;">
   Se você não esperava este convite, ignore este e-mail.

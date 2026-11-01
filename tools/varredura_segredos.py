@@ -21,6 +21,10 @@ PADROES = [
     ("Chave da Anthropic", re.compile(r"sk-ant-[A-Za-z0-9_-]{20,}")),
     ("Chave do Google", re.compile(r"AIza[0-9A-Za-z_-]{35}")),
     ("Token do Slack", re.compile(r"xox[baprs]-[0-9A-Za-z-]{10,}")),
+    # Brevo (e-mail transacional): chave de API e chave SMTP. Só o prefixo
+    # aparece na documentação; um valor completo versionado é vazamento.
+    ("Chave do Brevo (API)", re.compile(r"xkeysib-[A-Za-z0-9]{32,}-[A-Za-z0-9]{8,}")),
+    ("Chave do Brevo (SMTP)", re.compile(r"xsmtpsib-[A-Za-z0-9]{32,}-[A-Za-z0-9]{8,}")),
     ("URL com senha embutida", re.compile(r"://[^/\s:@]+:[^/\s:@]{4,}@[^/\s]+")),
 ]
 

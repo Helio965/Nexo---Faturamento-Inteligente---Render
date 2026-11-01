@@ -7,11 +7,15 @@ Isso evita import circular entre models.py e app.py.
 """
 
 import hashlib
+import hmac
+import smtplib
+import ssl
 
+from flask import current_app
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
 from flask_migrate import Migrate
-from flask_mail import Mail
+from flask_mail import Connection, Mail
 from flask_socketio import SocketIO
 from flask_wtf import CSRFProtect
 from flask_limiter import Limiter
@@ -29,8 +33,64 @@ db = SQLAlchemy(model_class=Base)
 login_manager = LoginManager()
 # Flask-Migrate (Alembic): versionamento de schema do Postgres/Supabase.
 migrate = Migrate()
-# Flask-Mail: envio de e-mails transacionais (SMTP).
-mail = Mail()
+class _ConexaoSMTPComPrazo(Connection):
+    """Conexão SMTP do Flask-Mail com prazo e certificado TLS verificado.
+
+    O Flask-Mail 0.10 abre o SMTP sem timeout (uma porta bloqueada, como no
+    Render Free, prende a thread por minutos) e o starttls() padrão do smtplib
+    não confere o certificado do servidor (a senha SMTP poderia ser entregue a
+    um intermediário). Mesmo fluxo da classe original: SSL/STARTTLS, login.
+    """
+
+    def configure_host(self):
+        prazo = current_app.config.get("EMAIL_TIMEOUT_SEGUNDOS", 15.0)
+        contexto = ssl.create_default_context()
+        if self.mail.use_ssl:
+            host = smtplib.SMTP_SSL(self.mail.server, self.mail.port, timeout=prazo, context=contexto)
+        else:
+            host = smtplib.SMTP(self.mail.server, self.mail.port, timeout=prazo)
+        try:
+            host.set_debuglevel(int(self.mail.debug))
+            if self.mail.use_tls:
+                host.starttls(context=contexto)
+            if self.mail.username and self.mail.password:
+                host.login(self.mail.username, self.mail.password)
+        except BaseException:
+            host.close()
+            raise
+        return host
+
+    def send(self, message, envelope_from=None):
+        # A partir daqui a mensagem está na transação SMTP (MAIL/RCPT/DATA): uma
+        # queda agora deixa o resultado incerto (emails.py não afirma "não saiu").
+        message.nexo_fase_smtp = "envio"
+        return super().send(message, envelope_from)
+
+    def __exit__(self, exc_type, exc_value, tb):
+        # O QUIT final não muda o resultado: com a mensagem já aceita (ou com a
+        # falha original seguindo adiante), uma conexão derrubada pelo servidor
+        # não pode virar "falha no envio" de algo que o SMTP aceitou.
+        if self.host is not None:
+            try:
+                self.host.quit()
+            except (smtplib.SMTPException, OSError):
+                self.host.close()
+
+
+class MailComPrazo(Mail):
+    """Flask-Mail cujas conexões usam _ConexaoSMTPComPrazo (mesma API: send/connect)."""
+
+    def connect(self):
+        app = getattr(self, "app", None) or current_app
+        try:
+            return _ConexaoSMTPComPrazo(app.extensions["mail"])
+        except KeyError as err:
+            raise RuntimeError("The current application was not configured with Flask-Mail") from err
+
+
+# Flask-Mail: envio de e-mails transacionais por SMTP (alternativa à API do
+# Brevo; ver emails.py).
+mail = MailComPrazo()
 # Flask-SocketIO: notificações em tempo real (sininho ao vivo).
 # async_mode "threading" é o modo estável no Python 3.12 (sem eventlet/gevent),
 # usando o driver simple-websocket. As origens permitidas no handshake são
@@ -54,7 +114,13 @@ def chave_limite_conta() -> str:
     email = (request.form.get("email") or "").strip().lower()
     if not email:
         return get_remote_address()
-    return "conta:" + hashlib.sha256(email.encode("utf-8")).hexdigest()[:24]
+    # HMAC com a SECRET_KEY: o Flask-Limiter escreve a chave no log quando o
+    # limite estoura, e um SHA-256 sem segredo de um e-mail é reversível por
+    # dicionário (revelaria qual conta foi alvo).
+    segredo = current_app.config.get("SECRET_KEY") or ""
+    if isinstance(segredo, str):
+        segredo = segredo.encode("utf-8")
+    return "conta:" + hmac.new(segredo, email.encode("utf-8"), hashlib.sha256).hexdigest()[:24]
 
 
 def chave_limite_usuario() -> str:

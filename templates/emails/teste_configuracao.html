@@ -1,0 +1,16 @@
+{% extends "emails/_base.html" %}
+{% block content %}
+<h1 style="margin:0 0 8px;font-size:20px;color:#ffffff;">Teste de envio de e-mail 🧪</h1>
+<p style="margin:0 0 18px;color:#c4c6d2;">
+  Olá{% if usuario and usuario.nome %}, {{ usuario.nome.split(' ')[0] }}{% endif %}! Esta é uma mensagem de teste
+  solicitada no painel administrativo do NEXO (Diagnóstico de e-mail) em
+  <strong style="color:#ffffff;">{{ instante|horario_brasilia(rotulo=True) }}</strong>.
+</p>
+<p style="margin:0 0 18px;color:#c4c6d2;">
+  Se você está lendo este e-mail, o provedor aceitou a mensagem e ela chegou à sua caixa de correio. Confira
+  também se ela não foi parar na pasta de spam — isso indica que o domínio do remetente precisa de autenticação.
+</p>
+<p style="margin:0;color:#9aa0b7;font-size:12px;line-height:1.5;">
+  Esta mensagem não contém links de acesso nem dados de clientes.
+</p>
+{% endblock %}
