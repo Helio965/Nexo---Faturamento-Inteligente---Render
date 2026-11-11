@@ -99,20 +99,21 @@
    NEXO — Landing Page · JS de mockups Plotly
    ============================================================
    Renderiza 3 gráficos demonstrativos:
-     #hero-chart            barra vertical compacta (no mockup do hero)
+     #hero-chart            comparação horizontal em Como funciona
      #demo-chart-evolucao   linha multissérie (5 meses de compras x vendas)
      #demo-chart-top        barra horizontal (top produtos do período)
 
    Tema espelha o design system NEXO (dark + paleta Hélio):
      - fundo transparente
      - tipografia Inter
-     - paleta: roxo #a855f7, verde #22c55e, âmbar #f59e0b, info #38bdf8
+     - paleta: roxo #a855f7, âmbar #f59e0b, info #38bdf8
      - tooltips dark com borda roxa
 
    Dados são FICTÍCIOS (loja de tintas demonstrativa "Tintas Almeida").
    ============================================================ */
 
 (function () {
+  'use strict';
   var rendered = false;
   function startCharts() {
   if (rendered || typeof window.Plotly === 'undefined') return;
@@ -175,40 +176,73 @@
   };
 
   /* ============================================================
-     1) hero-chart — barras compactas dentro do mockup do hero
-        (Compras vs Vendas do mês)
+     1) hero-chart — comparação horizontal em Como funciona.
+        A faixa hachurada é apenas a diferença estimada do período,
+        sem representar estoque físico, lucro ou prejuízo contábil.
      ============================================================ */
   (function () {
     var el = document.getElementById('hero-chart');
     if (!el) return;
     var labels = ['Compras', 'Vendas'];
     var values = [156300, 142800];
-    var cores  = [NEXO.amber, NEXO.info];
 
     drawChart(el, [{
       type: 'bar',
-      x: labels,
-      y: values,
-      marker: { color: cores, line: { color: 'rgba(255,255,255,0.10)', width: 1 } },
-      width: 0.5,
-      text: values.map(function (v) {
-        return 'R$ ' + v.toLocaleString('pt-BR', { maximumFractionDigits: 0 });
-      }),
-      textposition: 'outside',
-      textfont: { color: NEXO.text, family: 'Inter, sans-serif', size: 11 },
-      hovertemplate: '<b>%{x}</b><br>R$ %{y:,.0f}<extra></extra>',
-      cliponaxis: false
+      orientation: 'h',
+      x: values,
+      y: labels,
+      marker: { color: [NEXO.info, NEXO.purple] },
+      width: 0.44,
+      hovertemplate: '<b>%{y}</b><br>R$ %{x:,.0f}<extra></extra>'
+    }, {
+      type: 'bar',
+      orientation: 'h',
+      x: [13500],
+      y: ['Vendas'],
+      base: [142800],
+      width: 0.44,
+      marker: {
+        color: 'rgba(245,158,11,0.08)',
+        line: { color: NEXO.amber, width: 1 },
+        pattern: { shape: '/', fgcolor: NEXO.amber, size: 5, solidity: 0.25 }
+      },
+      hovertemplate: 'Diferença estimada: R$ 13.500<extra></extra>'
     }], baseLayout({
-      height: 158,
-      bargap: 0.5,
-      margin: { l: 52, r: 14, t: 22, b: 28 },
-      yaxis: { gridcolor: NEXO.grid, tickprefix: 'R$ ', tickformat: ',.0f', fixedrange: true, automargin: true }
+      height: 200,
+      barmode: 'overlay',
+      margin: { l: 8, r: 8, t: 26, b: 30 },
+      xaxis: {
+        range: [0, 215000],
+        tickvals: [0, 50000, 100000, 150000],
+        ticktext: ['0', '50 mil', '100 mil', '150 mil'],
+        tickfont: { size: 10, color: NEXO.textMut },
+        gridcolor: NEXO.grid,
+        zerolinecolor: NEXO.grid,
+        fixedrange: true
+      },
+      yaxis: {
+        categoryorder: 'array', categoryarray: labels, autorange: 'reversed',
+        showticklabels: false, showgrid: false, zeroline: false,
+        fixedrange: true
+      },
+      annotations: labels.map(function (label, index) {
+        return {
+          x: 0, y: label, xref: 'x', yref: 'y', xanchor: 'left',
+          yshift: 24, showarrow: false,
+          text: label + '  <b>R$ ' + values[index].toLocaleString('pt-BR') + '</b>',
+          font: { size: 11, color: NEXO.textMut }
+        };
+      }).concat([{
+        x: 160000, y: 'Vendas', xref: 'x', yref: 'y',
+        xanchor: 'left', showarrow: false, text: 'R$ 13.500',
+        font: { family: 'JetBrains Mono, monospace', size: 10, color: NEXO.amber }
+      }])
     }), Object.assign({}, baseConfig, { staticPlot: true }));
   })();
 
   /* ============================================================
      2) demo-chart-evolucao — linha multissérie de 5 meses
-        Compras (laranja) vs Faturamento (azul neon)
+        Compras (azul) vs Faturamento (roxo)
      ============================================================ */
   (function () {
     var el = document.getElementById('demo-chart-evolucao');
@@ -222,27 +256,28 @@
         type: 'scatter', mode: 'lines+markers',
         name: 'Compras',
         x: meses, y: compras,
-        line: { color: NEXO.amber, width: 2.5, shape: 'spline', smoothing: 0.8 },
-        marker: { color: NEXO.amber, size: 7, line: { color: '#0c0c14', width: 2 } },
+        line: { color: NEXO.info, width: 2.5 },
+        marker: { color: NEXO.info, size: 7, line: { color: '#0c0c14', width: 2 } },
         hovertemplate: '<b>%{x}</b><br>Compras: R$ %{y:,.0f}<extra></extra>'
       },
       {
         type: 'scatter', mode: 'lines+markers',
         name: 'Vendas',
         x: meses, y: vendas,
-        line: { color: NEXO.info, width: 2.5, shape: 'spline', smoothing: 0.8 },
-        marker: { color: NEXO.info, size: 7, line: { color: '#0c0c14', width: 2 } },
+        line: { color: NEXO.purple, width: 2.5 },
+        marker: { color: NEXO.purple, size: 7, line: { color: '#0c0c14', width: 2 } },
         hovertemplate: '<b>%{x}</b><br>Vendas: R$ %{y:,.0f}<extra></extra>'
       }
     ], baseLayout({
       height: 220,
       showlegend: true,
       legend: {
-        orientation: 'h', y: -0.18, x: 0.5, xanchor: 'center',
+        orientation: 'h', y: 1.16, x: 0.5, xanchor: 'center',
         font: { color: NEXO.textMut, size: 11 }
       },
-      yaxis: { gridcolor: NEXO.grid, tickprefix: 'R$ ', tickformat: ',.0f', fixedrange: true, automargin: true },
-      margin: { l: 60, r: 18, t: 14, b: 48 }
+      xaxis: { tickvals: meses, ticktext: ['Dez', 'Jan', 'Fev', 'Mar', 'Abr'], fixedrange: true, showgrid: false },
+      yaxis: { gridcolor: NEXO.grid, tickvals: [120000, 130000, 140000, 150000], ticktext: ['120 mil', '130 mil', '140 mil', '150 mil'], fixedrange: true, automargin: true },
+      margin: { l: 58, r: 16, t: 38, b: 30 }
     }), Object.assign({}, baseConfig, { staticPlot: false }));
   })();
 
@@ -266,38 +301,35 @@
       type: 'bar',
       orientation: 'h',
       x: valores,
-      y: produtos,
-      marker: {
-        color: [NEXO.purple, NEXO.info, NEXO.amber, NEXO.green, NEXO.purpleD],
-        line: { color: 'rgba(255,255,255,0.08)', width: 1 }
-      },
-      hovertemplate: '<b>%{y}</b><br>R$ %{x:,.0f}<extra></extra>'
+      y: [4, 3, 2, 1, 0],
+      width: 0.5,
+      customdata: produtos,
+      marker: { color: NEXO.purple },
+      text: valores.map(function (value) { return 'R$ ' + value.toLocaleString('pt-BR'); }),
+      textposition: 'outside',
+      textfont: { size: 11, color: NEXO.text },
+      cliponaxis: false,
+      hovertemplate: '<b>%{customdata}</b><br>R$ %{x:,.0f}<extra></extra>'
     }], baseLayout({
-      height: 220,
-      margin: { l: window.innerWidth <= 640 ? 110 : 170, r: 20, t: 14, b: 34 },
-      xaxis: { gridcolor: NEXO.grid, tickprefix: 'R$ ', tickformat: ',.0f', fixedrange: true, automargin: true },
-      yaxis: { autorange: 'reversed', tickfont: { size: 11, color: NEXO.textMut }, fixedrange: true, automargin: true, tickvals: produtos, ticktext: window.innerWidth <= 640 ? ['Massa corrida 18L', 'Tinta acrílica 18L', 'Esmalte 3,6L', 'Látex 18L', 'Selador 18L'] : produtos }
+      height: 290,
+      margin: { l: 0, r: 8, t: 26, b: 8 },
+      xaxis: {
+        range: [0, 38500], showticklabels: false, showgrid: false,
+        zeroline: false, fixedrange: true
+      },
+      yaxis: {
+        range: [-0.55, 4.55], showticklabels: false, showgrid: false,
+        zeroline: false, fixedrange: true
+      },
+      annotations: produtos.map(function (produto, index) {
+        return {
+          x: 0, y: 4 - index, xref: 'x', yref: 'y', xanchor: 'left',
+          yshift: 21, showarrow: false, text: produto,
+          font: { size: 10.5, color: NEXO.textMut }
+        };
+      })
     }), Object.assign({}, baseConfig, { staticPlot: false }));
   })();
-  var resizeQueued = false;
-  window.addEventListener('resize', function () {
-    if (resizeQueued) return;
-    resizeQueued = true;
-    window.requestAnimationFrame(function () {
-      resizeQueued = false;
-      var chart = document.getElementById('demo-chart-top');
-      if (!chart || !chart.hasAttribute('data-chart-ready')) return;
-      var compact = window.innerWidth <= 640;
-      var names = ['Massa Corrida Premium PVA 18L', 'Tinta Acrílica Fosca 18L',
-        'Esmalte Sintético Brilhante 3,6L', 'Tinta Látex Branca 18L', 'Selador Acrílico 18L'];
-      try {
-        Promise.resolve(window.Plotly.relayout(chart, {
-          'margin.l': compact ? 110 : 170,
-          'yaxis.ticktext': compact ? ['Massa corrida 18L', 'Tinta acrílica 18L', 'Esmalte 3,6L', 'Látex 18L', 'Selador 18L'] : names
-        })).catch(function () {});
-      } catch (error) { /* A tabela acessível permanece disponível. */ }
-    });
-  });
   }
   var loader = document.getElementById('nexo-plotly');
   if (typeof window.Plotly !== 'undefined') startCharts();

@@ -15,6 +15,7 @@ from unittest.mock import patch
 from flask import render_template
 
 from tests.deploy_support import DeployTestCase
+from tests.test_contratos_navegador import _CDN, _copias_locais_da_cdn
 from tests.test_nexobot_navegador import _CONECTAR_LOCAL
 
 try:
@@ -126,16 +127,61 @@ class LandingCommercialHTTPTests(DeployTestCase):
 
     def test_contracting_and_review_buttons_do_not_promise_unavailable_flows(self):
         html, dom = self.landing()
-        pending = [attrs for tag, attrs in dom.elements if tag == "button" and "disabled" in attrs]
-        self.assertGreaterEqual(len(pending), 5)  # 3 planos, contato e avaliação.
-        for title in ("BRONZE", "PRATA", "OURO", "Contrate Agora", "Sob consulta"):
-            self.assertIn(title, dom.text)
-        self.assertEqual(dom.text.count("Contrate Agora"), 3)
-        self.assertIn("A contratação ainda não está disponível nesta página", dom.text)
-        self.assertIn("O envio de avaliações ainda não está disponível", dom.text)
         plans = html.split('id="planos"', 1)[1].split("</section>", 1)[0]
+        cards = re.findall(r'<article class="plan [^"]*">(.*?)</article>', plans, flags=re.S)
+        self.assertEqual(len(cards), 3)
+        for card, title in zip(cards, ("BRONZE", "PRATA", "OURO")):
+            self.assertIn(title, card)
+            self.assertIn("Sob consulta", card)
+            self.assertNotIn("Contrate Agora", card)
+            self.assertNotIn("<button", card)
+        self.assertIn("Mais completo", cards[2])
+        self.assertEqual(dom.text.count("Contrate Agora"), 1)
+        action = re.search(r'<a\b([^>]*)>\s*Contrate Agora\s*</a>', plans)
+        self.assertIsNotNone(action)
+        action_attrs = _LandingDOM(action.group(0)).elements[0][1]
+        self.assertEqual(action_attrs.get("href"), "/como-aderir")
+        self.assertNotIn("disabled", action_attrs)
+        self.assertEqual(action_attrs.get("aria-describedby"), "contratacao-status")
+        self.assertGreater(action.start(), plans.rfind("</article>"))
+        self.assertIn("A contratação não é concluída automaticamente", dom.text)
+        self.assertIn("O envio de avaliações ainda não está disponível", dom.text)
+        for description in ("reviews-availability", "contact-availability"):
+            pending = [attrs for tag, attrs in dom.elements if tag == "button"
+                       and attrs.get("aria-describedby") == description]
+            self.assertEqual(len(pending), 1)
+            self.assertIn("disabled", pending[0])
         self.assertNotIn('href="/auth/login"', plans)
-        self.assertIn('href="/como-aderir"', plans)
+        response = self.client.get(action_attrs["href"])
+        self.assertEqual(response.status_code, 200)
+        access = _LandingDOM(response.get_data(as_text=True))
+        self.assertIn("Não há contratação ou cadastro automático nesta página", access.text)
+        self.assertIn("O canal oficial de contratação ainda não foi publicado", access.text)
+
+    def test_redesign_preserves_section_sequence_and_moves_summary_after_process(self):
+        html, dom = self.landing()
+        sections = [attrs.get("id") for tag, attrs in dom.elements if tag == "section" and attrs.get("id")]
+        self.assertEqual(sections, ["inicio", "problema", "como-funciona", "avaliacoes",
+                                    "indicadores", "demonstracao", "metodo", "planos"])
+        hero = html.split('id="inicio"', 1)[1].split("</section>", 1)[0]
+        for identifier in ("hero-chart", "demo-chart-evolucao", "demo-chart-top"):
+            self.assertNotIn(identifier, hero)
+        self.assertNotIn("<video", hero)
+        process = html.split('id="como-funciona"', 1)[1].split("</section>", 1)[0]
+        self.assertEqual(process.count('class="flow-card"'), 4)
+        self.assertEqual(process.count('id="hero-chart"'), 1)
+        self.assertGreater(process.index('id="hero-chart"'), process.rfind('class="flow-card"'))
+        self.assertIn("Destaques por produto", process)
+        for value in ("R$ 142.800", "R$ 156.300", "R$ 13.500", "318 unidades", "R$ 28.450", "85 un"):
+            self.assertIn(value, process)
+        demo = html.split('id="demonstracao"', 1)[1].split("</section>", 1)[0]
+        self.assertNotIn('id="hero-chart"', demo)
+        self.assertIn('id="demo-chart-evolucao"', demo)
+        self.assertIn('id="demo-chart-top"', demo)
+        indicators = html.split('id="indicadores"', 1)[1].split("</section>", 1)[0]
+        self.assertEqual(indicators.count('class="kpi-row"'), 7)
+        method = html.split('id="metodo"', 1)[1].split("</section>", 1)[0]
+        self.assertEqual(method.count('class="report-block"'), 5)
 
     def test_no_unconfirmed_contacts_corporate_data_or_legal_links_are_published(self):
         _, dom = self.landing()
@@ -217,12 +263,13 @@ class LandingCommercialBrowserTests(DeployTestCase):
         self.browser = self.pw.chromium.launch(executable_path=os.environ.get("NEXO_TEST_CHROMIUM") or None)
         self.addCleanup(self.browser.close)
         self.errors = []
+        self.cdn_local = _copias_locais_da_cdn()
 
     def _stop_server(self):
         self.server.shutdown()
         self.server.server_close()
 
-    def page(self, width=1440, *, javascript=True, plotly_stub=None, reduced_motion="reduce"):
+    def page(self, width=1440, *, javascript=True, plotly_stub=None, load_plotly=False, reduced_motion="reduce"):
         context = self.browser.new_context(viewport={"width": width, "height": 900},
                                            java_script_enabled=javascript, reduced_motion=reduced_motion)
         self.addCleanup(context.close)
@@ -241,9 +288,17 @@ class LandingCommercialBrowserTests(DeployTestCase):
                 else:
                     request.continue_()
             elif "/bootstrap@5.3.3/dist/css/bootstrap.min.css" in url:
-                request.continue_()
+                copy = self.cdn_local.get(url)
+                if copy:
+                    path, content_type = copy
+                    request.fulfill(status=200, path=path, content_type=content_type)
+                else:
+                    request.continue_()
             elif plotly_stub is not None and "/plotly.js-dist-min@2.35.2/plotly.min.js" in url:
                 request.fulfill(status=200, content_type="application/javascript", body=plotly_stub)
+            elif load_plotly and url == _CDN + "plotly.js-dist-min@2.35.2/plotly.min.js" and url in self.cdn_local:
+                path, content_type = self.cdn_local[url]
+                request.fulfill(status=200, path=path, content_type=content_type)
             else:
                 request.abort()
         page.route("**/*", route)
@@ -254,11 +309,30 @@ class LandingCommercialBrowserTests(DeployTestCase):
         self.assertEqual(self.errors, [], "Exceções JavaScript na landing")
 
     def test_all_required_viewports_have_no_horizontal_overflow_and_usable_header(self):
-        for width in (320, 375, 390, 430, 768, 1024, 1440):
+        if _CDN + "bootstrap@5.3.3/dist/css/bootstrap.min.css" not in self.cdn_local:
+            self.skipTest("Bootstrap 5.3.3 íntegro necessário para medir o layout (NEXO_TEST_CDN_DIR)")
+        for width in (320, 375, 390, 430, 768, 1024, 1440, 1920):
             with self.subTest(width=width):
                 page = self.page(width)
                 self.assertTrue(page.locator(".hero h1").is_visible())
+                self.assertEqual(page.locator(".hero #hero-chart, .hero .mockup, .hero video").count(), 0)
+                self.assertEqual(page.locator("#como-funciona #hero-chart").count(), 1)
+                self.assertEqual(page.locator("#planos .plan").count(), 3)
+                self.assertEqual(page.locator("#planos .plan button, #planos .plan a").count(), 0)
+                action = page.get_by_role("link", name="Contrate Agora", exact=True)
+                self.assertEqual(action.count(), 1)
+                self.assertEqual(action.get_attribute("href"), "/como-aderir")
+                plans_box = page.locator(".plans-grid").bounding_box()
+                action_box = action.bounding_box()
+                self.assertGreaterEqual(action_box["y"], plans_box["y"] + plans_box["height"])
+                self.assertAlmostEqual(action_box["x"] + action_box["width"] / 2,
+                                       plans_box["x"] + plans_box["width"] / 2, delta=2)
                 self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), width + 1)
+                clipped = page.evaluate("""() => [...document.querySelectorAll('a, button')].filter(el => {
+                    const box=el.getBoundingClientRect();
+                    return box.width && box.height && (box.left < -1 || box.right > innerWidth + 1);
+                }).map(el=>el.id || el.textContent.trim())""")
+                self.assertEqual(clipped, [], "Controle cortado nas laterais")
                 header = page.locator(".nexo-header").bounding_box()
                 self.assertGreater(header["height"], 0)
                 portal = page.locator(".header-actions a")
@@ -298,6 +372,9 @@ class LandingCommercialBrowserTests(DeployTestCase):
         page.locator('#landing-navigation a[href="#planos"]').click()
         self.assertTrue(page.url.endswith("#planos"))
         self.assertEqual(page.locator("#landing-menu-toggle").get_attribute("aria-expanded"), "false")
+        title = page.locator("#plans-title").bounding_box()
+        header = page.locator(".nexo-header").bounding_box()
+        self.assertGreaterEqual(title["y"], header["y"] + header["height"])
 
     def test_no_javascript_keeps_navigation_and_chart_data_accessible(self):
         page = self.page(320, javascript=False)
@@ -351,10 +428,41 @@ class LandingCommercialBrowserTests(DeployTestCase):
         page.wait_for_function("() => document.querySelectorAll('[data-chart-ready=true]').length === 3")
         values = page.evaluate("window.__charts")
         self.assertEqual([item['id'] for item in values], ['hero-chart', 'demo-chart-evolucao', 'demo-chart-top'])
-        self.assertEqual(values[0]['data'][0]['y'], [156300, 142800])
+        summary = values[0]['data']
+        self.assertEqual(summary[0]['orientation'], 'h')
+        self.assertEqual(summary[0]['x'], [156300, 142800])
+        self.assertEqual(summary[0]['y'], ['Compras', 'Vendas'])
+        self.assertEqual(summary[1]['x'], [13500])
+        self.assertEqual(summary[1]['base'], [142800])
+        self.assertEqual(summary[1]['y'], ['Vendas'])
         self.assertEqual(values[1]['data'][0]['y'], [138400, 124900, 149600, 152300, 156300])
         self.assertEqual(values[2]['data'][0]['x'], [28450, 24800, 19200, 16500, 12700])
         self.assertEqual(page.locator('[data-chart-fallback-for]:visible').count(), 0)
+
+    def test_real_charts_fit_required_viewports_with_readable_labels(self):
+        required = (_CDN + "bootstrap@5.3.3/dist/css/bootstrap.min.css",
+                    _CDN + "plotly.js-dist-min@2.35.2/plotly.min.js")
+        if not all(url in self.cdn_local for url in required):
+            self.skipTest("Bootstrap 5.3.3 e Plotly 2.35.2 íntegros necessários (NEXO_TEST_CDN_DIR)")
+        for width in (320, 375, 390, 430, 768, 1024, 1440, 1920):
+            with self.subTest(width=width):
+                page = self.page(width, load_plotly=True)
+                page.wait_for_function("() => document.querySelectorAll('[data-chart-ready=true]').length === 3")
+                for identifier in ("hero-chart", "demo-chart-evolucao", "demo-chart-top"):
+                    chart = page.locator("#" + identifier)
+                    self.assertTrue(chart.locator(".main-svg").first.is_visible())
+                    outside = chart.evaluate("""el => {
+                        const box=el.getBoundingClientRect();
+                        return [...el.querySelectorAll('.xtick text, .ytick text, .annotation-text, .bartext')]
+                            .filter(text => { const b=text.getBoundingClientRect(); return b.width && b.height &&
+                                (b.left < box.left - 1 || b.right > box.right + 1 ||
+                                 b.top < box.top - 1 || b.bottom > box.bottom + 1); })
+                            .map(text=>text.textContent);
+                    }""")
+                    self.assertEqual(outside, [], f"Rótulo cortado em {identifier}")
+                self.assertEqual(page.locator("#hero-chart .barlayer .point").count(), 3)
+                self.assertLessEqual(page.evaluate("document.documentElement.scrollWidth"), width + 1)
+                page.context.close()
 
     def test_secondary_text_tokens_meet_normal_text_contrast(self):
         page = self.page()

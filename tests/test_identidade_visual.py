@@ -18,6 +18,7 @@ from flask import render_template
 from PIL import Image
 
 from tests.deploy_support import DeployTestCase, ROOT
+from tests.test_contratos_navegador import _copias_locais_da_cdn
 from tests.test_nexobot_navegador import _CONECTAR_LOCAL
 
 try:
@@ -200,6 +201,7 @@ class IdentidadeVisualBrowserTests(DeployTestCase):
         self.addCleanup(self.pw.stop)
         self.browser = self.pw.chromium.launch(executable_path=os.environ.get("NEXO_TEST_CHROMIUM") or None)
         self.addCleanup(self.browser.close)
+        self.cdn_local = _copias_locais_da_cdn()
 
     def _parar_servidor(self):
         self.server.shutdown()
@@ -212,8 +214,15 @@ class IdentidadeVisualBrowserTests(DeployTestCase):
 
         def rota(requisicao):
             url = requisicao.request.url
-            if url.startswith(self.base) or "/bootstrap@5.3.3/dist/css/bootstrap.min.css" in url:
+            if url.startswith(self.base):
                 requisicao.continue_()
+            elif "/bootstrap@5.3.3/dist/css/bootstrap.min.css" in url:
+                copia = self.cdn_local.get(url)
+                if copia:
+                    caminho, tipo = copia
+                    requisicao.fulfill(status=200, path=caminho, content_type=tipo)
+                else:
+                    requisicao.continue_()
             else:
                 requisicao.abort()
         pagina.route("**/*", rota)

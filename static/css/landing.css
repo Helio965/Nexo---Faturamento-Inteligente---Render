@@ -68,7 +68,7 @@ html { scroll-behavior: smooth; scroll-padding-top: 100px; }
 
 section[id], main[id], footer[id] { scroll-margin-top: 100px; }
 
-.container { width: 100%; max-width: 1240px; padding-inline: 24px; }
+.container { width: 100%; max-width: 1160px; margin-inline: auto; padding-inline: 24px; }
 
 main { overflow: clip; }
 
@@ -110,7 +110,7 @@ h5 { font-size: 0.95rem; }
 p { margin: 0 0 14px; color: var(--nexo-text-2); }
 p.lead { font-size: 1.08rem; color: var(--nexo-text-2); }
 
-section { padding: 88px 0; position: relative; }
+section { padding: 80px 0; position: relative; }
 
 .accent { color: var(--nexo-accent-text); }
 
@@ -119,13 +119,13 @@ section { padding: 88px 0; position: relative; }
    ============================================================ */
 .nexo-header {
   position: sticky; top: 0; z-index: 50;
-  background: rgba(8, 8, 13, 0.78);
+  background: rgba(8, 8, 13, 0.94);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   border-bottom: 1px solid var(--nexo-border);
 }
 .nexo-header-inner {
-  max-width: 1240px; margin: 0 auto;
+  max-width: 1160px; margin: 0 auto;
   padding: 12px 24px;
   display: flex; align-items: center; justify-content: space-between; gap: 20px;
 }
@@ -193,272 +193,103 @@ section { padding: 88px 0; position: relative; }
    ============================================================ */
 .section-tag {
   display: inline-flex; align-items: center; gap: 8px;
-  padding: 7px 14px;
+  padding: 6px 12px;
   background: var(--nexo-accent-soft);
   color: var(--nexo-accent-text);
   border-radius: 999px;
   font-size: 0.8rem; font-weight: 600;
   letter-spacing: 0.02em;
-  margin-bottom: 22px;
+  margin-bottom: 18px;
 }
 .section-title { margin-bottom: 18px; max-width: 28ch; margin-inline: auto; text-wrap: balance; }
-.section-subtitle { color: var(--nexo-text-2); max-width: 700px; font-size: 1.04rem; }
+.section-subtitle { color: var(--nexo-text-2); max-width: 650px; font-size: 1.04rem; margin-bottom: 0; }
 
-/* ============================================================
-   5. Hero
-   ============================================================ */
-.hero { padding-top: 76px; padding-bottom: 96px; overflow: hidden; }
-.hero h1 { margin-bottom: 24px; max-width: 16ch; text-wrap: balance; }
-.hero .lead { max-width: 36rem; font-size: 1.08rem; line-height: 1.75; }
-.hero-audience { color: var(--nexo-text-2); font-size: 0.9rem; max-width: 34rem; }
-.hero-note { color: var(--nexo-text-3); font-size: 0.82rem; max-width: 34rem; margin: 0; }
-.bg-ornament {
-  position: absolute; top: -200px; right: -240px;
-  width: 720px; height: 720px;
-  background: radial-gradient(closest-side, var(--nexo-accent-glow), transparent 70%);
-  filter: blur(20px); pointer-events: none; z-index: 0;
-}
-.position-relative { position: relative; z-index: 1; }
+/* 5. Apresentação inicial, sem painel */
+.hero { padding: 70px 0 72px; text-align: center; border-bottom: 1px solid var(--nexo-border); }
+.hero-copy { position: relative; max-width: 760px; margin: 0 auto; }
+.hero h1 { max-width: 20ch; margin: 0 auto 24px; text-wrap: balance; line-height: 1.08; }
+.hero .lead { max-width: 650px; margin: 0 auto 16px; font-size: 1.08rem; line-height: 1.75; }
+.hero-audience { max-width: 580px; margin: 0 auto; font-size: 0.94rem; }
+.hero-note { max-width: 570px; margin: 0 auto; color: var(--nexo-text-3); font-size: 0.86rem; line-height: 1.6; }
+.hero-cta { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; margin: 28px 0 22px; }
+.bg-ornament { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at 50% 0, rgba(124, 58, 237, 0.14), transparent 60%); }
 
-.hero-cta { display: flex; gap: 12px; flex-wrap: wrap; margin: 28px 0 32px; }
-.hero-trust { display: flex; gap: 22px; flex-wrap: wrap; }
-.hero-trust-item {
-  display: inline-flex; align-items: center; gap: 8px;
-  color: var(--nexo-text-3);
-  font-size: 0.85rem;
-}
-.hero-trust-item svg { color: var(--nexo-accent); }
+/* 6. Oportunidades */
+.opportunities-section, .reviews-section, .method-section { border-bottom: 1px solid var(--nexo-border); }
+.opportunities-section .row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin: 0; }
+.opportunities-section .row > * { width: auto; padding: 0; margin: 0; }
+.nexo-card { height: 100%; padding: 24px 20px; background: linear-gradient(145deg, #171720, var(--nexo-surface)); border: 1px solid var(--nexo-border); border-radius: var(--nexo-radius); }
+.nexo-card-icon { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 20px; border: 1px solid rgba(168, 85, 247, 0.18); border-radius: 12px; background: var(--nexo-accent-soft); color: var(--nexo-accent-text); font-size: 21px; }
+.nexo-card h3 { font-size: 1.02rem; line-height: 1.4; margin-bottom: 8px; }
+.nexo-card p { font-size: 0.94rem; line-height: 1.7; margin: 0; }
+.opportunities-section .commercial-note { max-width: 760px; margin-inline: auto; }
 
-/* ============================================================
-   6. Mockup do hero (dashboard simulado)
-   ============================================================ */
-.mockup {
-  background: var(--nexo-surface);
-  border: 1px solid var(--nexo-border-strong);
-  border-radius: var(--nexo-radius);
-  padding: 22px;
-  box-shadow: var(--nexo-shadow-lg);
-  position: relative;
-}
-.mockup-head {
-  display: flex; justify-content: space-between; align-items: flex-start;
-  margin-bottom: 18px; gap: 12px;
-}
-.mockup-title-block .mt-1 { font-weight: 700; font-size: 1.02rem; }
-.mockup-title-block .mt-2 { color: var(--nexo-text-3); font-size: 0.78rem; margin-top: 2px; }
+/* 7. Etapas e painel resumido; no mobile, o painel segue as quatro etapas */
+.process-layout { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); align-items: start; gap: 48px; }
+.process-flow { position: relative; }
+.process-flow::before { content: ''; position: absolute; left: 24px; top: 24px; bottom: 70px; width: 1px; background: linear-gradient(var(--nexo-accent-soft), var(--nexo-border)); }
+.flow-card { position: relative; padding: 12px 0 28px 66px; }
+.flow-num { position: absolute; left: 0; top: 0; display: grid; place-items: center; width: 48px; height: 48px; border: 1px solid rgba(168, 85, 247, 0.5); border-radius: 50%; background: var(--nexo-surface); box-shadow: 0 0 0 6px rgba(168, 85, 247, 0.06); color: var(--nexo-accent-text); font: 600 0.85rem 'JetBrains Mono', monospace; }
+.flow-card h3 { margin: 0 0 8px; font-size: 1.02rem; line-height: 1.4; }
+.flow-card p { margin: 0; font-size: 0.94rem; line-height: 1.7; }
+.process-note { margin: 8px 0 0; padding: 16px 18px; border-left: 3px solid var(--nexo-accent); border-radius: 0 8px 8px 0; background: var(--nexo-surface); }
+.mockup, .dashboard-demo { padding: 20px; background: linear-gradient(145deg, #191923, var(--nexo-surface)); border: 1px solid var(--nexo-border-strong); border-radius: var(--nexo-radius); box-shadow: var(--nexo-shadow-lg); }
+.mockup-head, .demo-head { display: flex; justify-content: space-between; align-items: start; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.mockup-title-block h3, .demo-head-title h3 { font-size: 1.04rem; margin: 0 0 4px; }
+.mockup-title-block p, .demo-head-title p { font-size: 0.84rem; color: var(--nexo-text-3); margin: 0; }
+.badge-published { display: inline-flex; align-items: center; gap: 7px; width: fit-content; padding: 4px 10px; border: 1px solid var(--nexo-border-strong); border-radius: 999px; color: var(--nexo-text-2); background: rgba(255,255,255,0.02); font-size: 0.74rem; font-weight: 500; }
+.badge-published .dot { width: 6px; height: 6px; border: 1px solid currentColor; border-radius: 50%; }
+.kpi-grid { display: grid; grid-template-columns: 1fr; margin-bottom: 16px; border: 1px solid var(--nexo-border); border-radius: var(--nexo-radius-sm); overflow: hidden; }
+.kpi-tile { padding: 14px 16px; background: rgba(255,255,255,0.015); }
+.kpi-tile + .kpi-tile { border-top: 1px solid var(--nexo-border); }
+.kpi-tile .label, .demo-kpi .label { display: flex; align-items: center; gap: 8px; color: var(--nexo-text-2); font-size: 0.8rem; margin-bottom: 4px; line-height: 1.5; }
+.kpi-tile .label::before, .demo-kpi .label::before { content: ''; width: 9px; height: 9px; flex-shrink: 0; border-radius: 2px; background: var(--nexo-accent); }
+.cyan .label::before { background: var(--nexo-info); }
+.amber .label::before, .estimate-key { background: repeating-linear-gradient(135deg, transparent 0 2px, var(--nexo-warning) 2px 3px); border: 1px solid var(--nexo-warning); }
+.kpi-tile .value, .demo-kpi .value { font: 500 1.35rem/1.5 'JetBrains Mono', ui-monospace, monospace; color: var(--nexo-text); }
+.summary-chart-card, .mockup-list, .demo-chart-card { min-width: 0; padding: 16px; background: rgba(255,255,255,0.015); border: 1px solid var(--nexo-border); border-radius: var(--nexo-radius-sm); }
+.summary-chart-card { margin-bottom: 16px; }
+.summary-chart-card h3, .mockup-list h3, .demo-chart-card h3 { font-size: 1rem; margin: 0 0 4px; line-height: 1.4; }
+.sub { color: var(--nexo-text-3); font-size: 0.8rem; }
+.mockup-chart { width: 100%; height: 200px; }
+.chart-estimate { display: flex; align-items: start; gap: 8px; margin: 8px 0 0; }
+.estimate-key { display: inline-block; width: 10px; height: 10px; flex-shrink: 0; margin-top: 5px; border-radius: 2px; }
+.mockup-list dl { margin: 0; }
+.row-i { padding: 16px 0; border-bottom: 1px solid var(--nexo-border); }
+.row-i:last-child { padding-bottom: 8px; border: 0; }
+.row-i dt { font-size: 0.8rem; font-weight: 500; color: var(--nexo-text-3); margin-bottom: 6px; }
+.row-i dd { color: var(--nexo-text); font-size: 1rem; font-weight: 600; line-height: 1.5; margin: 0; }
+.product-value { display: block; margin-top: 4px; color: var(--nexo-text-3); font: 400 0.86rem/1.6 'JetBrains Mono', monospace; }
 
-.badge-published {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: rgba(34, 197, 94, 0.13); color: var(--nexo-success);
-  padding: 4px 10px; border-radius: 999px;
-  font-size: 0.74rem; font-weight: 600;
-  white-space: nowrap;
-}
-.badge-published .dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: var(--nexo-success);
-  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.18);
-}
+/* 8. Depoimentos autorizados */
+.review-carousel { max-width: 760px; margin: 28px auto 0; padding: 28px; background: var(--nexo-surface); border: 1px solid var(--nexo-border-strong); border-radius: var(--nexo-radius); }
+.review-empty { text-align: center; max-width: 600px; margin: auto; }
+.review-empty p { margin-bottom: 0; }
+.review-empty p + p { margin-top: 4px; }
+.review-card { animation: review-appear 180ms ease-out; }
+.review-card blockquote { margin: 0 0 22px; font-size: 1.12rem; line-height: 1.75; }
+.review-author { font-size: 0.9rem; }
+.review-controls { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 24px; }
+.review-controls button { min-height: 44px; min-width: 44px; padding: 8px 12px; border-radius: 9px; border: 1px solid var(--nexo-border-strong); background: var(--nexo-surface-2); color: var(--nexo-text); font: inherit; cursor: pointer; }
+[data-review-indicators] { display: flex; gap: 4px; }
+[data-review-indicators] button { padding: 0; border-color: transparent; background: transparent; }
+[data-review-indicators] button::before { content: ''; display: block; margin: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--nexo-text-3); }
+[data-review-indicators] button[aria-current="true"]::before { background: var(--nexo-accent-text); width: 20px; border-radius: 5px; }
+@keyframes review-appear { from { opacity: 0; } to { opacity: 1; } }
 
-.kpi-grid {
-  display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
-  margin-bottom: 16px;
-}
-.kpi-tile {
-  background: var(--nexo-surface-2);
-  border: 1px solid var(--nexo-border);
-  border-radius: var(--nexo-radius-sm);
-  padding: 12px 14px;
-  position: relative;
-  overflow: hidden;
-}
-.kpi-tile .label { color: var(--nexo-text-3); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
-.kpi-tile .value { font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 700; font-size: 1.05rem; color: var(--nexo-text); }
-.kpi-tile.green::before, .kpi-tile.amber::before, .kpi-tile.purple::before {
-  content: ''; position: absolute; inset: 0 auto 0 0; width: 3px;
-}
-.kpi-tile.green::before  { background: var(--nexo-success); }
-.kpi-tile.amber::before  { background: var(--nexo-warning); }
-.kpi-tile.purple::before { background: var(--nexo-accent); }
-.kpi-tile.green .value  { color: var(--nexo-success); }
-.kpi-tile.amber .value  { color: var(--nexo-warning); }
-.kpi-tile.purple .value { color: var(--nexo-accent-text); }
+/* 9. Sete indicadores */
+.kpi-list { max-width: 820px; margin: auto; background: var(--nexo-surface); border: 1px solid var(--nexo-border-strong); border-radius: var(--nexo-radius); overflow: hidden; }
+.kpi-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: 20px 24px; border-bottom: 1px solid var(--nexo-border); }
+.kpi-row:last-child { border: 0; }
+.kpi-index { color: var(--nexo-accent-text); font: 600 0.85rem 'JetBrains Mono', monospace; }
+.kpi-name { font-size: 0.94rem; font-weight: 500; }
+.kpi-source { display: inline-flex; align-items: center; gap: 6px; width: fit-content; padding: 4px 10px; border: 1px solid var(--nexo-border); border-radius: 999px; background: var(--nexo-surface-2); color: var(--nexo-text-2); font-size: 0.74rem; }
+.kpi-source::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--nexo-accent); }
+.source-purchases::before { background: var(--nexo-info); }
+.source-estimate::before { background: var(--nexo-warning); }
+.indicator-note { max-width: 820px; margin: 20px auto 0; color: var(--nexo-text-3); font-size: 0.84rem; line-height: 1.75; }
 
-.mockup-chart {
-  height: 160px;
-  background: var(--nexo-surface-2);
-  border: 1px solid var(--nexo-border);
-  border-radius: var(--nexo-radius-sm);
-  margin-bottom: 14px;
-}
-
-.mockup-list {
-  background: var(--nexo-surface-2);
-  border: 1px solid var(--nexo-border);
-  border-radius: var(--nexo-radius-sm);
-  padding: 12px 14px;
-}
-.mockup-list .ll { color: var(--nexo-text-3); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
-.row-i {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 6px 0; gap: 12px;
-  border-bottom: 1px dashed var(--nexo-border);
-  font-size: 0.86rem;
-}
-.row-i:last-child { border-bottom: 0; }
-.row-i strong { color: var(--nexo-text-2); font-weight: 500; }
-.row-i .v { color: var(--nexo-text); font-weight: 600; text-align: right; font-size: 0.82rem; }
-
-/* ============================================================
-   7. Cards do "Problema" + ganhos práticos
-   ============================================================ */
-.nexo-card {
-  background: var(--nexo-surface);
-  border: 1px solid var(--nexo-border);
-  border-radius: var(--nexo-radius);
-  padding: 26px 22px;
-  height: 100%;
-  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
-}
-.nexo-card:hover {
-  transform: translateY(-3px);
-  border-color: var(--nexo-border-strong);
-  box-shadow: var(--nexo-shadow);
-}
-.nexo-card-icon {
-  width: 46px; height: 46px;
-  display: grid; place-items: center;
-  border-radius: 12px;
-  margin-bottom: 16px;
-  background: var(--nexo-accent-soft);
-  color: var(--nexo-accent);
-}
-.nexo-card-icon.red   { background: rgba(239, 68, 68, 0.13); color: var(--nexo-danger); }
-.nexo-card-icon.amber { background: rgba(245, 158, 11, 0.14); color: var(--nexo-warning); }
-.nexo-card h3 { font-size: 1.02rem; margin-bottom: 8px; }
-.nexo-card p { color: var(--nexo-text-2); font-size: 0.9rem; margin: 0; }
-
-.ganhos-strip {
-  margin-top: 36px;
-  background: var(--nexo-surface);
-  border: 1px solid var(--nexo-border);
-  border-radius: var(--nexo-radius);
-  padding: 18px 22px;
-  display: flex; flex-wrap: wrap; align-items: center; gap: 14px;
-}
-.ganhos-label { color: var(--nexo-text-3); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.07em; font-weight: 600; }
-.ganho-chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: rgba(34, 197, 94, 0.10);
-  color: var(--nexo-success);
-  padding: 6px 12px;
-  border-radius: 999px;
-  font-size: 0.82rem; font-weight: 500;
-}
-
-/* ============================================================
-   8. Flow cards (Como funciona)
-   ============================================================ */
-.flow-card {
-  background: var(--nexo-surface);
-  border: 1px solid var(--nexo-border);
-  border-radius: var(--nexo-radius);
-  padding: 26px 22px;
-  height: 100%;
-  position: relative;
-  transition: transform 0.2s, border-color 0.2s;
-}
-.flow-card:hover { transform: translateY(-3px); border-color: var(--nexo-accent); }
-.flow-num {
-  position: absolute; top: 18px; right: 22px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  color: var(--nexo-text-3); font-size: 0.78rem; font-weight: 600; letter-spacing: 0.05em;
-}
-.flow-icon {
-  width: 46px; height: 46px;
-  display: grid; place-items: center;
-  border-radius: 12px;
-  background: var(--nexo-accent-soft); color: var(--nexo-accent);
-  margin-bottom: 16px;
-}
-.flow-card h3 { font-size: 1.05rem; margin: 20px 0 10px; max-width: 18ch; }
-.flow-card p { color: var(--nexo-text-2); font-size: 0.92rem; line-height: 1.75; margin: 0; }
-
-/* ============================================================
-   9. Testimonial
-   ============================================================ */
-.testimonial {
-  margin-top: 56px;
-  max-width: 760px; margin-left: auto; margin-right: auto;
-  background: var(--nexo-surface);
-  border: 1px solid var(--nexo-border-strong);
-  border-radius: var(--nexo-radius);
-  padding: 32px;
-  position: relative;
-}
-.quote-mark { position: absolute; top: 18px; left: 22px; color: var(--nexo-accent-soft); }
-.testimonial p {
-  font-size: 1.04rem; font-style: italic;
-  color: var(--nexo-text); margin: 12px 0 22px;
-  padding-left: 28px;
-}
-.testimonial-author { display: flex; align-items: center; gap: 12px; padding-left: 28px; }
-.ta-avatar {
-  width: 42px; height: 42px; border-radius: 50%;
-  display: grid; place-items: center;
-  background: linear-gradient(135deg, var(--nexo-action), var(--nexo-action-dark));
-  color: #fff; font-weight: 700; font-size: 0.88rem;
-}
-.ta-name { font-weight: 600; font-size: 0.92rem; }
-.ta-role { color: var(--nexo-text-3); font-size: 0.78rem; }
-
-/* ============================================================
-   10. Indicadores do MVP (tabela "lista")
-   ============================================================ */
-.indicators-wrap {
-  max-width: 820px; margin: 0 auto;
-  background: var(--nexo-surface);
-  border: 1px solid var(--nexo-border);
-  border-radius: var(--nexo-radius);
-  overflow: hidden;
-}
-.indicator-row {
-  display: grid;
-  grid-template-columns: 60px 1fr auto;
-  align-items: center; gap: 16px;
-  padding: 16px 22px;
-  border-bottom: 1px solid var(--nexo-border);
-  transition: background 0.15s;
-}
-.indicator-row:hover { background: var(--nexo-surface-2); }
-.indicator-row:last-of-type { border-bottom: 0; }
-.indicator-num {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  color: var(--nexo-accent); font-weight: 700; font-size: 1rem;
-}
-.indicator-name { color: var(--nexo-text); font-weight: 500; }
-.indicator-tag {
-  background: var(--nexo-surface-2);
-  color: var(--nexo-text-3);
-  padding: 4px 10px; border-radius: 999px;
-  font-size: 0.74rem; font-weight: 600;
-  border: 1px solid var(--nexo-border);
-}
-
-.disclaimer {
-  background: rgba(245, 158, 11, 0.10);
-  border-top: 1px solid var(--nexo-border);
-  padding: 18px 22px;
-  display: flex; gap: 14px; align-items: flex-start;
-  color: var(--nexo-warning);
-  font-size: 0.86rem;
-}
-.disclaimer strong { display: block; margin-bottom: 4px; color: var(--nexo-warning); }
-.disclaimer span { color: var(--nexo-text-2); }
-
-/* ============================================================
-   11. Demonstração do dashboard
-   ============================================================ */
+/* 10. Player original e demonstração completa */
 .motion-demo { margin: 0 0 40px; }
 .motion-demo-intro { margin-bottom: 18px; }
 .motion-demo-intro h3 { margin-bottom: 8px; }
@@ -606,290 +437,6 @@ section { padding: 88px 0; position: relative; }
 .motion-demo-caption a { color: var(--nexo-accent); text-decoration: underline; }
 .motion-demo-caption a:hover { color: var(--nexo-text); }
 
-.dashboard-demo {
-  background: var(--nexo-surface);
-  border: 1px solid var(--nexo-border-strong);
-  border-radius: var(--nexo-radius);
-  padding: 28px;
-  box-shadow: var(--nexo-shadow-lg);
-}
-.demo-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; margin-bottom: 22px; }
-.demo-head-title h4, .demo-head-title h3 { margin: 0 0 4px; font-size: 1.08rem; }
-.demo-head-title p { color: var(--nexo-text-3); font-size: 0.84rem; margin: 0; }
-
-.demo-kpi-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px;
-  margin-bottom: 22px;
-}
-.demo-kpi {
-  background: var(--nexo-surface-2);
-  border: 1px solid var(--nexo-border);
-  border-radius: var(--nexo-radius-sm);
-  padding: 16px 18px;
-  position: relative;
-  overflow: hidden;
-}
-.demo-kpi .label {
-  display: inline-flex; align-items: center; gap: 6px;
-  color: var(--nexo-text-3); font-size: 0.78rem;
-  text-transform: uppercase; letter-spacing: 0.05em;
-  margin-bottom: 10px;
-}
-.demo-kpi .value {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 1.6rem; font-weight: 700;
-  color: var(--nexo-text);
-  margin-bottom: 4px;
-}
-.demo-kpi .sub { color: var(--nexo-text-3); font-size: 0.78rem; }
-.demo-kpi.green .value { color: var(--nexo-success); }
-.demo-kpi.amber .value { color: var(--nexo-warning); }
-.demo-kpi.green::before, .demo-kpi.amber::before {
-  content: ''; position: absolute; inset: 0 auto 0 0; width: 3px;
-}
-.demo-kpi.green::before { background: var(--nexo-success); }
-.demo-kpi.amber::before { background: var(--nexo-warning); }
-
-.demo-charts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
-.demo-chart-card {
-  background: var(--nexo-surface-2);
-  border: 1px solid var(--nexo-border);
-  border-radius: var(--nexo-radius-sm);
-  padding: 18px;
-}
-.demo-chart-card h5, .demo-chart-card h3 { font-size: 1rem; margin: 0 0 6px; }
-.demo-chart-card .sub { color: var(--nexo-text-3); font-size: 0.78rem; margin-bottom: 12px; }
-
-/* ============================================================
-   12. Método NEXO (report-blocks)
-   ============================================================ */
-.report-blocks {
-  display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px;
-  margin-top: 36px;
-}
-.report-block {
-  background: var(--nexo-surface);
-  border: 1px solid var(--nexo-border);
-  border-radius: var(--nexo-radius-sm);
-  padding: 22px 18px;
-  transition: transform 0.18s, border-color 0.18s;
-}
-.report-block:hover { transform: translateY(-2px); border-color: var(--nexo-accent); }
-.report-block .step {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  color: var(--nexo-accent); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em;
-  margin-bottom: 8px;
-}
-.report-block h4, .report-block h3 { font-size: 0.98rem; margin-bottom: 10px; }
-.report-block p { color: var(--nexo-text-2); font-size: 0.85rem; margin: 0; }
-
-/* ============================================================
-   13. Plans
-   ============================================================ */
-.plans-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px;
-  max-width: 1080px; margin: 0 auto;
-}
-.plan {
-  background: var(--nexo-surface);
-  border: 1px solid var(--nexo-border);
-  border-radius: var(--nexo-radius);
-  padding: 32px 28px;
-  display: flex; flex-direction: column;
-  position: relative;
-  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
-}
-.plan:hover { transform: translateY(-3px); border-color: var(--nexo-border-strong); }
-.plan.featured {
-  border-color: var(--nexo-accent);
-  background: linear-gradient(180deg, rgba(168, 85, 247, 0.06), var(--nexo-surface));
-  box-shadow: var(--nexo-shadow), 0 0 0 1px var(--nexo-accent-soft);
-}
-.plan-flag {
-  position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
-  background: linear-gradient(135deg, var(--nexo-action), var(--nexo-action-dark));
-  color: #fff;
-  padding: 6px 16px; border-radius: 999px;
-  font-size: 0.74rem; font-weight: 700; letter-spacing: 0.05em;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-.plan-name {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
-  font-size: 1.1rem; font-weight: 700; letter-spacing: 0.08em;
-  margin-bottom: 6px;
-}
-.plan.bronze .plan-name { color: #cd7f32; }
-.plan.prata  .plan-name { color: #c0c0c0; }
-.plan.ouro   .plan-name { color: #ffd700; }
-.plan-tag { color: var(--nexo-text-2); font-size: 0.9rem; margin-bottom: 24px; }
-.plan-price { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 1.6rem; font-weight: 700; }
-.plan-price-sub { color: var(--nexo-text-3); font-size: 0.82rem; margin-bottom: 20px; }
-.plan-features { list-style: none; padding: 0; margin: 0 0 28px; flex: 1; }
-.plan-features li {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 0;
-  border-bottom: 1px dashed var(--nexo-border);
-  font-size: 0.9rem;
-}
-.plan-features li:last-child { border-bottom: 0; }
-.plan-features svg { color: var(--nexo-success); flex-shrink: 0; }
-
-/* ============================================================
-   14. CTA Final
-   ============================================================ */
-.cta-final {
-  background: linear-gradient(135deg, var(--nexo-surface-2), var(--nexo-surface));
-  border: 1px solid var(--nexo-border-strong);
-  border-radius: var(--nexo-radius);
-  padding: 60px 40px;
-  text-align: center;
-  position: relative;
-  overflow: hidden;
-}
-.cta-final::before {
-  content: ''; position: absolute;
-  top: -200px; left: 50%; transform: translateX(-50%);
-  width: 700px; height: 700px;
-  background: radial-gradient(closest-side, var(--nexo-accent-glow), transparent 70%);
-  filter: blur(20px);
-  pointer-events: none;
-}
-.cta-final h2 { margin-bottom: 14px; position: relative; z-index: 1; }
-.cta-final p { color: var(--nexo-text-2); max-width: 620px; margin: 0 auto 28px; position: relative; z-index: 1; }
-.cta-buttons { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; position: relative; z-index: 1; }
-
-/* ============================================================
-   15. Footer
-   ============================================================ */
-.nexo-footer {
-  background: var(--nexo-bg-2);
-  border-top: 1px solid var(--nexo-border);
-  padding: 60px 0 30px;
-  margin-top: 80px;
-}
-.footer-grid {
-  display: grid;
-  grid-template-columns: 1.65fr 1fr 1.2fr 1.15fr;
-  gap: 40px;
-  max-width: 1240px; margin: 0 auto;
-  padding: 0;
-}
-.footer-brand p { color: var(--nexo-text-3); font-size: 0.88rem; margin-top: 16px; max-width: 340px; }
-.footer-col h5, .footer-col h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--nexo-text); margin-bottom: 14px; }
-.footer-col ul { list-style: none; padding: 0; margin: 0; }
-.footer-col li { padding: 6px 0; }
-.footer-col a { color: var(--nexo-text-3); font-size: 0.88rem; }
-.footer-col a:hover { color: var(--nexo-text); }
-.footer-bottom {
-  max-width: 1240px; margin: 40px auto 0;
-  padding: 24px 0 0;
-  border-top: 1px solid var(--nexo-border);
-  display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
-  color: var(--nexo-text-3); font-size: 0.82rem;
-}
-.academic-tag {
-  display: inline-flex; align-items: center; gap: 6px;
-  background: var(--nexo-accent-soft); color: var(--nexo-accent);
-  padding: 6px 12px; border-radius: 999px;
-  font-size: 0.76rem; font-weight: 600;
-}
-
-/* ============================================================
-   16. Apresentação comercial e alternativas acessíveis
-   ============================================================ */
-.landing-menu-toggle {
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-  min-height: 44px; padding: 8px 12px;
-  font: inherit; font-size: 0.84rem; font-weight: 600;
-  color: var(--nexo-text); background: var(--nexo-surface);
-  border: 1px solid var(--nexo-border-strong); border-radius: 10px; cursor: pointer;
-}
-.landing-menu-toggle[aria-expanded="true"] { border-color: var(--nexo-accent); }
-
-.btn-nexo:disabled, .btn-nexo[aria-disabled="true"] {
-  color: #b8bed2; background: var(--nexo-surface-3);
-  border-color: rgba(255, 255, 255, 0.15); box-shadow: none;
-  cursor: not-allowed; opacity: 1; transform: none;
-}
-.text-link { color: var(--nexo-accent-text); font-weight: 600; text-decoration: underline; text-underline-offset: 4px; }
-.text-link:hover { color: var(--nexo-text); }
-.commercial-note { color: var(--nexo-text-3); font-size: 0.86rem; line-height: 1.75; }
-.process-note {
-  max-width: 820px; margin: 28px auto 0; padding: 18px 22px;
-  border-left: 3px solid var(--nexo-accent); background: var(--nexo-surface);
-  border-radius: 0 10px 10px 0; text-align: left;
-}
-.illustrative-label { color: var(--nexo-text-3); font-size: 0.8rem; }
-.opportunities-section, .reviews-section, .method-section { background: var(--nexo-bg-2); }
-.nexo-card-icon.green { background: rgba(34, 197, 94, 0.12); color: var(--nexo-success); }
-.nexo-card-icon.purple { color: var(--nexo-accent-text); }
-.nexo-card-icon { font-size: 1.6rem; font-weight: 600; }
-.nexo-card h3 { font-size: 1.08rem; line-height: 1.4; margin-bottom: 12px; }
-.nexo-card p { line-height: 1.75; font-size: 0.93rem; }
-.flow-num { position: static; display: inline-flex; color: var(--nexo-accent-text); font-size: 0.85rem; }
-.flow-card { padding-top: 24px; }
-
-.kpi-list {
-  max-width: 880px; margin: 0 auto; padding: 0; list-style: none;
-  background: var(--nexo-surface); border: 1px solid var(--nexo-border-strong);
-  border-radius: var(--nexo-radius); overflow: hidden;
-}
-.kpi-row {
-  display: grid; grid-template-columns: 38px minmax(0, 1fr) auto;
-  align-items: center; gap: 18px; padding: 20px 24px;
-  border-bottom: 1px solid var(--nexo-border);
-}
-.kpi-row:last-child { border-bottom: 0; }
-.kpi-index { font-family: 'JetBrains Mono', monospace; color: var(--nexo-accent-text); font-size: 0.88rem; font-weight: 700; }
-.kpi-name { color: var(--nexo-text); font-weight: 500; }
-.kpi-source {
-  color: var(--nexo-text-2); background: var(--nexo-surface-2); border: 1px solid var(--nexo-border);
-  border-radius: 999px; padding: 4px 10px; font-size: 0.76rem; white-space: nowrap;
-}
-.indicator-note { max-width: 880px; margin: 20px auto 0; color: var(--nexo-text-3); font-size: 0.86rem; line-height: 1.75; }
-
-.chart-summary, .video-description { margin-top: 10px; color: var(--nexo-text-2); font-size: 0.84rem; }
-.chart-summary summary, .video-description summary { cursor: pointer; min-height: 44px; padding: 10px 2px; }
-.chart-summary summary:hover, .video-description summary:hover { color: var(--nexo-text); }
-.chart-summary p, .video-description p { color: var(--nexo-text-2); margin: 8px 0 12px; }
-.chart-summary table { width: 100%; border-collapse: collapse; margin: 10px 0 8px; font-size: 0.8rem; }
-.chart-summary caption { color: var(--nexo-text-3); caption-side: bottom; padding-top: 8px; }
-.chart-summary th, .chart-summary td { padding: 9px 8px; border-bottom: 1px solid var(--nexo-border); text-align: left; }
-.chart-summary th { font-weight: 600; color: var(--nexo-text); }
-.chart-fallback { padding: 16px; color: var(--nexo-text-2); font-size: 0.86rem; }
-.mockup, .dashboard-demo, .demo-chart-card, .kpi-tile, .demo-kpi, .plan, .report-block,
-.row > *, .demo-charts > * { min-width: 0; }
-.demo-charts > *, .mockup-chart { max-width: 100%; }
-
-.review-carousel {
-  max-width: 880px; margin: 28px auto 0; padding: 32px;
-  background: var(--nexo-surface); border: 1px solid var(--nexo-border-strong);
-  border-radius: var(--nexo-radius); box-shadow: var(--nexo-shadow);
-}
-.review-empty { text-align: center; max-width: 600px; margin-inline: auto; }
-.review-empty h3 { font-size: 1.12rem; margin-bottom: 12px; }
-.review-empty p { margin-bottom: 0; color: var(--nexo-text-2); }
-.review-card { animation: review-appear 180ms ease-out; }
-.review-card blockquote { margin: 0 0 22px; font-size: 1.12rem; line-height: 1.75; color: var(--nexo-text); }
-.review-card .review-author { color: var(--nexo-text-2); font-size: 0.9rem; }
-.review-controls { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 24px; }
-.review-controls button {
-  min-height: 44px; min-width: 44px; padding: 8px 12px; border-radius: 9px;
-  border: 1px solid var(--nexo-border-strong); background: var(--nexo-surface-2);
-  color: var(--nexo-text); font: inherit; cursor: pointer;
-}
-.review-controls button:hover { border-color: var(--nexo-accent); }
-[data-review-indicators] { display: flex; align-items: center; gap: 4px; }
-[data-review-indicators] button { position: relative; padding: 0; border-color: transparent; background: transparent; }
-[data-review-indicators] button::before { content: ''; display: block; margin: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--nexo-text-3); }
-[data-review-indicators] button[aria-current="true"]::before,
-[data-review-indicators] button[aria-pressed="true"]::before { background: var(--nexo-accent-text); width: 20px; border-radius: 5px; }
-[data-review-status] { color: var(--nexo-text-3); font-size: 0.82rem; text-align: center; margin-top: 12px; }
-.review-action { margin: 24px auto 0; text-align: center; }
-.review-action .commercial-note { margin: 10px auto 0; max-width: 600px; }
-@keyframes review-appear { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-
 .motion-demo-toggle {
   position: absolute; z-index: 5; bottom: 14px;
   display: inline-flex; align-items: center; justify-content: center;
@@ -904,28 +451,98 @@ section { padding: 88px 0; position: relative; }
 .motion-demo-fullscreen { min-height: 44px; min-width: 44px; }
 .motion-demo-retry { min-height: 44px; }
 
-.plan { padding: 34px 28px 28px; }
-.plan-name { font-size: 1.08rem; }
-.plan-features li { align-items: flex-start; line-height: 1.65; }
-.plan-features li > [aria-hidden] { color: var(--nexo-success); flex-shrink: 0; }
-.plan .btn-nexo { margin-top: auto; }
-.plan-availability { max-width: 760px; margin-inline: auto; }
-.plan-availability .commercial-note { margin-bottom: 8px; }
-.footer-col p { font-size: 0.88rem; line-height: 1.75; }
-.footer-col a { display: inline-flex; align-items: center; min-height: 44px; text-underline-offset: 4px; }
-.footer-col a:hover { text-decoration: underline; }
-.footer-col li { padding: 0; }
-.footer-bottom { line-height: 1.7; }
-.cta-final > .commercial-note { max-width: 620px; margin: 18px auto 0; }
+.motion-demo { max-width: 900px; margin-inline: auto; }
+.dashboard-demo { padding: 22px; }
+.demo-kpi-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; margin-bottom: 16px; }
+.demo-kpi { padding: 16px; border: 1px solid var(--nexo-border); border-radius: var(--nexo-radius-sm); background: rgba(255,255,255,0.015); }
+.demo-kpi .label svg { display: none; }
+.demo-kpi .sub { margin-top: 4px; }
+.demo-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+#demo-chart-evolucao { height: 290px; }
+#demo-chart-top { height: 290px; }
 
-/* ============================================================
-   17. Responsividade sem depender de JavaScript ou CDNs
-   ============================================================ */
+/* 11. Método */
+.report-blocks { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 36px; }
+.report-block { padding: 22px 18px; background: var(--nexo-surface); border: 1px solid var(--nexo-border); border-radius: var(--nexo-radius-sm); }
+.report-block .step { margin-bottom: 12px; color: var(--nexo-accent-text); font: 600 0.72rem 'JetBrains Mono', monospace; letter-spacing: 0.08em; }
+.report-block h3 { font-size: 0.98rem; margin-bottom: 8px; line-height: 1.4; }
+.report-block p { font-size: 0.88rem; margin: 0; line-height: 1.6; }
+
+/* 12. Planos e CTA único */
+.plans-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; max-width: 1080px; margin: auto; }
+.plan { position: relative; display: flex; flex-direction: column; padding: 32px 24px 24px; border: 1px solid var(--nexo-border-strong); border-radius: var(--nexo-radius); background: linear-gradient(145deg, #191923, var(--nexo-surface)); }
+.plan.featured { border-color: rgba(168,85,247,0.65); background: linear-gradient(145deg, rgba(168,85,247,0.08), var(--nexo-surface)); box-shadow: 0 12px 40px -24px var(--nexo-accent-glow); }
+.plan-flag { position: absolute; top: -13px; left: 50%; transform: translateX(-50%); padding: 6px 16px; border-radius: 999px; background: linear-gradient(135deg, var(--nexo-action), var(--nexo-action-dark)); color: #fff; font-size: 0.72rem; font-weight: 700; text-transform: uppercase; white-space: nowrap; }
+.plan-name { font: 700 1rem 'JetBrains Mono', monospace; letter-spacing: 0.12em; margin: 0 0 10px; }
+.plan.bronze .plan-name { color: #e39b53; }
+.plan.prata .plan-name { color: #c0c0c0; }
+.plan.ouro .plan-name { color: #ffe024; }
+.plan-tag { font-size: 0.94rem; margin-bottom: 22px; }
+.plan-price { font-size: 1.65rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1.3; }
+.plan-price-sub { font-size: 0.82rem; margin: 4px 0 20px; color: var(--nexo-text-3); }
+.plan-features { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--nexo-border); }
+.plan-features li { display: flex; gap: 10px; align-items: start; padding: 10px 0; border-bottom: 1px dashed var(--nexo-border); font-size: 0.94rem; line-height: 1.65; }
+.plan-features li:last-child { border: 0; padding-bottom: 4px; }
+.plan-features [aria-hidden] { color: var(--nexo-success); flex-shrink: 0; }
+.plan-availability { max-width: 680px; margin-inline: auto; }
+.plan-availability .btn-nexo { min-width: 300px; margin: 12px auto; }
+.plan-availability .commercial-note { margin: 0; }
+
+/* 13. Chamada final e rodapé compacto */
+.final-section { padding: 52px 0; border-top: 1px solid var(--nexo-border); }
+.cta-final { position: relative; max-width: 900px; margin: auto; padding: 48px 40px; border: 1px solid var(--nexo-border-strong); border-radius: var(--nexo-radius); background: radial-gradient(ellipse at 50% 0, rgba(168,85,247,0.18), transparent 75%), var(--nexo-surface); text-align: center; }
+.cta-final h2 { max-width: 26ch; margin: 0 auto 20px; text-wrap: balance; }
+.cta-final p { max-width: 590px; margin: 0 auto 28px; }
+.cta-buttons { display: flex; justify-content: center; flex-wrap: wrap; gap: 12px; }
+.cta-final > .commercial-note { margin: 18px auto 0; max-width: 580px; }
+.nexo-footer { padding: 40px 0 24px; background: var(--nexo-bg-2); }
+.footer-grid { display: grid; grid-template-columns: 1.5fr 1fr 1.1fr 1.1fr; gap: 28px; }
+.footer-brand p { font-size: 0.86rem; color: var(--nexo-text-3); margin: 16px 0 0; }
+.footer-col h3 { font-size: 0.88rem; margin-bottom: 10px; }
+.footer-col p, .footer-col a { font-size: 0.86rem; color: var(--nexo-text-3); line-height: 1.65; }
+.footer-col p { margin-bottom: 0; }
+.footer-col ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); list-style: none; padding: 0; margin: 0; gap: 0 12px; }
+.footer-col a, .footer-bottom a { display: inline-flex; align-items: center; min-height: 44px; }
+.footer-col a:hover { color: var(--nexo-text); text-decoration: underline; text-underline-offset: 4px; }
+.footer-bottom { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 24px; margin: 24px auto 0; padding-top: 16px; border-top: 1px solid var(--nexo-border); color: var(--nexo-text-3); font-size: 0.82rem; line-height: 1.6; }
+
+/* 14. Navegação, disponibilidade e alternativas acessíveis */
+.landing-menu-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px 12px; font: 600 0.84rem 'Inter', sans-serif; color: var(--nexo-text); background: var(--nexo-surface); border: 1px solid var(--nexo-border-strong); border-radius: 10px; cursor: pointer; }
+.landing-menu-toggle[aria-expanded="true"] { border-color: var(--nexo-accent); }
+.btn-nexo:disabled { color: #b8bed2; background: transparent; border: 1px dashed var(--nexo-border-strong); box-shadow: none; cursor: not-allowed; opacity: 1; transform: none; }
+.commercial-note { color: var(--nexo-text-3); font-size: 0.84rem; line-height: 1.65; }
+.chart-summary, .video-description { margin-top: 8px; color: var(--nexo-text-2); font-size: 0.82rem; }
+.chart-summary summary, .video-description summary { cursor: pointer; min-height: 44px; padding: 10px 2px; }
+.chart-summary summary:hover, .video-description summary:hover { color: var(--nexo-text); }
+.chart-summary p, .video-description p { margin: 8px 0 12px; font-size: 0.84rem; }
+.chart-summary table { width: 100%; border-collapse: collapse; margin: 10px 0 8px; font-size: 0.8rem; }
+.chart-summary caption { color: var(--nexo-text-3); caption-side: bottom; padding-top: 8px; }
+.chart-summary th, .chart-summary td { padding: 9px 6px; border-bottom: 1px solid var(--nexo-border); text-align: left; }
+.chart-summary th { color: var(--nexo-text); font-weight: 600; }
+.chart-fallback { padding: 12px 0; }
+.mockup, .dashboard-demo, .demo-chart-card, .kpi-tile, .demo-kpi, .plan, .report-block, .process-layout > * { min-width: 0; }
+.demo-charts > *, .mockup-chart { max-width: 100%; }
+
+/* 15. Responsividade da referência mobile às grades desktop */
+@media (min-width: 993px) {
+  .process-layout { display: block; }
+  .process-flow { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px; }
+  .process-flow::before { top: 24px; bottom: auto; left: 24px; right: 24px; width: auto; height: 1px; }
+  .flow-card { padding: 72px 0 0; }
+  .process-note { max-width: 820px; margin: 28px auto 40px; }
+  #process-demo { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; max-width: 1000px; margin: auto; }
+  #process-demo .mockup-head, #process-demo .kpi-grid { grid-column: 1 / -1; margin-bottom: 0; }
+  #process-demo .kpi-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #process-demo .kpi-tile + .kpi-tile { border-top: 0; border-left: 1px solid var(--nexo-border); }
+  #process-demo .summary-chart-card { margin-bottom: 0; }
+}
 @media (max-width: 1100px) {
   .nexo-header-inner { gap: 16px; }
   .nav-links { gap: 10px; }
   .nav-links a { font-size: 0.8rem; }
   .header-actions .btn-nexo { padding-inline: 14px; font-size: 0.84rem; }
+  .nexo-header .brand-text .b2 { display: none; }
+  .report-blocks { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 992px) {
   .nexo-header-inner { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; }
@@ -935,28 +552,35 @@ section { padding: 88px 0; position: relative; }
   .nav-links { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; padding: 8px 0 4px; border-top: 1px solid var(--nexo-border); }
   .nav-links a { display: flex; justify-content: center; font-size: 0.9rem; padding: 10px 8px; border-radius: 8px; }
   .nav-links a:hover, .nav-links a:focus-visible { background: var(--nexo-surface-2); }
-  .hero { padding-top: 58px; padding-bottom: 76px; }
-  .hero h1 { max-width: 22ch; }
-  .hero .lead { max-width: 42rem; }
-  .hero-note, .hero-audience { max-width: 40rem; }
-  .mockup { max-width: 720px; margin-inline: auto; }
-  .demo-kpi-grid { grid-template-columns: 1fr; }
+  .opportunities-section .row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .process-layout { grid-template-columns: 1fr; max-width: 700px; margin-inline: auto; gap: 40px; }
+  .demo-kpi-grid { grid-template-columns: 1fr; gap: 0; border: 1px solid var(--nexo-border); border-radius: var(--nexo-radius-sm); overflow: hidden; }
+  .demo-kpi { border: 0; border-radius: 0; }
+  .demo-kpi + .demo-kpi { border-top: 1px solid var(--nexo-border); }
   .demo-charts { grid-template-columns: 1fr; }
+  .plans-grid { gap: 16px; }
+  .plan { padding-inline: 20px; }
+  .footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; }
+}
+@media (max-width: 767px) {
+  .plans-grid { grid-template-columns: 1fr; max-width: 520px; gap: 28px; }
   .report-blocks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .plans-grid { grid-template-columns: 1fr; max-width: 560px; gap: 28px; }
-  .footer-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
-  .review-carousel { padding: 28px; }
 }
 @media (max-width: 640px) {
   .container { padding-inline: 20px; }
   section { padding: 64px 0; }
-  .hero { padding-top: 48px; padding-bottom: 64px; }
-  .hero h1 { font-size: clamp(2.1rem, 1.3rem + 4vw, 2.6rem); max-width: 18ch; }
-  .hero .lead { font-size: 1rem; line-height: 1.75; }
-  .hero-cta { margin-top: 24px; margin-bottom: 24px; gap: 10px; }
-  .hero-cta .btn-nexo { flex: 1 1 200px; }
-  .section-tag { font-size: 0.76rem; padding: 6px 11px; margin-bottom: 18px; }
-  .section-subtitle { font-size: 0.98rem; line-height: 1.75; }
+  .hero { padding: 52px 0 60px; }
+  .hero h1 { font-size: clamp(2.1rem, 9.8vw, 2.6rem); max-width: 12ch; margin-bottom: 24px; }
+  .hero h1 .accent { display: block; max-width: 11ch; margin-inline: auto; }
+  .hero .lead { font-size: 1rem; line-height: 1.7; }
+  .hero-audience { font-size: 0.92rem; }
+  .hero-note { font-size: 0.84rem; }
+  .hero-cta { margin: 28px 0 20px; gap: 10px; }
+  .hero-cta .btn-nexo { flex: 1 1 100%; }
+  .btn-nexo-lg { min-height: 52px; padding: 12px 18px; font-size: 0.98rem; }
+  .section-tag { font-size: 0.74rem; padding: 5px 11px; margin-bottom: 18px; }
+  .section-title { font-size: clamp(1.7rem, 7.4vw, 1.95rem); margin-bottom: 18px; }
+  .section-subtitle { font-size: 1rem; line-height: 1.7; }
   .nexo-header-inner { padding: 10px 16px; gap: 8px; }
   .brand { gap: 8px; }
   .brand-symbol { height: 34px; }
@@ -964,41 +588,44 @@ section { padding: 88px 0; position: relative; }
   .brand-text .b2 { font-size: 0.58rem; letter-spacing: 0.04em; }
   .header-actions { gap: 6px; }
   .header-actions .btn-nexo { padding-inline: 10px; font-size: 0.78rem; gap: 5px; }
-  .landing-menu-toggle { padding-inline: 10px; gap: 4px; font-size: 0.78rem; }
+  .landing-menu-toggle { padding-inline: 10px; font-size: 0.78rem; gap: 4px; }
   .nav-links { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .nav-links a { font-size: 0.86rem; }
-  .mockup { padding: 16px; }
-  .mockup-head, .demo-head { flex-direction: column; gap: 10px; }
-  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .kpi-tile { padding: 12px 10px; }
-  .kpi-tile .label { font-size: 0.67rem; line-height: 1.55; letter-spacing: 0.02em; }
-  .kpi-tile .value { font-size: 0.95rem; }
-  .row-i { align-items: flex-start; flex-direction: column; gap: 3px; padding: 9px 0; }
-  .row-i .v { text-align: left; }
-  .dashboard-demo { padding: 18px; }
-  .demo-kpi { padding: 16px; }
-  .demo-chart-card { padding: 16px; }
-  .demo-head-title h3 { font-size: 1rem; }
-  .kpi-row { grid-template-columns: 28px minmax(0, 1fr); gap: 6px 12px; padding: 18px; }
-  .kpi-index { grid-row: 1 / 3; align-self: start; padding-top: 3px; }
-  .kpi-name { font-size: 0.92rem; }
-  .kpi-source { grid-column: 2; width: fit-content; margin-top: 4px; }
+  .opportunities-section .row { grid-template-columns: 1fr; gap: 12px; }
+  .nexo-card { position: relative; padding: 20px 20px 20px 78px; }
+  .nexo-card-icon { position: absolute; top: 20px; left: 18px; margin: 0; }
+  .nexo-card h3 { font-size: 1.02rem; }
+  .nexo-card p { font-size: 0.94rem; }
+  .flow-card { padding-left: 64px; padding-bottom: 30px; }
+  .flow-card:last-child { padding-bottom: 20px; }
+  .process-layout { gap: 40px; }
+  .process-note { padding: 14px 16px; }
+  .mockup, .dashboard-demo { padding: 14px; }
+  .mockup-head, .demo-head { flex-direction: column; gap: 12px; }
+  .kpi-tile { padding: 14px 16px; }
+  .summary-chart-card, .mockup-list, .demo-chart-card { padding: 12px; }
+  .kpi-row { grid-template-columns: 24px minmax(0, 1fr); gap: 6px 16px; padding: 18px; }
+  .kpi-index { grid-row: 1 / 3; align-self: start; padding-top: 4px; }
+  .kpi-source { grid-column: 2; margin-top: 4px; }
   .indicator-note { font-size: 0.82rem; }
+  .review-carousel { padding: 24px 20px; }
+  .review-cta .btn-nexo { font-size: 0.86rem; }
   .report-blocks { grid-template-columns: 1fr; gap: 12px; }
   .report-block { padding: 20px; }
-  .review-carousel { padding: 24px 20px; }
-  .review-card blockquote { font-size: 1rem; }
-  .plan { padding: 32px 22px 24px; }
+  .plan { padding: 32px 22px 26px; }
+  .plan-availability .btn-nexo { display: flex; min-width: 0; width: 100%; margin: 12px 0; }
+  .final-section { padding: 52px 0; }
   .cta-final { padding: 40px 22px; }
-  .cta-final h2 { font-size: clamp(1.8rem, 1.2rem + 3vw, 2.25rem); }
+  .cta-final h2 { font-size: clamp(1.8rem, 7.6vw, 2.1rem); line-height: 1.15; }
+  .cta-final p { font-size: 1rem; line-height: 1.6; }
+  .cta-buttons { gap: 10px; }
   .cta-buttons .btn-nexo { width: 100%; white-space: normal; }
-  .footer-grid { grid-template-columns: 1fr; gap: 28px; }
-  .nexo-footer { margin-top: 32px; padding-top: 44px; }
-  .footer-bottom { margin-top: 28px; }
-  .process-note { padding: 16px 18px; }
-}
-@media (max-width: 575px) {
-  .nexo-header .brand-text .b2 { display: none; }
+  .cta-final > .commercial-note { font-size: 0.84rem; }
+  .footer-grid { grid-template-columns: 1fr; gap: 24px; }
+  .nexo-footer { padding-top: 40px; }
+  .footer-brand p { max-width: 100%; }
+  .footer-col ul { gap: 0 24px; }
+  .footer-bottom { margin-top: 24px; padding-top: 16px; }
 }
 @media (max-width: 480px) {
   .motion-demo-toggle { bottom: 10px; font-size: 0.76rem; padding: 8px 10px; }
@@ -1012,7 +639,6 @@ section { padding: 88px 0; position: relative; }
   *, *::before, *::after { scroll-behavior: auto !important; animation: none !important; transition: none !important; }
 }
 @media (forced-colors: active) {
-  .btn-nexo, .landing-menu-toggle, .motion-demo-toggle, .motion-demo-fullscreen,
-  .motion-demo-sound-enable, .review-controls button { border: 1px solid ButtonText; }
+  .btn-nexo, .landing-menu-toggle, .motion-demo-toggle, .motion-demo-fullscreen, .motion-demo-sound-enable, .review-controls button { border: 1px solid ButtonText; }
   :focus-visible { outline: 3px solid Highlight; }
 }
