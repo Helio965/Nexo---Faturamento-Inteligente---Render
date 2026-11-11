@@ -14,6 +14,8 @@ import unittest
 from flask import Blueprint, Flask, render_template
 from werkzeug.serving import make_server, WSGIRequestHandler
 
+from tests.test_contratos_navegador import _copias_locais_da_cdn
+
 try:
     from playwright.sync_api import sync_playwright
 except ImportError:
@@ -49,6 +51,7 @@ class LandingVideoCommercialTests(unittest.TestCase):
         cls.addClassCleanup(cls.pw.stop)
         cls.browser = cls.pw.chromium.launch(executable_path=os.environ.get("NEXO_TEST_CHROMIUM") or None)
         cls.addClassCleanup(cls.browser.close)
+        cls.cdn_local = _copias_locais_da_cdn()
 
     def page(self, *, width=1440, reduced_motion="reduce", fail_media=False):
         context = self.browser.new_context(viewport={"width": width, "height": 900},
@@ -66,7 +69,12 @@ class LandingVideoCommercialTests(unittest.TestCase):
                 else:
                     request.continue_()
             elif "/bootstrap@5.3.3/dist/css/bootstrap.min.css" in url:
-                request.continue_()
+                copy = self.cdn_local.get(url)
+                if copy:
+                    path, content_type = copy
+                    request.fulfill(status=200, path=path, content_type=content_type)
+                else:
+                    request.continue_()
             else:
                 request.abort()
 
