@@ -9,7 +9,7 @@ e evita espalhar os.environ.get() pelo código.
 import os
 from datetime import timedelta
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+from database_urls import normalize_postgres_url
 
 from dotenv import load_dotenv
 from dataclasses import asdict
@@ -23,26 +23,11 @@ BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
 
 
-# Query params que alguns provedores (Prisma/Supabase) anexam à URL mas que o
-# psycopg2/SQLAlchemy NÃO reconhecem — passá-los adiante quebra a conexão com
-# "invalid connection option". São removidos antes de entregar a URL ao engine.
-_PARAMS_PG_INCOMPATIVEIS = {"pgbouncer", "connection_limit", "pool_timeout", "schema"}
-
-
 def _limpar_url_pg(url: str) -> str:
-    """Remove de uma URL Postgres os query params que o psycopg2 não aceita."""
-    if not url:
+    """Normaliza Postgres pelo mesmo parser seguro usado na preparação."""
+    if not url or not url.lstrip(" \t\r\n'\"").lower().startswith("postgres"):
         return url
-    parts = urlsplit(url)
-    if not parts.scheme.startswith("postgres"):
-        return url
-    query = [
-        (k, v) for k, v in parse_qsl(parts.query, keep_blank_values=True)
-        if k.lower() not in _PARAMS_PG_INCOMPATIVEIS
-    ]
-    # Explicita o driver instalado: SQLAlchemy 2.1 passou a preferir psycopg 3.
-    scheme = "postgresql+psycopg2" if parts.scheme in {"postgres", "postgresql"} else parts.scheme
-    return urlunsplit((scheme, parts.netloc, parts.path, urlencode(query), parts.fragment))
+    return normalize_postgres_url(url)
 
 
 def _resolve_database_uri() -> str:
@@ -51,8 +36,8 @@ def _resolve_database_uri() -> str:
     absoluto baseado em BASE_DIR. Para Postgres, remove params incompatíveis
     (ex.: ?pgbouncer=true) antes de entregar ao SQLAlchemy.
     """
-    raw = os.environ.get("DATABASE_URL", "").strip()
-    if not raw:
+    raw = os.environ.get("DATABASE_URL", "")
+    if not raw.strip():
         # Sem env: usa o default absoluto.
         return f"sqlite:///{(BASE_DIR / 'instance' / 'nexo_mvp.db').as_posix()}"
     if raw == "sqlite:///:memory:":
@@ -107,8 +92,8 @@ def _resolve_direct_uri() -> str:
     No Supabase, migrações devem usar a conexão direta, não o PgBouncer (6543).
     Cai na URI principal se DIRECT_URL não estiver definida.
     """
-    raw = os.environ.get("DIRECT_URL", "").strip()
-    return _limpar_url_pg(raw) if raw else _resolve_database_uri()
+    raw = os.environ.get("DIRECT_URL", "")
+    return _limpar_url_pg(raw) if raw.strip() else _resolve_database_uri()
 
 
 class Config:
