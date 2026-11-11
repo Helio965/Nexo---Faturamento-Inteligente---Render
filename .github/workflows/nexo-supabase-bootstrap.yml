@@ -1,0 +1,158 @@
+name: NEXO - Preparar novo Supabase (manual)
+
+# Rotina excepcional de primeira instalação. Nunca roda em push/PR ou deploy.
+on:
+  workflow_dispatch:
+    inputs:
+      confirmacao:
+        description: "Digite PREPARAR_NEXO para iniciar a instalação no Supabase novo"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nexo-supabase-bootstrap
+  cancel-in-progress: false
+
+jobs:
+  preparar:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FLASK_ENV: production
+      NEXO_PUBLIC_URL: https://nexo-faturamento-inteligente-render.onrender.com
+      PGSSLMODE: require
+      DATABASE_URL: ${{ secrets.NEXO_BOOTSTRAP_DATABASE_URL }}
+      DIRECT_URL: ${{ secrets.NEXO_BOOTSTRAP_DIRECT_URL }}
+      ADMIN_EMAIL: ${{ secrets.NEXO_BOOTSTRAP_ADMIN_EMAIL }}
+      ADMIN_SENHA: ${{ secrets.NEXO_BOOTSTRAP_ADMIN_SENHA }}
+      ADMIN_NOME: Administrador NEXO
+
+    steps:
+      - name: Exigir confirmação explícita e credenciais configuradas
+        shell: bash
+        env:
+          CONFIRMACAO: ${{ inputs.confirmacao }}
+        run: |
+          if [[ "$CONFIRMACAO" != "PREPARAR_NEXO" ]]; then
+            echo "::error::Confirmação inválida. Use PREPARAR_NEXO."
+            exit 1
+          fi
+          for key in DATABASE_URL DIRECT_URL ADMIN_EMAIL ADMIN_SENHA; do
+            if [[ -z "${!key}" ]]; then
+              echo "::error::Secret de instalação ausente para $key."
+              exit 1
+            fi
+          done
+
+      - name: Obter código aprovado da branch main
+        uses: actions/checkout@v4
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependências oficiais do projeto
+        run: python -m pip install -r requirements.txt
+
+      - name: Gerar chave efêmera de sessão, apenas para esta execução
+        shell: bash
+        run: |
+          echo "SECRET_KEY=$(python -c 'import secrets; print(secrets.token_hex(32))')" >> "$GITHUB_ENV"
+
+      - name: Confirmar projeto, portas, TLS e estado inicial (somente leitura)
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from urllib.parse import urlsplit, parse_qs, unquote
+          from sqlalchemy import create_engine, text
+
+          expected_user = "postgres.mgjdsbcohboxzcbicbuc"
+          expected_host = "aws-0-us-west-2.pooler.supabase.com"
+          for key, expected_port in (("DATABASE_URL", 6543), ("DIRECT_URL", 5432)):
+              value = os.environ[key]
+              parsed = urlsplit(value)
+              params = parse_qs(parsed.query)
+              valid = (
+                  parsed.scheme in ("postgres", "postgresql", "postgresql+psycopg2")
+                  and parsed.hostname == expected_host
+                  and parsed.port == expected_port
+                  and unquote(parsed.username or "") == expected_user
+                  and parsed.path == "/postgres"
+                  and bool(parsed.password)
+                  and params.get("sslmode", ["require"])[0] in ("require", "verify-ca", "verify-full")
+              )
+              if not valid:
+                  raise SystemExit(f"{key} não corresponde ao projeto e método esperados; nada foi modificado.")
+              print(f"{key}: projeto, pooler, porta e TLS validados.")
+
+          engine = create_engine(os.environ["DIRECT_URL"], connect_args={"connect_timeout": 15})
+          try:
+              with engine.connect() as conn:
+                  tables = set(conn.execute(text(
+                      "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'"
+                  )).scalars())
+          finally:
+              engine.dispose()
+          if tables and "alembic_version" not in tables:
+              raise SystemExit(
+                  "O esquema public não está vazio e não possui alembic_version. "
+                  "Interrompido para proteger dados pré-existentes."
+              )
+          print("Conexão de migração válida; estrutura inicial verificada sem alterações.")
+          PY
+
+      - name: Aplicar migrações existentes do GitHub ao novo banco
+        env:
+          NEXO_DB_DIRECT: "1"
+        shell: bash
+        run: |
+          python -m flask --app app:create_app db heads
+          python -m flask --app app:create_app db upgrade
+          python -m flask --app app:create_app db current
+
+      - name: Preparar planos, segmentos e administrador inicial
+        env:
+          NEXO_DB_DIRECT: "0"
+        shell: bash
+        run: |
+          # Não imprimir e-mail ou hashes de senha em logs públicos.
+          python seed.py > /dev/null
+          echo "Seed inicial executado."
+
+      - name: Validar tabelas, revisão e administrador (somente leitura)
+        env:
+          NEXO_DB_DIRECT: "0"
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from sqlalchemy import text
+          from app import create_app
+          from extensions import db
+
+          app = create_app("production")
+          with app.app_context():
+              with db.engine.connect() as conn:
+                  tables = set(conn.execute(text(
+                      "SELECT tablename FROM pg_catalog.pg_tables WHERE schemaname = 'public'"
+                  )).scalars())
+                  required = {"alembic_version", "plano", "segmento", "usuario", "empresa", "analise"}
+                  if not required.issubset(tables):
+                      raise SystemExit("Tabelas essenciais ausentes; preparação incompleta.")
+                  revision = conn.execute(text("SELECT version_num FROM public.alembic_version")).scalar()
+                  admins = conn.execute(
+                      text("SELECT count(*) FROM public.usuario WHERE email = :email AND role = 'ADMIN'"),
+                      {"email": os.environ["ADMIN_EMAIL"]},
+                  ).scalar()
+                  plans = conn.execute(text("SELECT count(*) FROM public.plano")).scalar()
+                  if not revision or admins != 1 or plans < 3:
+                      raise SystemExit("Revisão, planos ou administrador não foram validados.")
+                  print(f"Banco NEXO preparado: {len(tables)} tabelas, migração {revision}, planos e ADMIN confirmados.")
+          PY
