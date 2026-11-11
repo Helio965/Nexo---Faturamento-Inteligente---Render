@@ -77,19 +77,38 @@ jobs:
           expected_host = "aws-0-us-west-2.pooler.supabase.com"
           for key, expected_port in (("DATABASE_URL", 6543), ("DIRECT_URL", 5432)):
               value = os.environ[key]
-              parsed = urlsplit(value)
+              # Informar SOMENTE nomes de campos inválidos: nunca exibir credenciais,
+              # a URL ou trechos do usuário/host provenientes dos Secrets.
+              try:
+                  parsed = urlsplit(value)
+                  host = parsed.hostname
+                  port = parsed.port
+                  user = unquote(parsed.username or "")
+                  password = parsed.password or ""
+              except ValueError:
+                  raise SystemExit(
+                      f"{key}: sintaxe da URI inválida (confira colchetes e porta). "
+                      "Nenhum dado foi modificado."
+                  ) from None
               params = parse_qs(parsed.query)
-              valid = (
-                  parsed.scheme in ("postgres", "postgresql", "postgresql+psycopg2")
-                  and parsed.hostname == expected_host
-                  and parsed.port == expected_port
-                  and unquote(parsed.username or "") == expected_user
-                  and parsed.path == "/postgres"
-                  and bool(parsed.password)
-                  and params.get("sslmode", ["require"])[0] in ("require", "verify-ca", "verify-full")
-              )
-              if not valid:
-                  raise SystemExit(f"{key} não corresponde ao projeto e método esperados; nada foi modificado.")
+              checks = {
+                  "esquema postgresql://": parsed.scheme in ("postgres", "postgresql", "postgresql+psycopg2"),
+                  "usuário do projeto": user == expected_user,
+                  "host do pooler": host == expected_host,
+                  f"porta {expected_port}": port == expected_port,
+                  "caminho /postgres": parsed.path == "/postgres",
+                  "senha real, sem marcador [YOUR-PASSWORD]": bool(password) and password != "[YOUR-PASSWORD]",
+                  "SSL (sslmode válido)": params.get("sslmode", ["require"])[0] in ("require", "verify-ca", "verify-full"),
+                  "ausência de espaços ou aspas extras": value == value.strip() and not value.startswith(("'", '"')) and not value.endswith(("'", '"')),
+                  "ausência de fragmento # não codificado": not parsed.fragment,
+              }
+              invalid = [name for name, ok in checks.items() if not ok]
+              if invalid:
+                  print(f"::error::{key}: campos inválidos: {', '.join(invalid)}.")
+                  raise SystemExit(
+                      f"{key} não corresponde ao projeto e método esperados; "
+                      "corrija somente os campos indicados. Nenhum dado foi modificado."
+                  )
               print(f"{key}: projeto, pooler, porta e TLS validados.")
 
           engine = create_engine(os.environ["DIRECT_URL"], connect_args={"connect_timeout": 15})
