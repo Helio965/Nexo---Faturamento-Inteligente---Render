@@ -6,6 +6,7 @@ amostras do módulo. Habilitado por NEXO_TEST_BROWSER=1, como em tests/test_over
 
 from datetime import date, datetime, timezone
 import unittest
+from unittest.mock import patch
 
 from tests.test_overflow_navegador import NavegadorCase, _BROWSER
 from tests.test_tema_navegador import _CONTRASTE
@@ -93,7 +94,7 @@ class ConfiguracoesNavegadorTests(NavegadorCase):
         for tema in ("dark", "light"):
             for email, caminhos in telas.items():
                 pagina = self._sessao(email, tema=tema, largura=320, altura=700)
-                for largura in (320, 390):
+                for largura in (320, 390, 768, 1024, 1366):
                     pagina.set_viewport_size({"width": largura, "height": 700})
                     for caminho in caminhos:
                         self.ir(pagina, caminho)
@@ -102,6 +103,50 @@ class ConfiguracoesNavegadorTests(NavegadorCase):
                             return document.documentElement.scrollWidth - window.innerWidth; }""")
                         with self.subTest(tema=tema, largura=largura, caminho=caminho):
                             self.assertLessEqual(sobra, 0)
+                pagina.context.close()
+
+    def test_seletor_nao_envia_formularios_nem_depende_das_migracoes_de_configuracoes(self):
+        # Simula o estado de disponibilidade usado pelos templates; nenhum banco externo é acessado.
+        with patch("configuracoes_conta.esquema_configuracoes_disponivel", return_value=False):
+            for email, caminho, formulario in ((CLIENTE, PAGINA_CLIENTE, "form[action$='/configuracoes/preferencias']"),
+                                               (ADMIN, "/admin/configuracoes", "form[action$='/configuracoes/copia-suporte']")):
+                pagina = self._sessao(email)
+                self.ir(pagina, caminho)
+                self.assertTrue(pagina.is_disabled(formulario + " button[type=submit]"))
+                posts = self._posts(pagina)
+                pagina.evaluate("window.__mesmaPagina = true")
+                for modo in ("light", "dark", "system"):
+                    botao = pagina.locator(f'[data-theme-preference="{modo}"]')
+                    self.assertTrue(botao.is_enabled())
+                    self.assertEqual(botao.get_attribute("type"), "button")
+                    self.assertFalse(botao.evaluate("e => !!e.closest('form')"))
+                    botao.click()
+                    self.assertEqual(botao.get_attribute("aria-pressed"), "true")
+                    self.assertEqual(pagina.evaluate("localStorage.getItem('theme')"), modo)
+                self.assertEqual(posts, [])
+                self.assertTrue(pagina.evaluate("window.__mesmaPagina === true"))
+                pagina.context.close()
+
+    def test_seletor_tem_tres_botoes_horizontais_e_contraste_nos_dois_temas(self):
+        for email, caminho in ((CLIENTE, PAGINA_CLIENTE), (ADMIN, "/admin/configuracoes")):
+            for tema in ("dark", "light"):
+                pagina = self._sessao(email, tema=tema)
+                self.ir(pagina, caminho)
+                for largura in (320, 390, 768, 1024, 1366):
+                    pagina.set_viewport_size({"width": largura, "height": 768})
+                    medidas = pagina.locator('[data-theme-preference]').evaluate_all("""es => es.map(e => {
+                        const r = e.getBoundingClientRect(); return {x: r.x, y: r.y, direita: r.right, largura: r.width}; })""")
+                    with self.subTest(email=email, tema=tema, largura=largura):
+                        self.assertEqual(len(medidas), 3)
+                        self.assertLessEqual(max(m["y"] for m in medidas) - min(m["y"] for m in medidas), 1)
+                        self.assertEqual(sorted(m["x"] for m in medidas), [m["x"] for m in medidas])
+                        self.assertTrue(all(m["x"] >= 0 and m["direita"] <= largura and m["largura"] > 0 for m in medidas))
+                        self.assertLessEqual(pagina.evaluate("document.documentElement.scrollWidth - innerWidth"), 0)
+                for modo in ("system", "light", "dark"):
+                    seletor = f'[data-theme-preference="{modo}"]'
+                    self.assertGreaterEqual(pagina.locator(seletor).inner_text().count({"system": "Sistema", "light": "Claro", "dark": "Escuro"}[modo]), 1)
+                    for medida in pagina.evaluate(_CONTRASTE, [seletor]):
+                        self.assertGreaterEqual(medida["razao"], medida["minimo"], medida)
                 pagina.context.close()
 
     def test_nome_longo_sem_espacos_nao_cria_rolagem(self):
@@ -161,8 +206,8 @@ class ConfiguracoesNavegadorTests(NavegadorCase):
             self.ir(pagina, PAGINA_CLIENTE)
             pagina.evaluate("() => window.scrollTo(0, 500)")
             antes = pagina.evaluate(posicao)
-            pagina.evaluate("() => document.getElementById('themeToggle').focus()")
-            with self.subTest(largura=largura, foco="tema"):
+            pagina.evaluate("() => document.getElementById('bellBtn').focus()")
+            with self.subTest(largura=largura, foco="notificacoes"):
                 self.assertLessEqual(abs(pagina.evaluate(posicao) - antes), 2)
             if largura < 992:  # fechar a gaveta devolve o foco ao botão de menu, na topbar
                 pagina.evaluate("() => document.getElementById('navToggle').click()")

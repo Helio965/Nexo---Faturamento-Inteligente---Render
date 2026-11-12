@@ -14,6 +14,7 @@
 
 <nav class="config-atalhos" aria-label="Seções das configurações">
     <a href="#conta-e-email" class="btn-ghost btn-sm-x"><i class="bi bi-shield-lock" aria-hidden="true"></i> Conta e e-mail</a>
+    <a href="#aparencia" class="btn-ghost btn-sm-x"><i class="bi bi-circle-half" aria-hidden="true"></i> Aparência</a>
     <a href="#documentos-legais" class="btn-ghost btn-sm-x"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> Documentos Legais</a>
     <a href="{{ url_for('admin.termos_aceites') }}" class="btn-ghost btn-sm-x"><i class="bi bi-person-check" aria-hidden="true"></i> Auditoria de aceites</a>
 </nav>
@@ -89,6 +90,16 @@
         </div>
     </div>
 </div>
+
+<section class="config-secao" id="aparencia" aria-labelledby="titulo-aparencia">
+    <h2 class="config-secao-titulo" id="titulo-aparencia">Aparência</h2>
+    <div class="nexo-card">
+        <div class="nexo-card-head"><div><h3><i class="bi bi-circle-half text-purple" aria-hidden="true"></i> Tema</h3></div></div>
+        <div class="nexo-card-body">
+            {% include "_seletor_tema.html" %}
+        </div>
+    </div>
+</section>
 
 <div class="nexo-card" id="documentos-legais">
     <div class="nexo-card-head">

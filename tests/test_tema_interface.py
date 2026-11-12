@@ -19,7 +19,6 @@ BASE = (TEMPLATES / "base.html").read_text(encoding="utf-8")
 FOLHA = (ROOT / "static" / "css" / "nexo-tema-claro.css").read_text(encoding="utf-8")
 ESCURO = (ROOT / "static" / "css" / "nexo.css").read_text(encoding="utf-8")
 PREFIXO = 'html[data-theme="light"]'
-_BOTAO = re.compile(r'<button\b[^>]*\bid="themeToggle"[^>]*>')
 _ESTADO = re.compile(r":(hover|focus-visible|focus)\b")
 _PINTURA = {"background": "fundo", "background-color": "fundo", "color": "cor", "border-color": "borda", "box-shadow": "sombra"}
 
@@ -222,39 +221,41 @@ class TemplatesTests(unittest.TestCase):
         self.assertLess(cabeca.index("<script"), cabeca.index("<link"))
         self.assertLess(cabeca.rfind("{% if current_user.is_authenticated %}", 0, cabeca.index("<script")), cabeca.index("<script"))
         self.assertGreater(cabeca.rfind("{% if current_user.is_authenticated %}", 0, cabeca.index("<script")), -1)
-        # Lê dentro de try/catch e só aceita os dois valores; nada do valor vai para o DOM sem o teste.
-        self.assertRegex(script, r"try \{ tema = window\.localStorage\.getItem\('theme'\); \} catch")
-        self.assertIn("if (tema === 'light' || tema === 'dark') {", script)
-        self.assertIn("setAttribute('data-theme', tema)", script)
-        self.assertIn("setAttribute('data-bs-theme', tema)", script)
+        # A preferência lógica é validada e resolvida antes da primeira folha de estilo.
+        for trecho in ("localStorage.getItem('theme')", "catch", "'light'", "'dark'", "'system'",
+                       "prefers-color-scheme: dark", "setAttribute('data-theme'", "setAttribute('data-bs-theme'"):
+            self.assertIn(trecho, script)
 
     def test_nome_longo_cede_lugar_ao_titulo_da_topbar(self):
         """O limite acompanha a largura da janela: em 1366 px só os nomes enormes são cortados. O
         corte não tira as descendentes do nome que cabe, e o nome inteiro continua no title."""
         estilo = BASE[BASE.index("<style>"):BASE.index("</style>")]
-        self.assertIn(".user-meta { max-width: calc(100vw - 810px); }", estilo)
+        self.assertIn(".user-meta { max-width: calc(100vw - 756px); }", estilo)
         self.assertIn(".user-meta strong { margin: 0 -2px -2px; padding: 0 2px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }", estilo)
         self.assertIn('<strong title="{{ current_user.nome }}">{{ current_user.nome }}</strong>', BASE)
         # Vale nos dois temas: não fica na folha clara.
         self.assertNotIn(".user-meta strong", FOLHA)
 
-    def test_botao_antes_do_sino_e_sem_manipulador_inline(self):
+    def test_cabecalho_preserva_sino_e_perfil_sem_controle_de_tema(self):
         direita = BASE[BASE.index('<div class="topbar-right">'):BASE.index('<main class="page"')]
-        botao = _BOTAO.search(direita)
-        self.assertIsNotNone(botao)
-        self.assertLess(botao.start(), direita.index('id="bellBtn"'))
-        for trecho in ('type="button"', 'class="bell-btn theme-toggle"', 'aria-label="Ativar tema claro"'):
-            self.assertIn(trecho, botao.group(0))
-        self.assertIn('<i class="bi bi-sun" aria-hidden="true"></i>', direita)
-        self.assertNotRegex(botao.group(0), r"\son\w+=")
-        script = direita[direita.index("<script"):direita.index("</script>")]
-        self.assertIn('nonce="{{ csp_nonce }}"', script)
-        for trecho in ("'Ativar tema escuro'", "'bi-moon'", "'bi-sun'", "addEventListener('storage'", "'.js-plotly-plot'",
-                       "window.location.reload()", "localStorage.setItem('theme', novo)", "NEXO.definirPaleta(tema)"):
-            self.assertIn(trecho, script)
-        # Sem armazenamento (exceção ao gravar) a página alterna sem recarregar.
-        self.assertRegex(script, r"catch \(erro\) \{ gravado = false; \}")
-        self.assertIn("if (graficos.length && gravado)", script)
+        self.assertNotIn('id="themeToggle"', BASE)
+        self.assertNotIn("theme-toggle", BASE)
+        self.assertNotIn('data-theme-preference=', direita)
+        self.assertIn('id="bellBtn"', direita)
+        self.assertIn('class="user-chip"', direita)
+
+    def test_seletor_compartilhado_e_sem_manipuladores_inline(self):
+        for relativo in ("admin/configuracoes.html", "cliente/configuracoes.html"):
+            self.assertIn("seletor_tema.html", (TEMPLATES / relativo).read_text(encoding="utf-8"))
+        seletor = (TEMPLATES / "_seletor_tema.html").read_text(encoding="utf-8")
+        for modo in ("system", "light", "dark"):
+            self.assertIn(f'data-theme-preference="{modo}"', seletor)
+        self.assertEqual(seletor.count('type="button"'), 3)
+        self.assertEqual(seletor.count('aria-pressed='), 3)
+        for rotulo in ("Sistema", "Claro", "Escuro", "navegador"):
+            self.assertIn(rotulo, seletor)
+        self.assertIn('role="group"', seletor)
+        self.assertNotRegex(seletor, r"\son\w+=")
 
 
 class PaletaDosGraficosTests(unittest.TestCase):
@@ -329,7 +330,7 @@ class HtmlServidoTests(DeployTestCase):
         for caminho, status in (("/", 200), ("/como-aderir", 200), ("/auth/recuperar-senha", 200), ("/rota-inexistente", 404)):
             self.assert_sem_tema(self._pagina(caminho, status).get_data(as_text=True), caminho)
 
-    def test_com_sessao_script_com_nonce_folha_e_botao(self):
+    def test_com_sessao_script_com_nonce_folha_e_seletor_so_nas_configuracoes(self):
         for email, caminhos in (("admin-test@example.invalid", ("/admin/dashboard", "/admin/empresas", "/admin/configuracoes")),
                                 ("cliente-test@example.invalid", ("/cliente/dashboard", "/cliente/tickets", "/cliente/configuracoes"))):
             self.client = self.app.test_client()
@@ -344,8 +345,12 @@ class HtmlServidoTests(DeployTestCase):
                     self.assertIn("localStorage.getItem('theme')", cabeca)
                     self.assertLess(cabeca.index("localStorage"), cabeca.index("<link"))
                     self.assertLess(cabeca.index("/static/css/nexo.css"), cabeca.index("/static/css/nexo-tema-claro.css"))
-                    self.assertEqual(html.count('id="themeToggle"'), 1)
-                    self.assertLess(html.index('id="themeToggle"'), html.index('id="bellBtn"'))
+                    self.assertNotIn('id="themeToggle"', html)
+                    self.assertIn('id="bellBtn"', html)
+                    self.assertIn('class="user-chip"', html)
+                    for modo in ("system", "light", "dark"):
+                        self.assertEqual(html.count(f'data-theme-preference="{modo}"'),
+                                         1 if caminho.endswith("/configuracoes") else 0)
                     self.assertNotIn("<script>", html)
                     self.assertNotRegex(html, r"\son(click|submit|load|change|input)=")
 
