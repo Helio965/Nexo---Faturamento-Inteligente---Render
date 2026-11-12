@@ -657,8 +657,10 @@ class HorarioBrasiliaPostgreSQLTests(unittest.TestCase):
                 # Gravado como relógio UTC qualquer que seja o TimeZone da sessão.
                 self.assertEqual(set(dados["notificacoes_gravadas"]), utc_esperado)
                 self.assertEqual(dados["gravado_com_fuso_de_toquio"], "2026-10-29 17:34:00")
+                # O roteiro reabre o chamado após a resolução: o fechamento anterior
+                # deixa de valer, mantendo os instantes UTC de abertura/atualização.
                 self.assertEqual(dados["chamado_gravado"],
-                                 ["2026-10-29 17:34:00", "2026-10-30 01:30:00", "2026-10-29 18:27:00"])
+                                 ["2026-10-29 17:34:00", "2026-10-30 01:30:00", None])
                 # Como o código anterior gravava (pela sessão) e exibia (sem conversão):
                 # o adiantamento é o deslocamento da sessão em relação a Brasília.
                 exibido_antes, horas = antes[zona]

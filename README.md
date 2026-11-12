@@ -407,6 +407,7 @@ Template completo em [`.env.example`](.env.example).
 
 ## 📚 Documentação Complementar
 
+- **[Auditoria e integração seletiva de 11/11/2026](Docs/INTEGRACOES/NEXO_COMPARACAO_E_INTEGRACAO_2026_11_11.md)** — comparação dos dois projetos, melhorias de conta/e-mail/uploads, matriz por arquivo, testes e roteiro de implantação. Os novos planos/Raio-X ficam desativados por padrão (`NEXO_NOVOS_PLANOS_HABILITADOS=0`); sua ativação depende de revisão comercial e migrações revisadas. A landing oficial e as regras financeiras existentes foram preservadas.
 - **[`docs/RELATORIO_TECNICO.md`](docs/RELATORIO_TECNICO.md)** — relatório técnico completo (arquitetura, tecnologias, funcionalidades) com diagrama Mermaid de arquitetura/fluxo de dados e DER das 13 entidades. Referência principal para a defesa do TCC.
 - **[`docs/RELATORIO_COBERTURA_ETL.md`](docs/RELATORIO_COBERTURA_ETL.md)** — contrato de robustez do motor de ETL, taxonomia de falhas em 6 camadas, matriz de testes (layouts reais + *chaos engineering*) e decisões deliberadas de escopo.
 
