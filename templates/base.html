@@ -3,17 +3,89 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    {# Tema do portal (localStorage.theme = dark | light): só com sessão. A tela de login
-       e demais páginas públicas continuam sempre escuras. Roda antes das folhas de
-       estilo e da primeira pintura; armazenamento bloqueado ou valor inválido: escuro. #}
+    {# Tema do portal: preferência dark | light | system, apenas com sessão.
+       O mesmo mecanismo resolve a primeira pintura, os seletores e a sincronização.
+       Sem preferência válida, conserva o padrão escuro. Páginas públicas não participam. #}
     {% if current_user.is_authenticated %}
     <script nonce="{{ csp_nonce }}">
       (function () {
-        var tema = null;
-        try { tema = window.localStorage.getItem('theme'); } catch (erro) { /* bloqueado: fica no escuro */ }
-        if (tema === 'light' || tema === 'dark') {
-          document.documentElement.setAttribute('data-theme', tema);
-          document.documentElement.setAttribute('data-bs-theme', tema);
+        var raiz = document.documentElement;
+        var preferencia = 'dark';
+        var sistema = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+        function normalizar(valor) {
+          return valor === 'light' || valor === 'system' ? valor : 'dark';
+        }
+        function preferenciaSalva() {
+          try { return normalizar(window.localStorage.getItem('theme')); }
+          catch (erro) { return preferencia; }
+        }
+        function preferenciaPersistida(valor) {
+          try { return normalizar(window.localStorage.getItem('theme')) === (valor || preferencia); }
+          catch (erro) { return false; }
+        }
+        function resolver(valor) {
+          return valor === 'system' ? (sistema && !sistema.matches ? 'light' : 'dark') : valor;
+        }
+        function refletir() {
+          document.querySelectorAll('button[data-theme-preference]').forEach(function (botao) {
+            botao.setAttribute('aria-pressed', String(botao.getAttribute('data-theme-preference') === preferencia));
+          });
+        }
+        function aplicar(valor, persistida) {
+          preferencia = normalizar(valor);
+          var tema = resolver(preferencia);
+          var mudou = raiz.getAttribute('data-theme') !== tema;
+          var graficos = document.querySelectorAll('.js-plotly-plot');
+          refletir();
+          /* Conserva o redesenho existente dos gráficos, só se a paleta mudou e a
+             preferência pode ser recuperada. Configurações não precisam recarregar. */
+          if (mudou && graficos.length && persistida) { window.location.reload(); return; }
+          raiz.setAttribute('data-theme', tema);
+          raiz.setAttribute('data-bs-theme', tema);
+          if (!graficos.length) {
+            /* A CDN pode ainda estar carregando: os próximos gráficos usam esta paleta. */
+            if (window.NEXO && NEXO.definirPaleta) NEXO.definirPaleta(tema);
+          } else if (window.NEXO) {
+            /* Sem armazenamento, recarregar perderia a escolha. Mantém os gráficos
+               legíveis sobre o fundo da paleta em que foram desenhados, como antes. */
+            graficos.forEach(function (grafico) {
+              var diferente = tema !== NEXO.tema;
+              grafico.style.backgroundColor = diferente ? (NEXO.tema === 'dark' ? '#140f27' : '#ffffff') : '';
+              grafico.style.borderRadius = diferente ? '12px' : '';
+            });
+          }
+        }
+        aplicar(preferenciaSalva(), false);
+        /* Delegação já ativa enquanto o HTML e as bibliotecas terminam de carregar. */
+        document.addEventListener('click', function (evento) {
+          var botao = evento.target.closest('button[data-theme-preference]');
+          if (!botao) return;
+          var nova = normalizar(botao.getAttribute('data-theme-preference'));
+          var persistida = false;
+          try { window.localStorage.setItem('theme', nova); persistida = true; }
+          catch (erro) { /* A escolha continua valendo nesta página. */ }
+          aplicar(nova, persistida);
+        });
+        document.addEventListener('nexo:tema-seletor', refletir);
+        document.addEventListener('DOMContentLoaded', refletir);
+        window.addEventListener('storage', function (evento) {
+          if (evento.key !== 'theme' && evento.key !== null) return;
+          try { if (evento.storageArea && evento.storageArea !== window.localStorage) return; }
+          catch (erro) { return; }
+          aplicar(evento.key === null ? preferenciaSalva() : evento.newValue, true);
+        });
+        window.addEventListener('pageshow', function (evento) {
+          if (evento.persisted) {
+            var salvo = preferenciaSalva();
+            aplicar(salvo, preferenciaPersistida(salvo));
+          }
+        });
+        function sistemaMudou() {
+          if (preferencia === 'system') aplicar(preferencia, preferenciaPersistida());
+        }
+        if (sistema) {
+          if (sistema.addEventListener) sistema.addEventListener('change', sistemaMudou);
+          else if (sistema.addListener) sistema.addListener(sistemaMudou);
         }
       })();
     </script>
@@ -36,17 +108,11 @@
     {% if current_user.is_authenticated %}
     {# Tema claro: só atua com <html data-theme="light"> (ver o script do início do <head>). #}
     <link href="{{ url_for('static', filename='css/nexo-tema-claro.css') }}" rel="stylesheet">
-    {# Abaixo de 390 px o avatar da topbar (sem ação; o usuário também aparece na gaveta do
-       menu) cede lugar ao botão de tema, para o título da página não ser cortado. Vale nos
-       dois temas, por isso não fica na folha clara.
-       No desktop o botão também toma largura do título: um nome muito longo é que cede, e
-       só quando o maior título do portal não caberia. 810 px = o resto da topbar (538), a
-       barra de rolagem (até 17) e esse título (cerca de 255 na Inter). A folga de 2 px
-       (padding e margem negativa) impede o corte de tirar as descendentes do nome que cabe;
-       o nome inteiro fica no title, porque a sidebar também o corta. #}
+    {# Sem o botão de tema, o avatar permanece visível também no celular estreito.
+       No desktop, nomes longos cedem espaço ao título; o nome completo fica no title.
+       O limite anterior reservava 54 px adicionais para o controle removido. #}
     <style>
-      @media (max-width: 389.98px) { .topbar-right .user-chip { display: none; } }
-      .user-meta { max-width: calc(100vw - 810px); }
+      .user-meta { max-width: calc(100vw - 756px); }
       .user-meta strong { margin: 0 -2px -2px; padding: 0 2px 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     </style>
     {% endif %}
@@ -154,81 +220,6 @@
             </button>
             <div class="topbar-title"><small>{{ 'Administração' if current_user.is_admin else 'Minha empresa' }}</small>{% block page_title %}NEXO{% endblock %}</div>
             <div class="topbar-right">
-                {# ---------------- Tema claro/escuro ---------------- #}
-                <button type="button" id="themeToggle" class="bell-btn theme-toggle" aria-label="Ativar tema claro" title="Ativar tema claro">
-                    <i class="bi bi-sun" aria-hidden="true"></i>
-                </button>
-                <script nonce="{{ csp_nonce }}">
-                  /* Logo depois do botão: o ícone e o rótulo já saem certos na primeira pintura.
-                     O tema vale entre páginas (script do <head>) e entre abas (evento storage).
-                     O Plotly desenha com as cores calculadas na chamada: com gráfico na página,
-                     a troca recarrega; sem gráfico, é instantânea. */
-                  (function () {
-                    var raiz = document.documentElement;
-                    var botao = document.getElementById('themeToggle');
-                    var icone = botao.querySelector('i');
-                    function temaAtual() { return raiz.getAttribute('data-theme') === 'light' ? 'light' : 'dark'; }
-                    function temaSalvo() {
-                      try { return window.localStorage.getItem('theme'); } catch (erro) { return null; }
-                    }
-                    function refletir() {
-                      var claro = temaAtual() === 'light';
-                      var rotulo = claro ? 'Ativar tema escuro' : 'Ativar tema claro';
-                      botao.setAttribute('aria-label', rotulo);
-                      botao.setAttribute('title', rotulo);
-                      icone.className = 'bi ' + (claro ? 'bi-moon' : 'bi-sun');
-                    }
-                    function aplicar(tema, gravado) {
-                      var graficos = document.querySelectorAll('.js-plotly-plot');
-                      if (graficos.length && gravado) { window.location.reload(); return; }
-                      raiz.setAttribute('data-theme', tema);
-                      raiz.setAttribute('data-bs-theme', tema);
-                      refletir();
-                      /* Página ainda carregando (CDN lenta), nada desenhado: os gráficos que vierem
-                         já saem na paleta do tema novo, sem recarregar. */
-                      if (!graficos.length) {
-                        if (window.NEXO && NEXO.definirPaleta) NEXO.definirPaleta(tema);
-                        return;
-                      }
-                      /* Sem armazenamento a recarga perderia a escolha: a página alterna sem
-                         recarregar e os gráficos ficam com a paleta em que foram desenhados, sobre
-                         um fundo dessa paleta, para continuarem legíveis. */
-                      graficos.forEach(function (grafico) {
-                        var diferente = tema !== NEXO.tema;
-                        grafico.style.backgroundColor = diferente ? (NEXO.tema === 'dark' ? '#140f27' : '#ffffff') : '';
-                        grafico.style.borderRadius = diferente ? '12px' : '';
-                      });
-                    }
-                    botao.addEventListener('click', function () {
-                      var novo = temaAtual() === 'light' ? 'dark' : 'light';
-                      var gravado = true;
-                      try { window.localStorage.setItem('theme', novo); } catch (erro) { gravado = false; }
-                      /* Pelo teclado, o foco volta ao botão depois da recarga. */
-                      try {
-                        if (gravado && botao.matches(':focus-visible') && document.querySelector('.js-plotly-plot')) window.sessionStorage.setItem('themeFoco', '1');
-                      } catch (erro) { /* sem foco de volta */ }
-                      aplicar(novo, gravado);
-                    });
-                    /* Outra aba trocou o tema (evento só dispara com armazenamento disponível). */
-                    window.addEventListener('storage', function (evento) {
-                      if (evento.key !== 'theme' && evento.key !== null) return;
-                      var novo = (evento.key === 'theme' && evento.newValue === 'light') ? 'light' : 'dark';
-                      if (novo !== temaAtual()) aplicar(novo, true);
-                    });
-                    /* Página restaurada do cache de navegação (voltar/avançar). */
-                    window.addEventListener('pageshow', function (evento) {
-                      var salvo = temaSalvo();
-                      if (evento.persisted && (salvo === 'light' || salvo === 'dark') && salvo !== temaAtual()) aplicar(salvo, true);
-                    });
-                    refletir();
-                    try {
-                      if (window.sessionStorage.getItem('themeFoco')) {
-                        window.sessionStorage.removeItem('themeFoco');
-                        botao.focus({ preventScroll: true });
-                      }
-                    } catch (erro) { /* bloqueado: segue sem restaurar o foco */ }
-                  })();
-                </script>
                 {# ---------------- Sininho de notificações ---------------- #}
                 <div class="dropdown nexo-bell">
                     {% set _c = notif_nao_lidas or 0 %}
@@ -629,8 +620,8 @@
       window.NEXO = window.NEXO || {};
       /* Respeita "reduzir movimento" do sistema nas animações dos gráficos. */
       NEXO.reduzMovimento = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
-      /* Paleta dos gráficos conforme o tema lido no carregamento. O botão de tema recarrega
-         a página que já tem gráfico; antes do primeiro desenho ele só chama esta função.
+      /* Paleta dos gráficos conforme o tema lido no carregamento. Uma mudança de paleta
+         recarrega a página que já tem gráfico; antes do primeiro desenho só chama esta função.
          Texto e contorno em chaves próprias: no claro, o âmbar de texto e o contorno de
          marcador são outros tons. */
       NEXO.definirPaleta = function (tema) {

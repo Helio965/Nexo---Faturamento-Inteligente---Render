@@ -1,8 +1,9 @@
-"""Tema claro/escuro em navegador real (Chromium via Playwright), com a CSP real do servidor.
+"""Temas Claro, Escuro e Sistema em Chromium via Playwright, com a CSP real do servidor.
 
 Alternar persiste entre páginas e após recarga; o <html> já está no tema antes da primeira
 pintura, sem clique; sem violação de CSP nem erro no console; localStorage bloqueado não quebra
-e o botão ainda alterna a página atual; valor inválido é ignorado; a tela de login continua
+e o seletor ainda altera a página atual; Sistema acompanha o SO e preserva a opção lógica;
+valor inválido é ignorado; a tela de login continua
 escura com theme=light guardado; sem rolagem horizontal em 320 px no claro; amostras principais
 passam o contraste AA, compondo os fundos semitransparentes; o indicador de foco passa 3:1 contra
 os pixels reais em volta dele; alternar antes de os gráficos serem desenhados (CDN lenta) não
@@ -40,12 +41,11 @@ _RELOGIO_DO_TEMA = """(function () {
         if (document.body && window.__temaAoNascerBody === null) window.__temaAoNascerBody = raiz.getAttribute('data-theme');
     }).observe(document, {childList: true, subtree: true, attributes: true});
 })();"""
-_ESTADO = """() => { const raiz = document.documentElement, b = document.getElementById('themeToggle');
-    return {tema: raiz.getAttribute('data-theme'), bs: raiz.getAttribute('data-bs-theme'),
-            rotulo: b && b.getAttribute('aria-label'),
-            icone: b && b.querySelector('i').className}; }"""
-_CLARO = {"tema": "light", "bs": "light", "rotulo": "Ativar tema escuro", "icone": "bi bi-moon"}
-_ESCURO = {"tema": "dark", "bs": "dark", "rotulo": "Ativar tema claro", "icone": "bi bi-sun"}
+_ESTADO = """() => { const raiz = document.documentElement;
+    return {tema: raiz.getAttribute('data-theme'), bs: raiz.getAttribute('data-bs-theme')}; }"""
+_CLARO = {"tema": "light", "bs": "light"}
+_ESCURO = {"tema": "dark", "bs": "dark"}
+_SELETOR = '[data-theme-preference="%s"]'
 # Compõe os fundos semitransparentes até o opaco; um gradiente no caminho fica registrado.
 _CONTRASTE = """(seletores) => {
     const cor = s => { const m = s.match(/rgba?\\(([^)]+)\\)/); if (!m) return {r: 0, g: 0, b: 0, a: 0};
@@ -106,8 +106,10 @@ def _razao_pixels(a, b):
 
 @unittest.skipUnless(_BROWSER, "Defina NEXO_TEST_BROWSER=1 e instale o Playwright para os testes de navegador.")
 class TemaNavegadorTests(NavegadorCase):
-    def _sessao(self, email, tema=None, largura=1366, altura=768, antes=None):
+    def _sessao(self, email, tema=None, largura=1366, altura=768, antes=None, esquema=None):
         pagina = self.abrir(largura, altura)
+        if esquema:
+            pagina.emulate_media(color_scheme=esquema)
         for script in antes or ():
             pagina.add_init_script(script)
         pagina.goto(self.base + "/auth/login", wait_until="load")
@@ -132,74 +134,86 @@ class TemaNavegadorTests(NavegadorCase):
             pagina.wait_for_timeout(50)
         self.fail(f"não aconteceu: {expressao}")
 
+    def _configuracoes(self, pagina, email=CLIENTE):
+        self.ir(pagina, "/admin/configuracoes" if email == ADMIN else "/cliente/configuracoes")
+
+    def _escolher(self, pagina, modo):
+        pagina.click(_SELETOR % modo)
+
+    def _selecionado(self, pagina):
+        return pagina.locator('[data-theme-preference][aria-pressed="true"]').get_attribute("data-theme-preference")
+
+    def _outra_aba(self, pagina, email=CLIENTE):
+        outra = pagina.context.new_page()
+        outra.on("pageerror", lambda erro: self.erros_js.append(f"outra aba: {erro}"))
+        outra.route("**/*", self._rota)
+        self._configuracoes(outra, email)
+        return outra
+
     def test_alternar_persiste_entre_paginas_e_apos_recarga(self):
-        pagina = self._sessao(CLIENTE)
-        self.ir(pagina, "/cliente/historico")
-        self.assertEqual(self._estado(pagina), _ESCURO)
-        # Sem gráfico a troca é instantânea: a página não recarrega.
-        pagina.evaluate("window.__mesmaPagina = true")
-        pagina.click("#themeToggle")
-        self.assertEqual(self._estado(pagina), _CLARO)
-        self.assertTrue(pagina.evaluate("window.__mesmaPagina === true"))
-        self.assertEqual(pagina.evaluate("localStorage.getItem('theme')"), "light")
-        self.ir(pagina, "/cliente/tickets")
-        self.assertEqual(self._estado(pagina), _CLARO)
-        pagina.reload(wait_until="load")
-        self.assertEqual(self._estado(pagina), _CLARO)
-        pagina.click("#themeToggle")
-        self.assertEqual(self._estado(pagina), _ESCURO)
-        self.assertEqual(pagina.evaluate("localStorage.getItem('theme')"), "dark")
-        self.ir(pagina, "/cliente/guia")
-        self.assertEqual(self._estado(pagina), _ESCURO)
-        # Voltar/avançar pelo cache de navegação: a página restaurada segue o valor guardado.
-        pagina.evaluate("""() => { localStorage.setItem('theme', 'light');
-            window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true})); }""")
-        self.assertEqual(self._estado(pagina), _CLARO)
+        for email, prefixo in ((CLIENTE, "/cliente"), (ADMIN, "/admin")):
+            pagina = self._sessao(email)
+            self._configuracoes(pagina, email)
+            self.assertEqual(self._estado(pagina), _ESCURO)
+            self.assertEqual(self._selecionado(pagina), "dark")
+            pagina.evaluate("window.__mesmaPagina = true")
+            self._escolher(pagina, "light")
+            self.assertEqual(self._estado(pagina), _CLARO)
+            self.assertEqual(self._selecionado(pagina), "light")
+            self.assertTrue(pagina.evaluate("window.__mesmaPagina === true"))
+            self.assertEqual(pagina.evaluate("localStorage.getItem('theme')"), "light")
+            self.ir(pagina, prefixo + "/dashboard")
+            self.assertEqual(self._estado(pagina), _CLARO)
+            pagina.reload(wait_until="load")
+            self.assertEqual(self._estado(pagina), _CLARO)
+            self._configuracoes(pagina, email)
+            self._escolher(pagina, "dark")
+            self.assertEqual(self._estado(pagina), _ESCURO)
+            self.assertEqual(self._selecionado(pagina), "dark")
+            self.assertEqual(pagina.evaluate("localStorage.getItem('theme')"), "dark")
+            pagina.evaluate("""() => { localStorage.setItem('theme', 'light');
+                window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true})); }""")
+            self.assertEqual(self._estado(pagina), _CLARO)
+            self.assertEqual(self._selecionado(pagina), "light")
+            pagina.context.close()
 
-    def test_teclado_alterna_o_tema(self):
-        pagina = self._sessao(ADMIN)
-        self.ir(pagina, "/admin/empresas")
-        pagina.keyboard.press("Tab")
-        pagina.focus("#themeToggle")
-        pagina.keyboard.press("Enter")
-        self.assertEqual(self._estado(pagina), _CLARO)
-        pagina.keyboard.press("Space")
-        self.assertEqual(self._estado(pagina), _ESCURO)
-        self.assertEqual(pagina.evaluate("document.activeElement.id"), "themeToggle")
-        # Sem recarga, a página seguinte não rouba o foco para o botão.
-        self.ir(pagina, "/admin/lixeira")
-        self.assertNotEqual(pagina.evaluate("document.activeElement.id"), "themeToggle")
-        # Com gráfico a página recarrega: pelo teclado, o foco volta ao botão.
-        self.ir(pagina, "/admin/dashboard")
-        pagina.wait_for_selector(".js-plotly-plot")
-        pagina.keyboard.press("Tab")
-        pagina.focus("#themeToggle")
-        with pagina.expect_navigation(wait_until="load"):
-            pagina.keyboard.press("Enter")
-        self.assertEqual(self._estado(pagina), _CLARO)
-        self.assertEqual(pagina.evaluate("document.activeElement.id"), "themeToggle")
+    def test_teclado_altera_o_tema_e_exibe_foco_nas_configuracoes(self):
+        for email in (ADMIN, CLIENTE):
+            pagina = self._sessao(email)
+            self._configuracoes(pagina, email)
+            pagina.keyboard.press("Tab")
+            pagina.focus(_SELETOR % "system")
+            for modo, tecla in (("system", "Enter"), ("light", "Space"), ("dark", "Enter")):
+                pagina.keyboard.press(tecla)
+                self.assertEqual(self._selecionado(pagina), modo)
+                foco = pagina.evaluate("""() => { const e = document.activeElement, c = getComputedStyle(e);
+                    return {modo: e.dataset.themePreference, visivel: e.matches(':focus-visible'),
+                            estilo: c.outlineStyle, largura: parseFloat(c.outlineWidth)}; }""")
+                self.assertEqual(foco["modo"], modo)
+                self.assertTrue(foco["visivel"])
+                self.assertEqual(foco["estilo"], "solid")
+                self.assertGreaterEqual(foco["largura"], 2)
+                pagina.keyboard.press("Tab")
+            self.assertFalse(pagina.locator('[data-theme-preference]').evaluate_all(
+                "es => es.includes(document.activeElement)"))
+            self.assertEqual(pagina.locator('[data-theme-preference][aria-pressed="true"]').count(), 1)
+            pagina.context.close()
 
-    def test_pagina_com_grafico_recarrega_e_troca_a_paleta(self):
-        pagina = self._sessao(CLIENTE)
-        self.ir(pagina, "/cliente/dashboard")
-        pagina.wait_for_selector(".js-plotly-plot .xtick text")
-        self.assertEqual(self._estado(pagina), _ESCURO)
-        self.assertEqual(pagina.evaluate("NEXO.colors.textStrong"), "#ece9f8")
-        pagina.evaluate("window.__mesmaPagina = true")
-        with pagina.expect_navigation(wait_until="load"):
-            pagina.click("#themeToggle")
-        pagina.wait_for_selector(".js-plotly-plot .xtick text")
-        self.assertEqual(self._estado(pagina), _CLARO)
-        self.assertFalse(pagina.evaluate("window.__mesmaPagina === true"))
-        self.assertEqual(pagina.evaluate("NEXO.tema"), "light")
-        self.assertEqual(pagina.evaluate("NEXO.colors.textStrong"), "#1b1630")
-        # O rótulo do eixo desenhado pelo Plotly segue a paleta clara.
-        preenchimento = pagina.evaluate("getComputedStyle(document.querySelector('#chartCliente .xtick text')).fill")
-        self.assertEqual(preenchimento, "rgb(27, 22, 48)")
-        with pagina.expect_navigation(wait_until="load"):
-            pagina.click("#themeToggle")
-        self.assertEqual(self._estado(pagina), _ESCURO)
-        self.assertEqual(pagina.evaluate("NEXO.colors.textStrong"), "#ece9f8")
+    def test_pagina_com_grafico_recarrega_e_troca_a_paleta_por_outra_aba(self):
+        for email, caminho, grafico in ((CLIENTE, "/cliente/dashboard", "chartCliente"),
+                                        (CLIENTE, f"/cliente/analise/{self.analise_id}", "chartAnaliseCli"),
+                                        (ADMIN, "/admin/dashboard", "chartPlano")):
+            pagina = self._sessao(email)
+            self.ir(pagina, caminho)
+            self._conferir_grafico(pagina, grafico, "dark")
+            outra = self._outra_aba(pagina, email)
+            for novo in ("light", "dark"):
+                pagina.evaluate("window.__mesmaPagina = true")
+                with pagina.expect_navigation(wait_until="load"):
+                    self._escolher(outra, novo)
+                self._conferir_grafico(pagina, grafico, novo)
+                self.assertFalse(pagina.evaluate("window.__mesmaPagina === true"))
+            pagina.context.close()
 
     def test_tema_aplicado_antes_da_primeira_pintura_sem_clique(self):
         pagina = self._sessao(ADMIN, tema="light", antes=[_RELOGIO_DO_TEMA])
@@ -214,51 +228,116 @@ class TemaNavegadorTests(NavegadorCase):
         # A folha clara já vale no fundo do portal.
         self.assertEqual(pagina.evaluate("getComputedStyle(document.body).backgroundColor"), "rgb(243, 240, 250)")
 
-    def test_sem_violacao_de_csp_nem_erro_no_console_no_claro(self):
+    def test_sem_violacao_de_csp_nem_erro_no_console_nos_tres_modos(self):
         for email, caminhos in ((ADMIN, ("/admin/dashboard", "/admin/empresas", "/admin/suporte", "/admin/configuracoes")),
                                 (CLIENTE, ("/cliente/dashboard", f"/cliente/analise/{self.analise_id}", "/cliente/upload", "/cliente/configuracoes"))):
             pagina = self._sessao(email, tema="light", antes=[_COLETOR])
             for caminho in caminhos:
                 with self.subTest(caminho=caminho):
                     self.ir(pagina, caminho)
-                    pagina.wait_for_timeout(300)
+                    pagina.wait_for_timeout(200)
                     self.assertEqual(self._estado(pagina), _CLARO)
                     violacoes = pagina.evaluate("window.__cspViolations || []")
                     self.assertEqual(violacoes, [], f"{caminho}: {json.dumps(violacoes, ensure_ascii=False)}")
-            # A troca com recarga e a instantânea também não violam nada.
-            self.ir(pagina, caminhos[1])
-            pagina.evaluate("document.getElementById('themeToggle').click()")
-            pagina.wait_for_timeout(600)
-            self.assertEqual(pagina.evaluate("window.__cspViolations || []"), [])
+                    self.assertEqual(pagina.locator("#themeToggle").count(), 0)
+            for modo in ("dark", "light", "system"):
+                self._escolher(pagina, modo)
+                pagina.wait_for_timeout(100)
+                self.assertEqual(pagina.evaluate("window.__cspViolations || []"), [])
             pagina.context.close()
         self.assertEqual(self.erros_js, [])
 
-    def test_localstorage_bloqueado_nao_quebra_e_o_botao_alterna_a_pagina_atual(self):
-        pagina = self._sessao(CLIENTE, antes=[_BLOQUEAR_STORAGE])
-        self.ir(pagina, "/cliente/historico")
-        self.assertEqual(self._estado(pagina), _ESCURO)
-        self.assertTrue(pagina.evaluate("typeof window.NEXO === 'object' && typeof bootstrap === 'object'"))
-        pagina.click("#themeToggle")
-        self.assertEqual(self._estado(pagina), _CLARO)
-        pagina.click("#themeToggle")
-        self.assertEqual(self._estado(pagina), _ESCURO)
-        # Em página com gráfico não recarrega (perderia a escolha) e o gráfico continua legível:
-        # desenhado na paleta escura, ele ganha um fundo dessa paleta.
+    def test_localstorage_bloqueado_nao_quebra_e_o_seletor_altera_a_pagina_atual(self):
+        for email in (CLIENTE, ADMIN):
+            pagina = self._sessao(email, antes=[_BLOQUEAR_STORAGE])
+            self._configuracoes(pagina, email)
+            pagina.evaluate("window.__mesmaPagina = true")
+            for modo, esperado in (("light", _CLARO), ("dark", _ESCURO)):
+                self._escolher(pagina, modo)
+                self.assertEqual(self._estado(pagina), esperado)
+                self.assertEqual(self._selecionado(pagina), modo)
+                self.assertTrue(pagina.evaluate("window.__mesmaPagina === true"))
+            pagina.emulate_media(color_scheme="light")
+            self._escolher(pagina, "system")
+            self.assertEqual(self._estado(pagina), _CLARO)
+            pagina.emulate_media(color_scheme="dark")
+            self._esperar(pagina, "document.documentElement.dataset.theme === 'dark'")
+            self.assertEqual(self._selecionado(pagina), "system")
+            pagina.reload(wait_until="load")
+            self.assertEqual(self._estado(pagina), _ESCURO)
+            self.assertEqual(self._selecionado(pagina), "dark")
+            pagina.context.close()
+
+    def test_sistema_persiste_a_opcao_logica_e_acompanha_mudancas_do_so(self):
+        for email in (ADMIN, CLIENTE):
+            pagina = self._sessao(email)
+            pagina.emulate_media(color_scheme="light")
+            self._configuracoes(pagina, email)
+            self.assertEqual(self._estado(pagina), _ESCURO)  # sem preferência, mantém o padrão NEXO
+            self._escolher(pagina, "system")
+            self.assertEqual(self._estado(pagina), _CLARO)
+            self.assertEqual(self._selecionado(pagina), "system")
+            self.assertEqual(pagina.evaluate("localStorage.getItem('theme')"), "system")
+            pagina.reload(wait_until="load")
+            self.assertEqual(self._estado(pagina), _CLARO)
+            self.assertEqual(self._selecionado(pagina), "system")
+            pagina.emulate_media(color_scheme="dark")
+            self._esperar(pagina, "document.documentElement.dataset.theme === 'dark'")
+            self.assertEqual(self._selecionado(pagina), "system")
+            self.assertEqual(pagina.evaluate("localStorage.getItem('theme')"), "system")
+            self._escolher(pagina, "light")
+            pagina.emulate_media(color_scheme="light")
+            pagina.emulate_media(color_scheme="dark")
+            pagina.wait_for_timeout(100)
+            self.assertEqual(self._estado(pagina), _CLARO)
+            self.assertEqual(self._selecionado(pagina), "light")
+            pagina.context.close()
+
+    def test_sistema_com_mesma_aparencia_nao_recarrega_graficos(self):
+        pagina = self._sessao(CLIENTE, tema="light")
+        pagina.emulate_media(color_scheme="light")
         self.ir(pagina, "/cliente/dashboard")
-        pagina.wait_for_selector(".js-plotly-plot .xtick text")
+        self._conferir_grafico(pagina, "chartCliente", "light")
+        outra = self._outra_aba(pagina)
+        outra.emulate_media(color_scheme="light")
         pagina.evaluate("window.__mesmaPagina = true")
-        pagina.click("#themeToggle")
-        pagina.wait_for_timeout(200)
-        self.assertEqual(self._estado(pagina), _CLARO)
+        self._escolher(outra, "system")
+        pagina.wait_for_timeout(150)
         self.assertTrue(pagina.evaluate("window.__mesmaPagina === true"))
-        self.assertEqual(pagina.evaluate("getComputedStyle(document.getElementById('chartCliente')).backgroundColor"), "rgb(20, 15, 39)")
-        pagina.click("#themeToggle")
-        self.assertEqual(self._estado(pagina), _ESCURO)
-        self.assertEqual(pagina.evaluate("getComputedStyle(document.getElementById('chartCliente')).backgroundColor"), "rgba(0, 0, 0, 0)")
-        # Sem como guardar, a página seguinte volta ao padrão.
-        pagina.click("#themeToggle")
-        self.ir(pagina, "/cliente/historico")
-        self.assertEqual(self._estado(pagina), _ESCURO)
+        self.assertEqual(self._estado(pagina), _CLARO)
+        self.assertEqual(pagina.evaluate("localStorage.getItem('theme')"), "system")
+        with pagina.expect_navigation(wait_until="load"):
+            pagina.emulate_media(color_scheme="dark")
+        self._conferir_grafico(pagina, "chartCliente", "dark")
+        self.assertEqual(pagina.evaluate("localStorage.getItem('theme')"), "system")
+
+    def test_pageshow_recarrega_graficos_com_preferencia_alterada_ou_removida(self):
+        pagina = self._sessao(CLIENTE, tema="light")
+        for valor in ("dark", None):
+            with self.subTest(valor=valor):
+                pagina.evaluate("localStorage.setItem('theme', 'light')")
+                self.ir(pagina, "/cliente/dashboard")
+                self._conferir_grafico(pagina, "chartCliente", "light")
+                pagina.evaluate("window.__mesmaPagina = true")
+                with pagina.expect_navigation(wait_until="load"):
+                    pagina.evaluate("""valor => {
+                        if (valor === null) localStorage.removeItem('theme');
+                        else localStorage.setItem('theme', valor);
+                        window.dispatchEvent(new PageTransitionEvent('pageshow', {persisted: true}));
+                    }""", valor)
+                self._conferir_grafico(pagina, "chartCliente", "dark")
+                self.assertFalse(pagina.evaluate("window.__mesmaPagina === true"))
+
+    def test_sistema_na_primeira_pintura_e_preferencias_antigas(self):
+        for preferencia, esquema, esperado in (("system", "light", "light"), ("system", "dark", "dark"),
+                                               ("light", "dark", "light"), ("dark", "light", "dark")):
+            pagina = self._sessao(ADMIN, tema=preferencia, antes=[_RELOGIO_DO_TEMA], esquema=esquema)
+            self._configuracoes(pagina, ADMIN)
+            with self.subTest(preferencia=preferencia, esquema=esquema):
+                self.assertEqual(pagina.evaluate("window.__temaAoNascerBody"), esperado)
+                self.assertEqual(self._selecionado(pagina), preferencia)
+                self.assertEqual(pagina.evaluate("localStorage.getItem('theme')"), preferencia)
+            pagina.context.close()
 
     def test_valor_invalido_em_localstorage_e_ignorado(self):
         pagina = self._sessao(ADMIN)
@@ -308,29 +387,27 @@ class TemaNavegadorTests(NavegadorCase):
                     self.assertEqual(self._estado(pagina), _CLARO)
                     medida = pagina.evaluate(_MEDIR_TITULO)
                     self.assertFalse(medida["rola"], medida)
-                    # O título da página não é cortado pelo botão novo da topbar.
+                    # A retirada do controle de tema preserva espaço para o título.
                     self.assertFalse(medida["corte"], medida)
             pagina.context.close()
 
-    def test_titulo_da_topbar_cabe_com_o_botao_novo_nos_dois_temas(self):
-        """O botão de tema toma largura da topbar: abaixo de 390 px o avatar (sem ação) cede
-        o lugar; em 390 px e acima a topbar mantém tudo o que já tinha."""
-        for largura, altura, avatar in ((360, 780, False), (375, 812, False), (390, 844, True), (768, 1024, True)):
-            pagina = self._sessao(ADMIN, largura=largura, altura=altura)
-            for caminho in ("/admin/configuracoes", "/admin/diagnostico-email"):
-                self.ir(pagina, caminho)
-                for clique in (False, True):
-                    if clique:
-                        pagina.click("#themeToggle")
-                    with self.subTest(largura=largura, caminho=caminho, tema=self._estado(pagina)["tema"]):
+    def test_topbar_preserva_avatar_e_sino_nos_dois_temas_sem_botao_de_tema(self):
+        for tema in ("dark", "light"):
+            pagina = self._sessao(ADMIN, tema=tema)
+            for largura, altura in ((320, 700), (390, 844), (768, 1024), (1024, 768), (1366, 768)):
+                pagina.set_viewport_size({"width": largura, "height": altura})
+                for caminho in ("/admin/configuracoes", "/admin/diagnostico-email"):
+                    self.ir(pagina, caminho)
+                    with self.subTest(largura=largura, caminho=caminho, tema=tema):
                         medida = pagina.evaluate(_MEDIR_TITULO)
                         self.assertFalse(medida["corte"], medida)
-                        self.assertEqual(medida["avatar"], avatar, medida)
-                pagina.click("#themeToggle")
-            # A medida enxerga o corte nos dois modos: duas linhas (vertical) e uma linha (horizontal).
-            pagina.evaluate("(texto) => { document.querySelector('.topbar-title').lastChild.textContent = texto; }", _TITULO_LONGO)
-            with self.subTest(largura=largura, titulo="longo"):
-                self.assertTrue(pagina.evaluate(_MEDIR_TITULO)["corte"])
+                        self.assertTrue(medida["avatar"], medida)
+                        self.assertTrue(pagina.is_visible("#bellBtn"))
+                        self.assertEqual(pagina.locator("#themeToggle").count(), 0)
+                # Força excesso inclusive no desktop, que ganhou espaço sem o botão antigo.
+                pagina.evaluate("(texto) => { document.querySelector('.topbar-title').lastChild.textContent = texto; }", _TITULO_LONGO * 3)
+                with self.subTest(largura=largura, titulo="longo"):
+                    self.assertTrue(pagina.evaluate(_MEDIR_TITULO)["corte"])
             pagina.context.close()
 
     def test_contraste_das_amostras_principais(self):
@@ -378,10 +455,11 @@ class TemaNavegadorTests(NavegadorCase):
             return {repouso, foco, fundo}; }""")
         self.assertGreaterEqual(medida["repouso"], 3, medida)
         self.assertGreaterEqual(medida["foco"], 3, medida)
-        # Botão de tema pelo teclado: contorno visível sobre a topbar clara.
+        # Seletor pelo teclado: contorno visível sobre o cartão claro.
+        self._configuracoes(pagina, ADMIN)
         pagina.keyboard.press("Tab")
-        pagina.focus("#themeToggle")
-        contorno = pagina.evaluate("""() => { const cs = getComputedStyle(document.getElementById('themeToggle'));
+        pagina.focus(_SELETOR % "light")
+        contorno = pagina.evaluate("""() => { const cs = getComputedStyle(document.activeElement);
             return {estilo: cs.outlineStyle, largura: parseFloat(cs.outlineWidth), cor: cs.outlineColor}; }""")
         self.assertEqual(contorno["estilo"], "solid")
         self.assertGreaterEqual(contorno["largura"], 2)
@@ -398,9 +476,9 @@ class TemaNavegadorTests(NavegadorCase):
                     nome: forte.textContent.trim(), fonte_nome: [f.fontSize, f.fontWeight, f.letterSpacing, f.color, f.backgroundImage],
                     sub: fraco.textContent.trim(), fonte_sub: [s.fontSize, s.color, s.letterSpacing]}; }"""
         pagina = self._sessao(CLIENTE)
-        self.ir(pagina, "/cliente/historico")
+        self._configuracoes(pagina)
         escuro = pagina.evaluate(medir)
-        pagina.click("#themeToggle")
+        self._escolher(pagina, "light")
         pagina.wait_for_timeout(250)  # transições do tema terminadas
         claro = pagina.evaluate(medir)
         self.assertEqual(claro, escuro)
@@ -446,7 +524,7 @@ class TemaNavegadorTests(NavegadorCase):
         presos = []
         pagina.route(padrao, lambda rota: presos.append(rota))
         pagina.goto(self.base + caminho, wait_until="commit")
-        pagina.wait_for_selector("#themeToggle")
+        pagina.wait_for_selector("#bellBtn")
         for _ in range(200):
             if presos:
                 break
@@ -473,77 +551,79 @@ class TemaNavegadorTests(NavegadorCase):
         # Tudo o que deriva da paleta segue junto.
         self.assertEqual(pagina.evaluate("[NEXO.spike.spikecolor, NEXO.abcColor.C]"), pagina.evaluate("[NEXO.colors.spike, NEXO.colors.neutral]"))
 
-    def test_alternar_antes_de_desenhar_os_graficos_nao_deixa_paleta_velha(self):
-        """CDN lenta: entre o cálculo da paleta e o desenho há um script que trava o parser. A
-        troca nessa janela é instantânea e os gráficos já saem na paleta do tema novo."""
+    def test_trocar_antes_de_desenhar_os_graficos_nao_deixa_paleta_velha(self):
         for email, caminho, grafico in ((CLIENTE, "/cliente/dashboard", "chartCliente"),
                                         (CLIENTE, f"/cliente/analise/{self.analise_id}", "chartAnaliseCli"),
                                         (ADMIN, "/admin/dashboard", "chartPlano")):
             pagina = self._sessao(email)
+            outra = self._outra_aba(pagina, email)
             for inicio, novo in (("dark", "light"), ("light", "dark")):
                 with self.subTest(caminho=caminho, inicio=inicio):
+                    # Prepara a próxima navegação sem disparar reload por storage nesta aba.
                     pagina.evaluate("(t) => localStorage.setItem('theme', t)", inicio)
                     soltar = self._reter_script(pagina, caminho)
                     self._esperar_paleta(pagina)
                     self.assertEqual(pagina.evaluate("NEXO.tema"), inicio)
-                    pagina.click("#themeToggle")
-                    self.assertEqual(self._estado(pagina), _CLARO if novo == "light" else _ESCURO)
+                    self._escolher(outra, novo)
+                    self._esperar(pagina, f"document.documentElement.dataset.theme === '{novo}'")
                     soltar()
                     self._conferir_grafico(pagina, grafico, novo)
                     self.assertTrue(pagina.evaluate("window.__mesmaPagina === true"))
-                    self.assertEqual(pagina.evaluate("localStorage.getItem('theme')"), novo)
-                    # Já desenhado, o clique seguinte volta a recarregar.
                     with pagina.expect_navigation(wait_until="load"):
-                        pagina.click("#themeToggle")
+                        self._escolher(outra, inicio)
                     self._conferir_grafico(pagina, grafico, inicio)
             pagina.context.close()
 
-    def test_outra_aba_troca_o_tema_antes_de_desenhar_os_graficos(self):
-        pagina = self._sessao(CLIENTE)
-        outra = pagina.context.new_page()
-        outra.route("**/*", self._rota)
-        self.ir(outra, "/cliente/tickets")
-        soltar = self._reter_script(pagina, "/cliente/dashboard")
-        self._esperar_paleta(pagina)
-        outra.click("#themeToggle")
-        self._esperar(pagina, "document.documentElement.getAttribute('data-theme') === 'light'")
-        soltar()
-        self._conferir_grafico(pagina, "chartCliente", "light")
-        self.assertTrue(pagina.evaluate("window.__mesmaPagina === true"))
-
-    def test_armazenamento_bloqueado_antes_de_desenhar_os_graficos(self):
-        """Sem recarga possível: o gráfico nasce na paleta do tema escolhido e, trocando de novo,
-        ganha o fundo da paleta em que foi desenhado, seja qual for a fase do clique."""
-        # Clique com a paleta já calculada (socket.io preso) e clique antes dela (Plotly preso).
+    def test_sistema_troca_o_tema_antes_de_desenhar_os_graficos(self):
         for padrao, esperar_paleta in (("**/socket.io.min.js", True), ("**/plotly.min.js", False)):
-            with self.subTest(preso=padrao):
-                pagina = self._sessao(CLIENTE, antes=[_BLOQUEAR_STORAGE])
-                soltar = self._reter_script(pagina, "/cliente/dashboard", padrao)
-                if esperar_paleta:
-                    self._esperar_paleta(pagina)
-                pagina.evaluate("window.__mesmaPagina = true")
-                pagina.click("#themeToggle")
-                self.assertEqual(self._estado(pagina), _CLARO)
-                soltar()
-                self._conferir_grafico(pagina, "chartCliente", "light")
-                fundo = "getComputedStyle(document.getElementById('chartCliente')).backgroundColor"
-                self.assertEqual(pagina.evaluate(fundo), "rgba(0, 0, 0, 0)")
-                pagina.click("#themeToggle")
-                pagina.wait_for_timeout(200)
-                self.assertEqual(self._estado(pagina), _ESCURO)
-                self.assertEqual(pagina.evaluate("NEXO.tema"), "light")
-                self.assertEqual(pagina.evaluate(fundo), "rgb(255, 255, 255)")
-                pagina.click("#themeToggle")
-                pagina.wait_for_timeout(200)
-                self.assertEqual(pagina.evaluate(fundo), "rgba(0, 0, 0, 0)")
-                self.assertTrue(pagina.evaluate("window.__mesmaPagina === true"))
-                pagina.context.close()
+            pagina = self._sessao(CLIENTE, tema="system", esquema="dark")
+            soltar = self._reter_script(pagina, "/cliente/dashboard", padrao)
+            if esperar_paleta:
+                self._esperar_paleta(pagina)
+            pagina.evaluate("window.__mesmaPagina = true")
+            pagina.emulate_media(color_scheme="light")
+            self._esperar(pagina, "document.documentElement.dataset.theme === 'light'")
+            soltar()
+            self._conferir_grafico(pagina, "chartCliente", "light")
+            self.assertTrue(pagina.evaluate("window.__mesmaPagina === true"))
+            pagina.context.close()
 
-    def test_pagina_sem_grafico_nao_recarrega_durante_o_carregamento(self):
+    def test_armazenamento_bloqueado_preserva_a_legibilidade_do_grafico_no_modo_sistema(self):
+        pagina = self._sessao(CLIENTE, tema="system", esquema="dark")
+        self.ir(pagina, "/cliente/dashboard")
+        self._conferir_grafico(pagina, "chartCliente", "dark")
+        pagina.evaluate(_BLOQUEAR_STORAGE)
+        pagina.evaluate("window.__mesmaPagina = true")
+        pagina.emulate_media(color_scheme="light")
+        self._esperar(pagina, "document.documentElement.dataset.theme === 'light'")
+        self.assertTrue(pagina.evaluate("window.__mesmaPagina === true"))
+        self.assertEqual(pagina.evaluate("NEXO.tema"), "dark")
+        self.assertEqual(pagina.evaluate("getComputedStyle(document.getElementById('chartCliente')).backgroundColor"), "rgb(20, 15, 39)")
+        pagina.emulate_media(color_scheme="dark")
+        self._esperar(pagina, "document.documentElement.dataset.theme === 'dark'")
+        self.assertEqual(pagina.evaluate("getComputedStyle(document.getElementById('chartCliente')).backgroundColor"), "rgba(0, 0, 0, 0)")
+
+    def test_selecao_salva_aparece_antes_das_bibliotecas_do_rodape(self):
+        for email in (ADMIN, CLIENTE):
+            pagina = self._sessao(email)
+            caminho = "/admin/configuracoes" if email == ADMIN else "/cliente/configuracoes"
+            for modo in ("light", "system"):
+                pagina.evaluate("(t) => localStorage.setItem('theme', t)", modo)
+                soltar = self._reter_script(pagina, caminho, "**/bootstrap.bundle.min.js")
+                # O preload pode pedir a biblioteca antes do parser alcançar o partial.
+                # A seleção deve sincronizar enquanto o rodapé continua retido.
+                pagina.locator(f'[data-theme-preference="{modo}"][aria-pressed="true"]').wait_for(state="attached")
+                self.assertEqual(self._selecionado(pagina), modo)
+                self.assertEqual(pagina.locator('[data-theme-preference][aria-pressed="true"]').count(), 1)
+                self.assertEqual(pagina.evaluate("document.readyState"), "loading")
+                soltar()
+            pagina.context.close()
+
+    def test_configuracoes_sem_grafico_nao_recarregam_durante_o_carregamento(self):
         pagina = self._sessao(CLIENTE)
-        soltar = self._reter_script(pagina, "/cliente/historico")
+        soltar = self._reter_script(pagina, "/cliente/configuracoes")
         self._esperar_paleta(pagina)
-        pagina.click("#themeToggle")
+        self._escolher(pagina, "light")
         self.assertEqual(self._estado(pagina), _CLARO)
         soltar()
         self.assertEqual(self._estado(pagina), _CLARO)
@@ -666,7 +746,7 @@ class TemaNavegadorTests(NavegadorCase):
                 self.assertEqual(medida["borda"], "rgb(109, 40, 217)")
 
     def test_nome_longo_cede_lugar_ao_titulo_da_topbar_nos_dois_temas(self):
-        """O botão de tema toma 54 px da topbar: abaixo de 1100 px um nome longo cortaria o título.
+        """O nome comprido continua cedendo espaço ao título da topbar.
         O nome é que cede, e só quando precisa; com folga, ele continua inteiro."""
         from models import Usuario
         usuario = self.db.session.get(Usuario, self.admin_id)
@@ -710,38 +790,30 @@ class TemaNavegadorTests(NavegadorCase):
 
     def test_sincroniza_entre_abas_pelo_evento_storage(self):
         pagina = self._sessao(CLIENTE)
-        self.ir(pagina, "/cliente/historico")
-        outra = pagina.context.new_page()
-        outra.on("pageerror", lambda erro: self.erros_js.append(f"outra aba: {erro}"))
-        outra.route("**/*", self._rota)
-        self.ir(outra, "/cliente/tickets")
+        self._configuracoes(pagina)
+        outra = self._outra_aba(pagina)
         outra.evaluate("window.__mesmaPagina = true")
         com_grafico = pagina.context.new_page()
         com_grafico.on("pageerror", lambda erro: self.erros_js.append(f"aba com gráfico: {erro}"))
         com_grafico.route("**/*", self._rota)
         self.ir(com_grafico, "/cliente/dashboard")
-        com_grafico.wait_for_selector(".js-plotly-plot .xtick text")
+        self._conferir_grafico(com_grafico, "chartCliente", "dark")
         com_grafico.evaluate("window.__mesmaPagina = true")
-        # O storage dispara reload na aba com gráfico: a espera precisa estar armada
-        # antes do clique, enquanto o contexto JavaScript anterior ainda existe.
         with com_grafico.expect_navigation(wait_until="load"):
-            pagina.click("#themeToggle")
-        # Sem gráfico: troca na hora, sem recarregar. Com gráfico: recarrega na paleta nova.
+            self._escolher(pagina, "light")
         outra.locator('html[data-theme="light"]').wait_for(state="attached", timeout=10000)
         self.assertEqual(self._estado(outra), _CLARO)
+        self.assertEqual(self._selecionado(outra), "light")
         self.assertTrue(outra.evaluate("window.__mesmaPagina === true"))
         self.assertFalse(com_grafico.evaluate("window.__mesmaPagina === true"))
-        self.assertEqual(self._estado(com_grafico), _CLARO)
         self._conferir_grafico(com_grafico, "chartCliente", "light")
-        # Valor apagado em outra aba: volta ao padrão.
         com_grafico.evaluate("window.__mesmaPagina = true")
         with com_grafico.expect_navigation(wait_until="load"):
             pagina.evaluate("localStorage.removeItem('theme')")
         outra.locator('html[data-theme="dark"]').wait_for(state="attached", timeout=10000)
-        self.assertEqual(self._estado(outra), _ESCURO)
+        self.assertEqual(self._selecionado(outra), "dark")
         self.assertTrue(outra.evaluate("window.__mesmaPagina === true"))
         self.assertFalse(com_grafico.evaluate("window.__mesmaPagina === true"))
-        self.assertEqual(self._estado(com_grafico), _ESCURO)
         self._conferir_grafico(com_grafico, "chartCliente", "dark")
 
 

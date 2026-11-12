@@ -1,0 +1,18 @@
+{# Mesmo controle nas configurações de ADMIN e CLIENTE; comportamento em base.html. #}
+<div class="theme-selector" role="group" aria-label="Tema" aria-describedby="tema-preferencia-ajuda">
+    <button type="button" class="theme-option" data-theme-preference="system" aria-label="Sistema" aria-pressed="false">
+        <i class="bi bi-display" aria-hidden="true"></i>
+        <span>Sistema</span>
+    </button>
+    <button type="button" class="theme-option" data-theme-preference="light" aria-label="Claro" aria-pressed="false">
+        <i class="bi bi-sun" aria-hidden="true"></i>
+        <span>Claro</span>
+    </button>
+    <button type="button" class="theme-option" data-theme-preference="dark" aria-label="Escuro" aria-pressed="true">
+        <i class="bi bi-moon" aria-hidden="true"></i>
+        <span>Escuro</span>
+    </button>
+</div>
+<p class="field-hint mt-3 mb-0" id="tema-preferencia-ajuda">A escolha é aplicada na hora e fica salva neste navegador. Sistema acompanha a aparência do seu dispositivo.</p>
+{# Sincroniza a seleção antes das bibliotecas do rodapé, inclusive com CDN lenta. #}
+<script nonce="{{ csp_nonce }}">document.dispatchEvent(new Event('nexo:tema-seletor'));</script>

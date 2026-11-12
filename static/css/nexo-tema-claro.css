@@ -168,8 +168,12 @@ html[data-theme="light"] .sidebar {
   box-shadow: var(--shadow-glass), var(--glass-shine);
 }
 html[data-theme="light"] .sidebar-overlay { background: rgba(27, 22, 48, 0.45); }
-/* O botão de fechar a gaveta fica fora da sidebar, sobre o véu claro: o lilás de nexo.css some ali. */
-html[data-theme="light"] .sidebar-close:focus-visible { outline-color: var(--roxo-forte); }
+/* O botão fica sobre o véu e, no celular estreito, também sobre o avatar roxo.
+   O halo claro mantém o contorno perceptível sobre ambos os fundos. */
+html[data-theme="light"] .sidebar-close:focus-visible {
+  outline-color: var(--roxo-forte);
+  box-shadow: 0 0 0 6px #ffffff, var(--shadow-glass);
+}
 
 /* Topbar: as duas camadas de desfoque continuam, em véu branco. A de cima é quase
    opaca: o título passa AA com qualquer conteúdo rolando por baixo. */
