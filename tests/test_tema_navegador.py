@@ -124,7 +124,8 @@ class TemaNavegadorTests(NavegadorCase):
 
     def _esperar(self, pagina, expressao):
         """wait_for_function repete a expressão com eval, que a CSP do portal barra (só a primeira
-        passa, dentro da avaliação do Playwright): a repetição fica aqui."""
+        passa, dentro da avaliação do Playwright): a repetição fica aqui, para condições sem
+        navegação. Ações que recarregam devem registrar a espera antes de serem disparadas."""
         for _ in range(200):
             if pagina.evaluate(expressao):
                 return
@@ -716,22 +717,32 @@ class TemaNavegadorTests(NavegadorCase):
         self.ir(outra, "/cliente/tickets")
         outra.evaluate("window.__mesmaPagina = true")
         com_grafico = pagina.context.new_page()
+        com_grafico.on("pageerror", lambda erro: self.erros_js.append(f"aba com gráfico: {erro}"))
         com_grafico.route("**/*", self._rota)
         self.ir(com_grafico, "/cliente/dashboard")
         com_grafico.wait_for_selector(".js-plotly-plot .xtick text")
         com_grafico.evaluate("window.__mesmaPagina = true")
-        pagina.click("#themeToggle")
+        # O storage dispara reload na aba com gráfico: a espera precisa estar armada
+        # antes do clique, enquanto o contexto JavaScript anterior ainda existe.
+        with com_grafico.expect_navigation(wait_until="load"):
+            pagina.click("#themeToggle")
         # Sem gráfico: troca na hora, sem recarregar. Com gráfico: recarrega na paleta nova.
-        self._esperar(outra, "document.documentElement.getAttribute('data-theme') === 'light'")
+        outra.locator('html[data-theme="light"]').wait_for(state="attached", timeout=10000)
         self.assertEqual(self._estado(outra), _CLARO)
         self.assertTrue(outra.evaluate("window.__mesmaPagina === true"))
-        self._esperar(com_grafico, "document.documentElement.getAttribute('data-theme') === 'light' && window.__mesmaPagina !== true")
-        com_grafico.wait_for_load_state("load")
+        self.assertFalse(com_grafico.evaluate("window.__mesmaPagina === true"))
         self.assertEqual(self._estado(com_grafico), _CLARO)
+        self._conferir_grafico(com_grafico, "chartCliente", "light")
         # Valor apagado em outra aba: volta ao padrão.
-        pagina.evaluate("localStorage.removeItem('theme')")
-        self._esperar(outra, "document.documentElement.getAttribute('data-theme') === 'dark'")
+        com_grafico.evaluate("window.__mesmaPagina = true")
+        with com_grafico.expect_navigation(wait_until="load"):
+            pagina.evaluate("localStorage.removeItem('theme')")
+        outra.locator('html[data-theme="dark"]').wait_for(state="attached", timeout=10000)
         self.assertEqual(self._estado(outra), _ESCURO)
+        self.assertTrue(outra.evaluate("window.__mesmaPagina === true"))
+        self.assertFalse(com_grafico.evaluate("window.__mesmaPagina === true"))
+        self.assertEqual(self._estado(com_grafico), _ESCURO)
+        self._conferir_grafico(com_grafico, "chartCliente", "dark")
 
 
 if __name__ == "__main__":
