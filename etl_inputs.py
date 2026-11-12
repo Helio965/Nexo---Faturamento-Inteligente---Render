@@ -180,7 +180,10 @@ def _csv_input(path, budget, materialize):
     if not materialize:
         return metadata
     rectangular = [row + [None] * (columns - len(row)) for row in values]
-    return _trim(pd.DataFrame(rectangular, dtype=object))
+    frame = _trim(pd.DataFrame(rectangular, dtype=object))
+    # Preserve encoding and delimiter when the security gatekeeper creates a values-only copy.
+    frame.attrs.update({"format": "csv", "separator": separator, "encoding": encoding})
+    return frame
 
 
 def _end_directory(stream, size, limits):
@@ -601,8 +604,13 @@ def _run(path, extension, limits, materialize):
 
 
 def read_raw(path, limits: ETLLimits):
-    """Retorna a matriz legada apenas após validação estrutural e de recursos."""
-    return _run(path, Path(path).suffix, limits, True)
+    """Read structurally bounded data and neutralize spreadsheet formulas.
+
+    Numeric representation stays unchanged, including XLSX numbers with three decimal
+    places. The financial engine continues to apply its existing parsing rules.
+    """
+    from security_gatekeeper import neutralizar_matriz
+    return neutralizar_matriz(_run(path, Path(path).suffix, limits, True))
 
 
 def validate_input(path, extension, limits: ETLLimits):

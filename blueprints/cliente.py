@@ -10,6 +10,8 @@ Rotas:
   /cliente/upload     → self-service onboarding: o cliente anexa os relatórios
                         ERP (Vendas + Compras) das análises abertas para a sua
                         empresa; o consultor NEXO homologa e dispara o ETL.
+  /cliente/configuracoes → perfil, senha, e-mail de acesso, privacidade (LGPD) e
+                        preferências; regras em configuracoes_conta.py.
 
 Regras:
   - Acesso restrito a Usuario.role == 'CLIENTE' (via cliente_required).
@@ -23,33 +25,40 @@ Regras:
   - Uploads do cliente nascem com id_usuario_admin = NULL (aguardando validação).
 """
 
+import json
 import os
 from functools import wraps
 
 from flask import (
     Blueprint, render_template, abort, request, redirect, url_for, flash, current_app,
-    Response, g,
+    Response, g, make_response,
 )
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from sqlalchemy import select, func
 from sqlalchemy.orm import selectinload
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from etl_inputs import ETLInputError
 from etl_uploads import ler_upload_validado, limitar_upload
 
+from blueprints.auth import (
+    _destino_abre_por_get, _destino_seguro, limite_reautenticacao, trocar_email_autenticado, trocar_senha_autenticada,
+)
+import configuracoes_conta
 from extensions import chave_limite_usuario, db, limiter
+import termos_legais
 from horario import agora_utc
 from models import (
     Analise, IndicadorAnalise, RelatorioAnalise, UploadRelatorio,
     ChamadoSuporte, MensagemSuporte, GuiaTopico,
 )
 from contract_policy import (
-    agora, filtrar_analises_consultaveis, obter_situacao_contratual, pode_consultar_analise,
-    pode_enviar_relatorio, pode_exportar_pdf,
+    agora, data_local, filtrar_analises_consultaveis, obter_situacao_contratual,
+    pode_consultar_analise, pode_enviar_relatorio, pode_exportar_pdf,
 )
 from insights import gerar_semaforos
 from notifications import notificar_admins
+from preferencias_usuario import salvar_preferencias
 from pdf_export import gerar_pdf_analise
 import storage
 
@@ -221,6 +230,7 @@ def dashboard():
         semaforos=semaforos,
         auditoria=auditoria,
         situacao=situacao,
+        aviso_renovacao=configuracoes_conta.aviso_renovacao(current_user, situacao),
     )
 
 
@@ -476,6 +486,9 @@ def upload():
 # =====================================================================
 @cliente_bp.route("/tickets", methods=["GET", "POST"])
 @cliente_required
+# Cada chamado novo pode gerar um e-mail de cópia: sem teto, um único usuário
+# esgotaria a cota do provedor, a mesma dos links de senha.
+@limiter.limit("30 per hour", methods=["POST"], key_func=chave_limite_usuario)
 def tickets():
     """
     GET  → lista os chamados da empresa do cliente + formulário de novo ticket.
@@ -518,9 +531,11 @@ def tickets():
             url_for("admin.ticket_detalhe", id_chamado=chamado.id_chamado),
         )
 
+        id_chamado = chamado.id_chamado
         db.session.commit()
+        configuracoes_conta.avisar_novo_chamado(id_chamado, CATEGORIAS_TICKET[categoria])
         flash("Chamado aberto com sucesso. A equipe NEXO responderá em breve.", "success")
-        return redirect(url_for("cliente.ticket_detalhe", id_chamado=chamado.id_chamado))
+        return redirect(url_for("cliente.ticket_detalhe", id_chamado=id_chamado))
 
     chamados = db.session.execute(
         select(ChamadoSuporte)
@@ -558,6 +573,7 @@ def ticket_detalhe(id_chamado):
         # Cliente respondeu → reabre se estava RESOLVIDO; notifica os admins.
         if chamado.status_chamado == "RESOLVIDO":
             chamado.status_chamado = "EM_ATENDIMENTO"
+            chamado.data_fechamento = None
         chamado.data_atualizacao = instante
         nome_emp = current_user.empresa.nome_fantasia or current_user.empresa.razao_social
         notificar_admins(
@@ -571,3 +587,217 @@ def ticket_detalhe(id_chamado):
         "cliente/ticket_detalhe.html",
         chamado=chamado, categorias=CATEGORIAS_TICKET,
     )
+
+
+@cliente_bp.route("/configuracoes")
+@cliente_required
+def configuracoes():
+    """Perfil e segurança, privacidade (LGPD) e preferências da própria conta."""
+    situacao = _situacao_cliente()
+    resposta = make_response(render_template(
+        "cliente/configuracoes.html", empresa=current_user.empresa, situacao=situacao,
+        **configuracoes_conta.contexto_cliente(current_user),
+    ))
+    # Dados pessoais na página: o botão Voltar não os mostra depois do logout.
+    resposta.headers["Cache-Control"] = "no-store"
+    return resposta
+
+
+
+def _salvar_configuracao(operacao, sucesso: str):
+    """Executa e confirma uma alteração; entrada recusada ou falha de banco viram aviso.
+
+    Dois envios juntos na primeira gravação: quem perde a corrida repete e encontra a
+    linha do outro, em vez de mostrar erro por uma gravação que valeu."""
+    for ultima_tentativa in (False, True):
+        try:
+            operacao()
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            if not ultima_tentativa:
+                continue
+            flash("Não foi possível salvar. Tente novamente.", "danger")
+        except configuracoes_conta.DadoInvalido as erro:
+            db.session.rollback()
+            flash(str(erro), "danger")
+        except SQLAlchemyError as erro:
+            db.session.rollback()
+            current_app.logger.warning("Configuração do cliente não salva (%s).", type(erro).__name__)
+            flash("Não foi possível salvar. Tente novamente.", "danger")
+        else:
+            flash(sucesso, "success")
+        break
+    return redirect(url_for("cliente.configuracoes"))
+
+
+
+@cliente_bp.route("/configuracoes/perfil", methods=["POST"])
+@cliente_required
+@limiter.limit("30 per hour", key_func=chave_limite_usuario)
+def configuracoes_perfil():
+    """Nome do responsável e telefone de contato."""
+    _situacao_cliente()
+    usuario = current_user._get_current_object()
+    return _salvar_configuracao(
+        lambda: configuracoes_conta.salvar_perfil(usuario, request.form.get("nome"), request.form.get("telefone"),
+                                                  request.form.get("telefone_exibido")),
+        "Dados atualizados.",
+    )
+
+
+
+@cliente_bp.route("/configuracoes/senha", methods=["POST"])
+@cliente_required
+@limite_reautenticacao
+def configuracoes_senha():
+    _situacao_cliente()
+    erro = trocar_senha_autenticada(current_user._get_current_object(), request.form.get("senha_atual"),
+                                    request.form.get("nova_senha"), request.form.get("confirmacao_nova_senha"))
+    flash(erro or "Senha alterada. As outras sessões abertas foram encerradas.", "danger" if erro else "success")
+    return redirect(url_for("cliente.configuracoes"))
+
+
+
+@cliente_bp.route("/configuracoes/email", methods=["POST"])
+@cliente_required
+@limite_reautenticacao
+def configuracoes_email():
+    _situacao_cliente()
+    erro = trocar_email_autenticado(current_user._get_current_object(), request.form.get("senha_atual"),
+                                    request.form.get("novo_email"), request.form.get("confirmacao_novo_email"))
+    flash(erro or "E-mail de acesso alterado: use o novo endereço no próximo login. As outras sessões foram "
+                  "encerradas.", "danger" if erro else "success")
+    return redirect(url_for("cliente.configuracoes"))
+
+
+
+@cliente_bp.route("/configuracoes/exportar-dados")
+@cliente_required
+@limiter.limit("10 per hour", key_func=chave_limite_usuario)
+def configuracoes_exportar_dados():
+    """Arquivo JSON com os dados da empresa da sessão (LGPD). Nenhum parâmetro da
+    requisição escolhe de quem são os dados."""
+    situacao = _situacao_cliente()
+    empresa = current_user.empresa
+    dados = configuracoes_conta.montar_exportacao(current_user, situacao)
+    current_app.logger.info("Exportação de dados da conta | usuario=%s empresa=%s analises=%s",
+                            current_user.id_usuario, empresa.id_empresa, len(dados["analises_concluidas"]))
+    nome = f"nexo_dados_empresa_{empresa.id_empresa}_{data_local(agora()):%Y%m%d}.json"
+    return Response(
+        json.dumps(dados, ensure_ascii=False, indent=2, default=configuracoes_conta.valor_json),
+        mimetype="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="{nome}"',
+            # Dado pessoal: nenhum cache (navegador, proxy ou CDN) pode guardar o arquivo.
+            "Cache-Control": "no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
+
+@cliente_bp.route("/configuracoes/aceitar-documento", methods=["POST"])
+@cliente_required
+@limiter.limit("30 per hour", key_func=chave_limite_usuario)
+def configuracoes_aceitar_documento():
+    """Registra o aceite da versão vigente de um documento, pelo próprio usuário."""
+    _situacao_cliente()
+    try:
+        configuracoes_conta.registrar_aceite(current_user._get_current_object(), request.form.get("tipo"),
+                                             request.form.get("versao"), termos_legais.ip_do_cliente(request.remote_addr))
+        db.session.commit()
+    except configuracoes_conta.DadoInvalido as erro:
+        db.session.rollback()
+        flash(str(erro), "danger")
+    except IntegrityError:
+        db.session.rollback()  # dois envios juntos: o outro já registrou o aceite
+        flash("Aceite registrado.", "success")
+    except SQLAlchemyError as erro:
+        db.session.rollback()
+        current_app.logger.warning("Aceite de documento não salvo (%s).", type(erro).__name__)
+        flash("Não foi possível registrar o aceite. Tente novamente.", "danger")
+    else:
+        flash("Aceite registrado.", "success")
+    return redirect(url_for("cliente.configuracoes"))
+
+
+
+@cliente_bp.route("/termos/aceitar", methods=["POST"])
+@cliente_required
+@limiter.limit("30 per hour", key_func=chave_limite_usuario)
+def aceitar_termos():
+    """Aceite do modal: todas as versões pendentes de uma vez, com o IP desta requisição.
+
+    A caixa "Li e concordo" é conferida aqui: o atributo required do HTML não protege nada.
+    Depois volta à página que a pessoa tentou abrir, se for local e abrir por GET.
+    """
+    _situacao_cliente()
+    proximo = request.form.get("proximo") or ""
+    destino = proximo if _destino_seguro(proximo) and _destino_abre_por_get(proximo) else url_for("cliente.dashboard")
+    if request.form.get("confirmo") != "1":
+        flash("Marque “Li e concordo com os Termos de Uso e a Política de Privacidade” para continuar.", "danger")
+        return redirect(destino)
+    usuario = current_user._get_current_object()
+    ip = termos_legais.ip_do_cliente(request.remote_addr)
+    try:
+        termos_legais.aceitar_pendentes(usuario, request.form.getlist("documento"), ip)
+        db.session.commit()
+    except configuracoes_conta.DadoInvalido as erro:
+        db.session.rollback()
+        flash(str(erro), "danger")
+        return redirect(destino)
+    except IntegrityError:
+        # Outra aba confirmou ao mesmo tempo: vale se não sobrou nada pendente.
+        db.session.rollback()
+        if termos_legais.pendentes(usuario.id_usuario):
+            flash("Não foi possível registrar o aceite. Tente novamente.", "danger")
+            return redirect(destino)
+    except SQLAlchemyError as erro:
+        db.session.rollback()
+        current_app.logger.warning("Aceite dos termos não salvo (%s).", type(erro).__name__)
+        flash("Não foi possível registrar o aceite. Tente novamente.", "danger")
+        return redirect(destino)
+    flash("Aceite registrado. Obrigado!", "success")
+    return redirect(destino)
+
+
+
+@cliente_bp.route("/configuracoes/solicitar-exclusao", methods=["POST"])
+@cliente_required
+@limiter.limit("5 per hour", key_func=chave_limite_usuario)
+def configuracoes_solicitar_exclusao():
+    """Abre o chamado interno de expurgo (sem duplicar um já aberto); nada é apagado aqui."""
+    _situacao_cliente()
+    try:
+        chamado, criado = configuracoes_conta.solicitar_exclusao_dados(current_user._get_current_object())
+        id_chamado = chamado.id_chamado
+        db.session.commit()
+    except SQLAlchemyError as erro:
+        db.session.rollback()
+        current_app.logger.warning("Solicitação de exclusão não registrada (%s).", type(erro).__name__)
+        flash("Não foi possível registrar a solicitação. Tente novamente.", "danger")
+        return redirect(url_for("cliente.configuracoes"))
+    if criado:
+        configuracoes_conta.avisar_novo_chamado(id_chamado, CATEGORIAS_TICKET["DUVIDA_TECNICA"])
+        flash(f"Solicitação registrada no chamado #{id_chamado}. Nenhum dado foi apagado ainda: a equipe NEXO "
+              "fará a tratativa.", "success")
+    else:
+        flash(f"Já existe uma solicitação em andamento, no chamado #{id_chamado}.", "info")
+    return redirect(url_for("cliente.configuracoes"))
+
+
+
+@cliente_bp.route("/configuracoes/preferencias", methods=["POST"])
+@cliente_required
+@limiter.limit("60 per hour", key_func=chave_limite_usuario)
+def configuracoes_preferencias():
+    _situacao_cliente()
+    id_usuario = current_user.id_usuario
+
+    def salvar():
+        configuracoes_conta.exigir_esquema()
+        salvar_preferencias(id_usuario, lembrete_renovacao="lembrete_renovacao" in request.form,
+                            alerta_chamado="alerta_chamado" in request.form)
+
+    return _salvar_configuracao(salvar, "Preferências salvas.")

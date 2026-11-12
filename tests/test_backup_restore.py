@@ -115,8 +115,11 @@ class PostgreSQLBackupRestoreTests(unittest.TestCase):
                          f"Ensaio isolado falhou na etapa {report.get('stage', 'desconhecida')} "
                          f"({report.get('error_type', 'erro não identificado')}); saídas brutas omitidas.")
         self.assertEqual(report.get("status"), "ok")
-        # 19 tabelas do domínio + alembic_version + sessao_autenticada (SEC-001).
-        self.assertEqual(report.get("tables"), 21)
+        # 19 tabelas do domínio + alembic_version + sessao_autenticada (SEC-001)
+        # + as 4 das Configurações da conta + a da trava do total do PDV
+        # + as 4 dos planos por nível e do Raio-X (b3e9d6c1f7a2)
+        # + as 2 da Avaliação de Cenário (f4c2a8e1d9b6).
+        self.assertEqual(report.get("tables"), 32)
         self.assertEqual(report.get("uploads"), 4)
         self.assertEqual(report.get("files"), 5)
         not_executed = report.get("not_executed", [])
@@ -206,7 +209,7 @@ class BackupDrillSafetyTests(unittest.TestCase):
             for tool in TOOLS:
                 _tool(Path(fake), tool).write_bytes(b"")
             for platform, approved, accepted in cases:
-                report = {"status": "ok", "tables": 21, "uploads": 4, "files": 5,  # espelha o ensaio real
+                report = {"status": "ok", "tables": 32, "uploads": 4, "files": 5,  # espelha o ensaio real
                           "checks": approved, "not_executed": ["etl"]}
                 completed = subprocess.CompletedProcess([], 0, stdout=json.dumps(report))
                 with self.subTest(platform=platform, checks=approved[-1:], accepted=accepted), \
@@ -294,10 +297,11 @@ class _PrivateDrill(unittest.TestCase):
 
     def fixture(self):
         from extensions import db
-        from models import (Analise, ChamadoSuporte, CoberturaPaga, Contrato, Empresa,
-                            EventoContratual, GuiaTopico, HistoricoPrecoPlano, IndicadorAnalise,
-                            MensagemSuporte, Notificacao, Plano, ProdutoCurvaABC, RegimeContratual,
-                            RelatorioAnalise, Segmento, UploadRelatorio, Usuario)
+        from models import (AceiteDocumento, Analise, ChamadoSuporte, CoberturaPaga, ConfiguracaoSistema,
+                            Contrato, DiagnosticoEntrada, DocumentoLegal, Empresa, EventoContratual, GuiaTopico,
+                            HistoricoPrecoPlano, IndicadorAnalise, MensagemSuporte, Notificacao, Plano,
+                            PreferenciaUsuario, ProdutoCurvaABC, RegimeContratual, RelatorioAnalise, Segmento,
+                            UploadRelatorio, Usuario, ValidacaoPdv, LeadAvaliacao, BrainstormingDadosPdv)
         import storage
 
         plano = Plano(nome_plano="BRONZE", valor_mensal=100, qtd_analises_mes=1,
@@ -381,6 +385,39 @@ class _PrivateDrill(unittest.TestCase):
             HistoricoPrecoPlano(id_plano=plano.id_plano, valor_anterior=90, valor_novo=100,
                                 alterado_em=instante, origem="fixture-fictícia"),
         ])
+        # Configurações da conta: a mesma regra, toda tabela nova com linha.
+        documento = DocumentoLegal(tipo="TERMOS_USO", versao=1, conteudo="Termo fictício restaurado.",
+                                   publicado_em=instante, id_usuario_admin=admin.id_usuario)
+        db.session.add(documento)
+        db.session.flush()
+        db.session.add_all([
+            AceiteDocumento(id_usuario=clientes[0].id_usuario, id_documento=documento.id_documento,
+                            aceito_em=instante),
+            PreferenciaUsuario(id_usuario=clientes[0].id_usuario, alerta_chamado=False, data_atualizacao=instante),
+            ConfiguracaoSistema(chave="suporte_bcc_email", valor="caixa@example.invalid", atualizado_em=instante,
+                                id_usuario_admin=admin.id_usuario),
+            ValidacaoPdv(id_analise=self.analysis_ids[0], valor_pdv_informado=25, faturamento_bruto_calculado=25,
+                         diferenca=0, status_validacao="CONCLUIDO", id_usuario_informante=clientes[0].id_usuario,
+                         informado_em=instante, validado_em=instante),
+            # Planos por nível: o catálogo vem da migração; o Raio-X é o único dado de cliente.
+            DiagnosticoEntrada(id_empresa=self.company_ids[0], id_usuario=clientes[0].id_usuario,
+                               gerado_em=instante, versao_regras="raio-x-ficticio", arquivos=1,
+                               periodo_inicio=date(2026, 1, 1), periodo_fim=date(2026, 1, 31),
+                               indice_saude=80, valor_recuperavel=12, plano_recomendado="PRATA",
+                               resultado='{"ficticio": true}'),
+        ])
+        # Avaliação de Cenário: um lead fictício, com o cifrão no nome das colunas de vazamento.
+        lead = LeadAvaliacao(nome_contato="Contato fictício", email="lead@example.invalid",
+                             whatsapp="11900000000", nome_loja="Loja fictícia", score_saude_cadastral=72.5,
+                             vazamento_total_reais=1234.56, status="concluido", plano_recomendado_codigo="PRATA",
+                             resumo_urgencia_json='["ficticio"]', criado_em=instante, atualizado_em=instante)
+        db.session.add(lead)
+        db.session.flush()
+        db.session.add(BrainstormingDadosPdv(lead_id=lead.id, ano_exercicio=2026, codigo_produto="P1",
+                                             descricao_produto="Produto fictício", quantidade=3,
+                                             valor_venda_bruto=30, custo_medio_registrado=12.5,
+                                             flag_venda_abaixo_custo=True, vazamento_estimado_reais=4.5,
+                                             criado_em=instante))
         guia_ref = storage.salvar(GUIA, "guia/imagem_ficticia.png")
         db.session.add(GuiaTopico(categoria="Teste", pergunta="Recuperação fictícia?",
                                  resposta="Conteúdo fictício restaurado.", imagem_url=guia_ref))

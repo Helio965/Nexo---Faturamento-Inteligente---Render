@@ -34,7 +34,7 @@ jobs:
     runs-on: ubuntu-24.04
     # A suíte completa com navegador levava ~18 min na main (limite de 20); os
     # testes de e-mail transacional a passaram desse limite. Folga para crescer.
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -123,7 +123,7 @@ jobs:
   postgresql-security:
     name: security-postgresql
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -153,6 +153,8 @@ jobs:
         run: python -B -m unittest tests.postgresql_company_restore_migration -v
       - name: ETL, limites, atomicidade e uploads concorrentes no PostgreSQL real
         run: python -B -m unittest tests.postgresql_etl_resource_security -v
+      - name: Configuracoes da conta, RLS e concorrencia no PostgreSQL isolado
+        run: python -B -m unittest tests.postgresql_configuracoes -v
 
   supply-chain:
     name: security-sca-sast

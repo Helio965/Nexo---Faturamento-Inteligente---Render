@@ -7,11 +7,14 @@ from datetime import datetime, timezone
 from functools import wraps
 
 from PIL import Image, UnidentifiedImageError
-from flask import Blueprint, render_template, redirect, url_for, flash, current_app, request, abort
+from flask import Blueprint, render_template, redirect, url_for, flash, current_app, request, abort, make_response
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from sqlalchemy import select, func
+from sqlalchemy.orm import selectinload
 
+from blueprints.auth import corrigir_email_pelo_admin, limite_reautenticacao, trocar_senha_autenticada
+import configuracoes_conta
 from extensions import chave_limite_usuario, db, limiter
 from horario import agora_utc
 from models import (
@@ -23,12 +26,14 @@ from etl_processor import processar_arquivos_analise, ResultadoETL
 from etl_inputs import ETLInputError
 from etl_limits import get_limits
 from etl_uploads import ler_upload_validado, limitar_upload, limitar_processamento
-from notifications import notificar_clientes_empresa
+from notifications import notificar_admins, notificar_clientes_empresa
 from emails import (
     CATEGORIAS, CATEGORIAS_RESULTADO_INCERTO, EVENTOS_FALHA_ENTREGA, EstadoEnvio, consultar_entrega_brevo,
-    diagnostico_configuracao, email_analise_publicada, email_boas_vindas, email_teste_configuracao,
-    email_ticket_resolvido, historico_envios,
+    diagnostico_configuracao, email_analise_publicada, email_boas_vindas, email_lembrete_aceite,
+    email_teste_configuracao, email_ticket_resolvido, envio_disponivel, historico_envios, ultima_conexao_smtp,
+    verificar_conexao_smtp,
 )
+import termos_legais
 from contas_email import email_em_uso, email_valido, normalizar_email
 from sqlalchemy.exc import IntegrityError, DataError, SQLAlchemyError
 from sqlalchemy.orm.exc import StaleDataError
@@ -37,7 +42,7 @@ from company_security import (
     excluir_empresa as excluir_empresa_segura,
     restaurar_empresa as restaurar_empresa_segura,
 )
-from session_security import STATUS_CONTA_SEM_ACESSO
+from session_security import STATUS_CONTA_SEM_ACESSO, usuario_pode_acessar
 from origem_publica import url_publica
 from contract_policy import (
     contrato_da_vigencia, esquema_contratual_disponivel, motivo_bloqueio_nova_analise,
@@ -205,6 +210,8 @@ def dashboard():
         dashboard_data=dashboard_data,
         homologacoes=homologacoes,
         alertas_contratuais=alertas_contratuais,
+        termos_atrasados=termos_legais.contar_pendencias_atrasadas(),
+        termos_dias_alerta=current_app.config["TERMOS_ALERTA_PENDENCIA_DIAS"],
     )
 
 
@@ -413,12 +420,12 @@ def _desconectar_revogados(revogacoes, operacao: str) -> None:
 # configuração" quando a causa é mesmo de configuração; o resto é neutro e
 # aponta o Diagnóstico de e-mail (a causa técnica fica lá e no log).
 _FALHAS_DO_DESTINATARIO = frozenset({"sem_destinatario", "destinatario_invalido", "smtp_destinatario_recusado"})
-_FALHAS_TEMPORARIAS = frozenset({"provedor_indisponivel", "rede", "conexao_sem_resposta"})
+_FALHAS_TEMPORARIAS = frozenset({"provedor_indisponivel", "rede", "conexao_sem_resposta", "smtp_login_temporario"})
 _FALHAS_DE_CONFIGURACAO = frozenset({
     "transporte_desativado", "remetente_invalido", "configuracao_invalida", "credencial_rejeitada",
     "ip_nao_autorizado", "conta_em_validacao", "conta_sem_permissao", "creditos_insuficientes",
     "remetente_nao_autorizado", "dominio_nao_autenticado", "tls", "smtp_autenticacao", "smtp_senha_de_app",
-    "smtp_remetente_recusado", "smtp_conexao",
+    "smtp_remetente_recusado", "smtp_conexao", "smtp_nao_suportado", "smtp_valor_invalido",
 })
 
 
@@ -798,9 +805,11 @@ def empresa_excluir_permanente(id_empresa):
       1) Por análise: ProdutoCurvaABC, UploadRelatorio (+arquivos físicos),
          IndicadorAnalise (1:1), RelatorioAnalise (1:1) → depois a Analise;
       2) Por chamado: MensagemSuporte → depois o ChamadoSuporte;
-      3) Notificacao dos usuários da empresa;
-      4) Usuario(s) da empresa;
-      5) a própria Empresa.
+      3) Notificacao dos usuários da empresa e as dos admins que citam a empresa
+         (nome e assunto digitado pelo cliente, com link para o que vai sair);
+      4) Usuario(s) da empresa (sessões, preferências e aceites saem por
+         ON DELETE CASCADE);
+      5) a própria Empresa (o último Raio-X do PDV sai por ON DELETE CASCADE).
 
     Empresa com histórico contratual (contratos, períodos pagos, eventos ou
     regime) NÃO é excluída: contratos, valores e pagamentos são registros
@@ -836,6 +845,7 @@ def empresa_excluir_permanente(id_empresa):
         analises = db.session.execute(
             select(Analise).where(Analise.id_empresa == id_empresa)
         ).scalars().all()
+        links_da_empresa = [url_for("admin.analise_upload", id_analise=a.id_analise) for a in analises]
         for analise in analises:
             db.session.execute(
                 ProdutoCurvaABC.__table__.delete().where(
@@ -849,10 +859,8 @@ def empresa_excluir_permanente(id_empresa):
                 # 'db:' sai nesta transação; legado em disco só após o commit (SEC-004).
                 storage.remover(up.caminho_arquivo)
                 db.session.delete(up)
-            if analise.indicador is not None:
-                db.session.delete(analise.indicador)
-            if analise.relatorio is not None:
-                db.session.delete(analise.relatorio)
+            # A cascata leva indicador e relatório. Apagá-los também aqui faria o relatório
+            # sair duas vezes, e o segundo DELETE (com controle de versão) derrubaria a exclusão.
             db.session.delete(analise)
 
         # 2) Chamados de suporte e suas mensagens.
@@ -860,6 +868,7 @@ def empresa_excluir_permanente(id_empresa):
             select(ChamadoSuporte).where(ChamadoSuporte.id_empresa == id_empresa)
         ).scalars().all()
         for ch in chamados:
+            links_da_empresa.append(url_for("admin.ticket_detalhe", id_chamado=ch.id_chamado))
             db.session.execute(
                 MensagemSuporte.__table__.delete().where(
                     MensagemSuporte.id_chamado == ch.id_chamado
@@ -868,6 +877,10 @@ def empresa_excluir_permanente(id_empresa):
             db.session.delete(ch)
 
         # 3/4) Notificações dos usuários da empresa + os próprios usuários.
+        if links_da_empresa:
+            db.session.execute(
+                Notificacao.__table__.delete().where(Notificacao.link_destino.in_(links_da_empresa))
+            )
         ids_usuarios = [u.id_usuario for u in usuarios]
         if ids_usuarios:
             db.session.execute(
@@ -954,6 +967,11 @@ def analise_upload(id_analise):
             db.session.rollback()
             flash("Análise não encontrada.", "danger")
             return redirect(url_for("admin.dashboard"))
+        if db.session.scalar(select(RelatorioAnalise.publicado).where(
+                RelatorioAnalise.id_analise == id_analise)):
+            db.session.rollback()
+            flash("Esta análise tem devolutiva publicada. Despublique-a antes de substituir os relatórios.", "warning")
+            return redirect(url_for("admin.analise_relatorio", id_analise=id_analise))
         nome_final = f"analise_{id_analise}_{tipo}_{sha[:8]}.{ext}"
         existente = _buscar_upload(id_analise, tipo)
         caminho_final = storage.salvar(conteudo, nome_final)
@@ -1354,6 +1372,10 @@ def _excluir_analise(analise):
     try:
         for caminho in caminhos:
             storage.remover(caminho)  # 'db:' na transação; legado só após o commit
+        # O aviso contém dados da empresa e não deve sobreviver à análise excluída.
+        link = current_app.url_map.bind("localhost").build(
+            "admin.analise_upload", {"id_analise": analise.id_analise})
+        db.session.execute(Notificacao.__table__.delete().where(Notificacao.link_destino == link))
         db.session.delete(analise)  # cascata ORM apaga todos os filhos na ordem certa
         db.session.commit()
     except (IntegrityError, SQLAlchemyError) as e:
@@ -1427,7 +1449,8 @@ def analise_excluir(id_empresa, id_analise):
 # =====================================================================
 # Suporte: painel central de chamados (consultor)
 # =====================================================================
-@admin_bp.route("/tickets")
+@admin_bp.route("/suporte")
+@admin_bp.route("/tickets")  # endereço anterior: continua válido
 @admin_required
 def tickets():
     """
@@ -1436,6 +1459,7 @@ def tickets():
     """
     todos = db.session.execute(
         select(ChamadoSuporte)
+        .options(selectinload(ChamadoSuporte.mensagens), selectinload(ChamadoSuporte.empresa))
         .order_by(ChamadoSuporte.data_abertura.desc(), ChamadoSuporte.id_chamado.desc())
     ).scalars().all()
 
@@ -1486,6 +1510,7 @@ def ticket_detalhe(id_chamado):
                 chamado.id_empresa,
                 f"A equipe NEXO respondeu seu chamado “{chamado.assunto}”.",
                 url_for("cliente.ticket_detalhe", id_chamado=id_chamado),
+                aviso="alerta_chamado",
             )
             db.session.commit()
             flash("Resposta enviada ao cliente.", "success")
@@ -1510,6 +1535,7 @@ def ticket_detalhe(id_chamado):
                     chamado.id_empresa,
                     f"Seu chamado “{chamado.assunto}” foi marcado como resolvido.",
                     url_for("cliente.ticket_detalhe", id_chamado=id_chamado),
+                    aviso="alerta_chamado",
                 )
             elif novo != "RESOLVIDO":
                 chamado.data_fechamento = None
@@ -1700,12 +1726,14 @@ def guia_deletar(id):
 @admin_bp.route("/diagnostico-email")
 @admin_required
 def diagnostico_email():
-    """Situação do envio de e-mails sem segredos: transporte, remetente, formato
-    da chave (só pelo prefixo), origem dos links, pendências e os envios
-    recentes deste processo (estado, categoria, correlação)."""
+    """Situação do envio de e-mails sem segredos: transporte, servidor SMTP,
+    remetente, formato da chave (só pelo prefixo), origem dos links, pendências,
+    último desfecho da conexão SMTP e os envios recentes deste processo (estado,
+    categoria, correlação)."""
     return render_template(
         "admin/diagnostico_email.html",
         diagnostico=diagnostico_configuracao(), envios=historico_envios(),
+        conexao_smtp=ultima_conexao_smtp(),
     )
 
 
@@ -1758,4 +1786,213 @@ def diagnostico_email_entrega(correlacao):
         else:
             flash(f"O Brevo registrou o envio, mas ainda não a entrega ({ref}): {rotulos}. Consulte de novo em "
                   "instantes.", "info")
+    return redirect(url_for("admin.diagnostico_email"))
+
+
+@admin_bp.route("/usuarios/<int:id_usuario>/corrigir-email", methods=["POST"])
+@admin_required
+# Step-up por tentativa, como na exclusão permanente: esta ação decide quem recupera a conta.
+@limiter.limit("5 per 15 minutes", methods=["POST"], key_func=chave_limite_usuario)
+def usuario_corrigir_email(id_usuario):
+    """Corrige o e-mail de acesso de um CLIENTE e devolve a conta ao dono (ver auth.corrigir_email_pelo_admin)."""
+    try:
+        usuario = db.session.get(Usuario, id_usuario, populate_existing=True)
+        acessivel = usuario_pode_acessar(usuario)
+    except SQLAlchemyError as erro:
+        db.session.rollback()
+        current_app.logger.warning("Correção de e-mail indisponível (%s).", type(erro).__name__)
+        flash("Não foi possível consultar o usuário agora. Tente novamente.", "danger")
+        return redirect(url_for("admin.empresas"))
+    if usuario is None or usuario.role != "CLIENTE" or usuario.id_empresa is None:
+        flash("Usuário não encontrado.", "danger")
+        return redirect(url_for("admin.empresas"))
+    destino = url_for("contratos.empresa_detalhe", id_empresa=usuario.id_empresa)
+    if not acessivel:
+        flash("Esta conta está sem acesso ao portal (usuário desativado, empresa na lixeira, cancelada ou sem "
+              "contrato vigente). Restaure ou reative antes de corrigir o e-mail.", "warning")
+        return redirect(destino)
+    if not current_user.check_senha(request.form.get("senha_confirmacao") or ""):
+        flash("Confirme sua senha de administrador para corrigir o e-mail de acesso.", "danger")
+        return redirect(destino)
+    id_alvo, id_admin = usuario.id_usuario, current_user.id_usuario
+    erro, envio = corrigir_email_pelo_admin(usuario, request.form.get("novo_email"), request.form.get("confirmacao_novo_email"))
+    if erro:
+        flash(erro, "danger")
+        return redirect(destino)
+    current_app.logger.info("E-mail de acesso corrigido pelo administrador | admin=%s usuario=%s", id_admin, id_alvo)
+    flash("E-mail de acesso corrigido. As sessões do usuário foram encerradas e a senha anterior deixou de valer.", "success")
+    if envio is None:
+        flash("O link para definir a senha não foi enviado: peça ao usuário para usar “Esqueci minha senha”.", "warning")
+    else:
+        _flash_envio_email(envio, "o link para definir a senha")
+    return redirect(destino)
+
+
+
+@admin_bp.route("/configuracoes")
+@admin_required
+def configuracoes():
+    resposta = make_response(render_template("admin/configuracoes.html", **configuracoes_conta.contexto_admin()))
+    resposta.headers["Cache-Control"] = "no-store"
+    return resposta
+
+
+
+@admin_bp.route("/configuracoes/senha", methods=["POST"])
+@admin_required
+@limite_reautenticacao
+def configuracoes_senha():
+    erro = trocar_senha_autenticada(current_user._get_current_object(), request.form.get("senha_atual"),
+                                    request.form.get("nova_senha"), request.form.get("confirmacao_nova_senha"))
+    flash(erro or "Senha alterada. As outras sessões abertas foram encerradas.", "danger" if erro else "success")
+    return redirect(url_for("admin.configuracoes"))
+
+
+
+@admin_bp.route("/configuracoes/documentos", methods=["POST"])
+@admin_required
+@limiter.limit("30 per hour", key_func=chave_limite_usuario)
+def configuracoes_documento():
+    """Publica a versão seguinte dos Termos de Uso ou da Política de Privacidade.
+
+    Se a publicação for recusada, a página volta com o texto digitado: um conflito de
+    versão não pode custar ao admin o documento que acabou de escrever."""
+    tipo = request.form.get("tipo")
+    id_admin = current_user.id_usuario
+    try:
+        documento = configuracoes_conta.publicar_documento(
+            tipo, request.form.get("conteudo"), request.form.get("versao_exibida"),
+            current_user._get_current_object(), request.form.get("alteracao"),
+        )
+        versao = documento.rotulo_versao if documento else None
+        db.session.commit()
+    except (configuracoes_conta.DadoInvalido, IntegrityError) as erro:
+        db.session.rollback()
+        flash(str(erro) if isinstance(erro, configuracoes_conta.DadoInvalido) else
+              "Outra versão foi publicada ao mesmo tempo. Confira o texto atual e publique de novo.", "danger")
+        return render_template("admin/configuracoes.html", rascunho_tipo=tipo,
+                               rascunho_conteudo=request.form.get("conteudo") or "",
+                               rascunho_alteracao=request.form.get("alteracao"),
+                               **configuracoes_conta.contexto_admin()), 400
+    except SQLAlchemyError as erro:
+        db.session.rollback()
+        current_app.logger.warning("Documento legal não publicado (%s).", type(erro).__name__)
+        flash("Não foi possível publicar o documento. Tente novamente.", "danger")
+        return redirect(url_for("admin.configuracoes"))
+    rotulo = configuracoes_conta.TIPOS_DOCUMENTO[tipo]
+    if versao is None:
+        flash(f"{rotulo}: o texto não mudou, nenhuma versão nova foi criada.", "info")
+    else:
+        current_app.logger.info("Documento legal publicado | tipo=%s versao=%s admin=%s", tipo, versao, id_admin)
+        flash(f"{rotulo}: versão {versao} publicada. Os clientes precisam aceitá-la no próximo acesso.", "success")
+    return redirect(url_for("admin.configuracoes"))
+
+
+
+@admin_bp.route("/termos-aceites")
+@admin_required
+def termos_aceites():
+    """Auditoria do aceite: status de cada cliente, versão aceita, data e IP, e a adesão."""
+    resposta = make_response(render_template("admin/termos_aceites.html", **termos_legais.auditoria()))
+    # IP e e-mail de clientes na página: nada em cache.
+    resposta.headers["Cache-Control"] = "no-store"
+    return resposta
+
+
+
+@admin_bp.route("/termos-aceites/<int:id_usuario>/lembrete", methods=["POST"])
+@admin_required
+# Um e-mail por clique, para uma pessoa: sem disparo em massa.
+@limiter.limit("30 per hour", methods=["POST"], key_func=chave_limite_usuario)
+def termos_aceites_lembrete(id_usuario):
+    """Lembrete por e-mail a um CLIENTE com aceite pendente. Síncrono: o admin vê se o
+    provedor aceitou. A pendência é conferida de novo agora, não na hora em que a tabela abriu."""
+    destino = url_for("admin.termos_aceites")
+    try:
+        usuario = db.session.get(Usuario, id_usuario, populate_existing=True)
+        if usuario is None or usuario.role != "CLIENTE":
+            flash("Usuário não encontrado.", "danger")
+            return redirect(destino)
+        if not usuario.ativo or usuario.primeiro_acesso or not usuario_pode_acessar(usuario):
+            flash("Este usuário não tem acesso ao portal agora: o lembrete não foi enviado.", "warning")
+            return redirect(destino)
+        pendencias = termos_legais.pendentes(usuario.id_usuario) if termos_legais.esquema_configuracoes_disponivel() else []
+    except SQLAlchemyError as erro:
+        db.session.rollback()
+        current_app.logger.warning("Lembrete de aceite indisponível (%s).", type(erro).__name__)
+        flash("Não foi possível consultar o usuário agora. Tente novamente.", "danger")
+        return redirect(destino)
+    if not pendencias:
+        flash("Este usuário já aceitou as versões vigentes: nenhum lembrete foi enviado.", "info")
+        return redirect(destino)
+    current_app.logger.info("Lembrete de aceite solicitado pelo administrador | usuario=%s", usuario.id_usuario)
+    _flash_envio_email(email_lembrete_aceite(usuario, pendencias, url_publica("cliente.dashboard")),
+                       "o lembrete de aceite")
+    return redirect(destino)
+
+
+
+@admin_bp.route("/configuracoes/copia-suporte", methods=["POST"])
+@admin_required
+# Step-up: a caixa recebe o texto de todo chamado novo e continua recebendo depois que a sessão cai.
+@limite_reautenticacao
+def configuracoes_copia_suporte():
+    """Caixa que recebe em cópia oculta (BCC) cada novo chamado; vazio desliga."""
+    if not current_user.check_senha(request.form.get("senha_confirmacao") or ""):
+        flash("Confirme sua senha de administrador para alterar a cópia de chamados.", "danger")
+        return redirect(url_for("admin.configuracoes"))
+    id_admin = current_user.id_usuario
+    for ultima_tentativa in (False, True):
+        try:
+            anterior = configuracoes_conta.email_copia_suporte()
+            endereco = configuracoes_conta.salvar_email_copia_suporte(
+                request.form.get("email_copia"), current_user._get_current_object(),
+            )
+            if endereco != anterior:
+                notificar_admins("A caixa que recebe a cópia dos novos chamados foi alterada. Confira em Configurações.",
+                                 url_for("admin.configuracoes"))
+            db.session.commit()
+        except IntegrityError:
+            # Dois envios na primeira gravação: quem perde repete e encontra a linha do outro.
+            db.session.rollback()
+            if not ultima_tentativa:
+                continue
+            flash("Não foi possível salvar. Tente novamente.", "danger")
+        except configuracoes_conta.DadoInvalido as erro:
+            db.session.rollback()
+            flash(str(erro), "danger")
+        except SQLAlchemyError as erro:
+            db.session.rollback()
+            current_app.logger.warning("Cópia de chamados não salva (%s).", type(erro).__name__)
+            flash("Não foi possível salvar. Tente novamente.", "danger")
+        else:
+            if endereco != anterior:
+                current_app.logger.info("Caixa de cópia de chamados alterada | admin=%s", id_admin)
+            if endereco and not envio_disponivel(current_app.config):
+                flash("Caixa salva, mas o envio de e-mail está indisponível: nenhuma cópia sai até ele voltar. "
+                      "Confira o Diagnóstico de e-mail.", "warning")
+            else:
+                flash("Novos chamados serão copiados para este e-mail." if endereco
+                      else "Cópia de novos chamados desligada.", "success")
+        break
+    return redirect(url_for("admin.configuracoes"))
+
+
+
+@admin_bp.route("/diagnostico-email/conexao", methods=["POST"])
+@admin_required
+# Cada pedido abre uma conexão e faz login no servidor SMTP: limite por usuário
+# para o botão não virar tentativas de login em série na conta de e-mail.
+@limiter.limit("30 per hour", methods=["POST"], key_func=chave_limite_usuario)
+def diagnostico_email_conexao():
+    """Testa a conexão SMTP configurada (TLS e login), sem enviar nenhuma mensagem."""
+    resultado = verificar_conexao_smtp()
+    if resultado["ok"]:
+        flash("Conexão SMTP confirmada: o servidor aceitou a conexão e o login. Nenhum e-mail foi enviado; "
+              "use o envio de teste para confirmar a mensagem.", "success")
+    elif resultado["origem"] == "verificacao" and resultado["categoria"] in (
+            "transporte_desativado", "smtp_nao_usado", "smtp_suprimido", "envio_bloqueado"):
+        flash(f"A conexão SMTP não foi testada: {resultado['descricao']}.", "warning")
+    else:
+        flash(f"A conexão SMTP falhou: {resultado['descricao'] or 'erro inesperado na conexão'}.", "danger")
     return redirect(url_for("admin.diagnostico_email"))

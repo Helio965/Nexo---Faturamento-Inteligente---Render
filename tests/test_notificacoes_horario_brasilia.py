@@ -200,6 +200,10 @@ class Portal:
             ident = re.search(r'<td class="t-mono t-mut">(\d+)</td>', tr)
             if ident:
                 linhas[int(ident.group(1))] = self.horarios(tr)[0]
+        # O painel do admin lista os chamados em cards, não em linhas de tabela.
+        for card in re.findall(r'<article class="nexo-card ticket-card">(.*?)</article>', pagina, re.S):
+            ident = re.search(r'<span class="t-mono t-mut">#(\d+)</span>', card)
+            linhas[int(ident.group(1))] = self.horarios(card)[0]
         return linhas
 
 
@@ -1021,7 +1025,10 @@ class HorarioBrasiliaNavegadorTests(DeployTestCase):
         # Recarga: o mesmo texto, agora vindo do banco.
         self.ir(admin, "/admin/tickets")
         self.assertEqual(self.tempo_no_dom(admin, "#bellList .bell-item time"), sino)
-        self.assertEqual(self.tempo_no_dom(admin, "table.nexo-table tbody time"), abertura)
+        # A Central de Suporte mostra os chamados em cartões (não há mais tabela nessa página): o
+        # horário do cartão precisa estar na tela antes de o atributo ser lido.
+        admin.wait_for_selector(".ticket-card time", timeout=5000)
+        self.assertEqual(self.tempo_no_dom(admin, ".ticket-card time"), abertura)
         self.assert_sem_html_injetado(admin)
         # O admin responde às 14:52; o cliente recebe em tempo real.
         self.ir(admin, f"/admin/tickets/{id_chamado}")

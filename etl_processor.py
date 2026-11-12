@@ -152,6 +152,10 @@ def _parse_valor(bruto):
     if bruto is None:
         return None
     s = str(bruto).strip()
+    # Formula neutralization prefixes text with an apostrophe. Remove it before
+    # detecting the sign so negative quantities and monetary amounts stay negative.
+    if s.startswith("'"):
+        s = s[1:].strip()
     if s.lower() in ("", "nan", "none", "-", "--"):
         return None
 
