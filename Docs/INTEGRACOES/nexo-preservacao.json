@@ -1,0 +1,137 @@
+{
+  "base_commit": "46a342066ef73408a794fd5abb75f177aa380ed2",
+  "verificacoes": [
+    {
+      "path": "Docs/landing-redesign/README.md",
+      "sha256_base": "06af681bff40fee25e8fbf120f1079c0092219428439374cfd92f8e444878e11",
+      "sha256_integrado": "06af681bff40fee25e8fbf120f1079c0092219428439374cfd92f8e444878e11",
+      "identico": true
+    },
+    {
+      "path": "Docs/landing-redesign/desktop-1440.png",
+      "sha256_base": "13966b21021b2283fe9867f6dbf63707df50528bb4a9ca955b243a0297521ffb",
+      "sha256_integrado": "13966b21021b2283fe9867f6dbf63707df50528bb4a9ca955b243a0297521ffb",
+      "identico": true
+    },
+    {
+      "path": "Docs/landing-redesign/mobile-390.png",
+      "sha256_base": "c0ac079913a4ba1777035497495e8033994c39c3ec035a28c1c2a36bf66cce8f",
+      "sha256_integrado": "c0ac079913a4ba1777035497495e8033994c39c3ec035a28c1c2a36bf66cce8f",
+      "identico": true
+    },
+    {
+      "path": "blueprints/api.py",
+      "sha256_base": "fca46269d07968dff5de94a0e046be49d22d4c1e26df048c8c271126f2e2e2ee",
+      "sha256_integrado": "fca46269d07968dff5de94a0e046be49d22d4c1e26df048c8c271126f2e2e2ee",
+      "identico": true
+    },
+    {
+      "path": "contract_admin.py",
+      "sha256_base": "b35b196d5dcaa9bdeb481f93000276d49d002587095c8e478867d322c74e94ec",
+      "sha256_integrado": "b35b196d5dcaa9bdeb481f93000276d49d002587095c8e478867d322c74e94ec",
+      "identico": true
+    },
+    {
+      "path": "contract_policy.py",
+      "sha256_base": "aa87cb408256981c0a7ecfc3e627a6656fc649665437b329ccfdc79ad357651d",
+      "sha256_integrado": "aa87cb408256981c0a7ecfc3e627a6656fc649665437b329ccfdc79ad357651d",
+      "identico": true
+    },
+    {
+      "path": "horario.py",
+      "sha256_base": "27ba8f80f6085cf37cc64e7a6849412444fe15ff3a995f9d49189be7dd39e8cf",
+      "sha256_integrado": "27ba8f80f6085cf37cc64e7a6849412444fe15ff3a995f9d49189be7dd39e8cf",
+      "identico": true
+    },
+    {
+      "path": "insights.py",
+      "sha256_base": "dad8cc35ece81642d8e96c829cf15b593f0a608183dbaf349a9611267a847edf",
+      "sha256_integrado": "dad8cc35ece81642d8e96c829cf15b593f0a608183dbaf349a9611267a847edf",
+      "identico": true
+    },
+    {
+      "path": "pdf_export.py",
+      "sha256_base": "4a5b982c5800088030785f5314f0a59e278b04b63a937b4ad98e0b979ca67890",
+      "sha256_integrado": "4a5b982c5800088030785f5314f0a59e278b04b63a937b4ad98e0b979ca67890",
+      "identico": true
+    },
+    {
+      "path": "plan_catalog.py",
+      "sha256_base": "c21e6651d9f56ecd03904a1a744710066ea6bf69dd4e3312cfa948da0885fd76",
+      "sha256_integrado": "c21e6651d9f56ecd03904a1a744710066ea6bf69dd4e3312cfa948da0885fd76",
+      "identico": true
+    },
+    {
+      "path": "render.yaml",
+      "sha256_base": "d9ddc61cf8ed677296540a9e7b1f00376f3f6b06997a8923d436c47265ed8625",
+      "sha256_integrado": "d9ddc61cf8ed677296540a9e7b1f00376f3f6b06997a8923d436c47265ed8625",
+      "identico": true
+    },
+    {
+      "path": "requirements-dev.txt",
+      "sha256_base": "5327b1c1e7aa00c8509d3d00aa33e24daa9600896ff89e6e66db437d2b0792af",
+      "sha256_integrado": "5327b1c1e7aa00c8509d3d00aa33e24daa9600896ff89e6e66db437d2b0792af",
+      "identico": true
+    },
+    {
+      "path": "requirements.txt",
+      "sha256_base": "bb640f8641e6e6c88c6f961af636710c6c655b8ff2cf5b0b47bfe0592d38b2bb",
+      "sha256_integrado": "bb640f8641e6e6c88c6f961af636710c6c655b8ff2cf5b0b47bfe0592d38b2bb",
+      "identico": true
+    },
+    {
+      "path": "static/css/landing.css",
+      "sha256_base": "75874342302245ea501c13e3da4301bdedf4d4f68c5f93e774ea7500c2f62d40",
+      "sha256_integrado": "75874342302245ea501c13e3da4301bdedf4d4f68c5f93e774ea7500c2f62d40",
+      "identico": true
+    },
+    {
+      "path": "static/js/landing-video.js",
+      "sha256_base": "df74ab15a63aa1f8d3dd2046207519924a8e0181c583861153f3fe4368c728a2",
+      "sha256_integrado": "df74ab15a63aa1f8d3dd2046207519924a8e0181c583861153f3fe4368c728a2",
+      "identico": true
+    },
+    {
+      "path": "static/js/landing.js",
+      "sha256_base": "57f470245caec6b407c92c753060cd6b0da989751e0e4e5b8d75a6e270c3c832",
+      "sha256_integrado": "57f470245caec6b407c92c753060cd6b0da989751e0e4e5b8d75a6e270c3c832",
+      "identico": true
+    },
+    {
+      "path": "static/video/nexo_demo_motion.mp4",
+      "sha256_base": "f7756d2507356c2164409190d0d618d630dba2d83a7d2e012aa38ee909c888fb",
+      "sha256_integrado": "f7756d2507356c2164409190d0d618d630dba2d83a7d2e012aa38ee909c888fb",
+      "identico": true
+    },
+    {
+      "path": "static/video/nexo_demo_poster.jpg",
+      "sha256_base": "0e3882b673f95e4826235fc04b7d881459f19d7a5d573cfb8c371e3234087a4d",
+      "sha256_integrado": "0e3882b673f95e4826235fc04b7d881459f19d7a5d573cfb8c371e3234087a4d",
+      "identico": true
+    },
+    {
+      "path": "static/video/nexo_demo_poster.png",
+      "sha256_base": "f84ca07f06cab6757649c64f98d5946d3a472e5b3c7263d022d8caef55126ce5",
+      "sha256_integrado": "f84ca07f06cab6757649c64f98d5946d3a472e5b3c7263d022d8caef55126ce5",
+      "identico": true
+    },
+    {
+      "path": "static/video/nexo_demo_preview.gif",
+      "sha256_base": "f9400ab49d15fd79f64e772ff51ea509ebb545598b1f787d133aa4a51ccf3c84",
+      "sha256_integrado": "f9400ab49d15fd79f64e772ff51ea509ebb545598b1f787d133aa4a51ccf3c84",
+      "identico": true
+    },
+    {
+      "path": "templates/landing.html",
+      "sha256_base": "6e7a754532f087afdf1da88db4e453a1a718e7ea5854cbe08fa8a4314660b522",
+      "sha256_integrado": "6e7a754532f087afdf1da88db4e453a1a718e7ea5854cbe08fa8a4314660b522",
+      "identico": true
+    },
+    {
+      "path": "tests/fixtures/sec005_financial_expected.json",
+      "sha256_base": "9e9f0e7931b2e595c676458119cf99b0ad72313bc668bbd2fe6c3cce3a0d69d5",
+      "sha256_integrado": "9e9f0e7931b2e595c676458119cf99b0ad72313bc668bbd2fe6c3cce3a0d69d5",
+      "identico": true
+    }
+  ]
+}

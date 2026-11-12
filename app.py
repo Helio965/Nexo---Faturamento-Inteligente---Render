@@ -13,9 +13,11 @@ EVENT LISTENER CRÍTICO:
     SEM ISSO, qualquer FK no schema é decorativa.
 """
 
+import math
 import os
 import secrets
 import logging
+import time
 from pathlib import Path
 
 from flask import Flask, redirect, url_for, render_template, session, request, abort, make_response, g
@@ -251,6 +253,14 @@ def create_app(config_name: str = None) -> Flask:
         ):
             return redirect(url_for("auth.primeiro_acesso"))
 
+    # Aceite obrigatório dos Termos de Uso e da Política de Privacidade (termos_legais.py):
+    # depois da troca de senha, o CLIENTE com versão vigente sem aceite só vê o modal. No
+    # login do admin, as pendências vencidas vão para o sininho dele.
+    import termos_legais
+    from flask_login import user_logged_in
+    app.before_request(termos_legais.trava_de_aceite)
+    user_logged_in.connect(termos_legais.ao_entrar, app)
+
     # Registra blueprints
     from blueprints.auth import auth_bp
     from blueprints.admin import admin_bp
@@ -258,6 +268,7 @@ def create_app(config_name: str = None) -> Flask:
     from blueprints.notificacoes import notificacoes_bp
     from blueprints.api import api_bp
     from blueprints.contratos import contratos_bp
+    from blueprints.onboarding import onboarding_bp
 
     app.register_blueprint(auth_bp, url_prefix="/auth")
     app.register_blueprint(admin_bp, url_prefix="/admin")
@@ -265,6 +276,8 @@ def create_app(config_name: str = None) -> Flask:
     app.register_blueprint(notificacoes_bp)
     app.register_blueprint(api_bp)
     app.register_blueprint(contratos_bp)
+    # Planos por nível e Raio-X de entrada (entitlements.py): rotas /onboarding/* e /api/onboarding/*.
+    app.register_blueprint(onboarding_bp)
 
     # Gestão contratual: prazos exibidos no fuso da política (nunca no do
     # navegador) e comandos `flask contratos` / `flask planos` (simulação padrão).
@@ -276,6 +289,9 @@ def create_app(config_name: str = None) -> Flask:
     app.jinja_env.filters["iso_utc"] = iso_utc
     from cli_contratos import registrar_comandos
     registrar_comandos(app)
+    # Avaliação de Cenário: `flask leads expurgar-pdv` (TTL de 30 dias; simulação padrão).
+    from leads_avaliacao import registrar_comandos as registrar_comandos_leads
+    registrar_comandos_leads(app)
 
     # Context processor: injeta os dados do sininho (contagem + 5 recentes) em
     # TODA página renderizada, para o usuário autenticado. Mantém o template
@@ -285,6 +301,14 @@ def create_app(config_name: str = None) -> Flask:
     @app.context_processor
     def _injeta_sininho():
         return contexto_sininho(current_user)
+
+    # Menu do cliente conforme o plano (itens de plano superior com cadeado e selo UPGRADE).
+    # Falha de banco devolve o menu de sempre, sem os itens de plano.
+    import entitlements
+
+    @app.context_processor
+    def _injeta_menu_cliente():
+        return entitlements.contexto_menu(current_user)
 
     # Expõe o classificador de badge ao template (mesma lógica do payload do socket).
     app.jinja_env.globals["badge_notif"] = classificar_notificacao
@@ -362,20 +386,28 @@ def create_app(config_name: str = None) -> Flask:
     def _csrf_error(e):
         if request.path.startswith("/api/"):
             return _erro_api("Sua sessão expirou. Atualize a página e tente novamente.", 400)
-        # Token ausente/expirado → mensagem clara e volta para a origem (re-render
-        # com token novo). Evita expor o traceback de "The CSRF token is missing".
-        from flask import flash
-        flash("Sua sessão expirou ou o formulário é inválido. Tente novamente.", "warning")
-        return redirect(request.referrer or url_for("auth.login")), 400
+        # Token ausente/expirado → página do portal com a mensagem: o navegador não segue
+        # Location numa resposta 400. Evita expor o traceback de "The CSRF token is missing".
+        return _pagina_erro(400, "Formulário expirado",
+                            "Sua sessão expirou ou este formulário é antigo. Nada foi gravado: "
+                            "abra a página de novo e repita.")
 
     @app.errorhandler(429)
     def _rate_limit(e):
-        if request.path.startswith("/api/"):
+        if request.path.startswith("/api/suporte-bot"):
             return _erro_api("Você enviou muitas mensagens em pouco tempo. "
                              "Aguarde um minuto e tente novamente.", 429)
-        return render_template("erro_simples.html", titulo="Muitas tentativas",
+        if request.path.startswith("/api/"):
+            return _erro_api("Você fez muitas requisições em pouco tempo. "
+                             "Aguarde alguns minutos e tente novamente.", 429)
+        # O limite pode durar de um minuto a uma hora: o texto acompanha o que estourou.
+        limite = limiter.current_limit
+        minutos = max(1, math.ceil((limite.reset_at - 1 - time.time()) / 60)) if limite else 1
+        espera = "um minuto" if minutos == 1 else f"{minutos} minutos"
+        return render_template("erro_simples.html", titulo="Muitas tentativas", codigo=429,
+                               painel_url=_painel_url(),
                                mensagem="Você fez muitas requisições em pouco tempo. "
-                                        "Aguarde um minuto e tente novamente."), 429
+                                        f"Aguarde {espera} e tente novamente."), 429
 
     # Páginas de erro na identidade do NEXO (antes: a página padrão do servidor,
     # branca e em inglês). O status HTTP não muda; chamadas /api/ recebem JSON.
@@ -434,6 +466,19 @@ def create_app(config_name: str = None) -> Flask:
         # Também cobre /api/: JSON, não a página HTML do servidor.
         return _pagina_erro(405, "Método não permitido",
                             "Esta ação não pode ser feita por este tipo de requisição.")
+
+    @app.errorhandler(413)
+    def _grande_demais(e):
+        # O corpo inteiro passou de MAX_CONTENT_LENGTH. Nada foi lido nem gravado; /api/ recebe
+        # JSON, as páginas a identidade do portal. O Raio-X manda vários meses por envio.
+        limite = app.config.get("MAX_CONTENT_LENGTH")
+        teto = (f"{limite // 1048576} MB" if limite and limite >= 1048576
+                else f"{limite // 1024} KB" if limite else "o limite do servidor")
+        if request.endpoint in ("onboarding.diagnostico_enviar", "onboarding.api_diagnostico_enviar"):
+            mensagem = f"Os relatórios enviados passam de {teto} somados. Nada foi gravado: envie menos meses por vez."
+        else:
+            mensagem = f"O envio passa de {teto}. Nada foi gravado: envie um arquivo menor."
+        return _pagina_erro(413, "Envio grande demais", mensagem)
 
     @app.errorhandler(500)
     def _erro_interno(e):

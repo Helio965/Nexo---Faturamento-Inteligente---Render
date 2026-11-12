@@ -98,7 +98,12 @@ TABELAS_CONTRATUAIS = (
 )
 # Tabelas NÃO contratuais que a cadeia de migrações cria depois de 81287c74387a
 # (a migração até "head" também as traz; nascem vazias como as contratuais).
-TABELAS_POSTERIORES = ("sessao_autenticada",)
+TABELAS_POSTERIORES = ("sessao_autenticada", "preferencia_usuario", "documento_legal", "aceite_documento",
+                       "configuracao_sistema", "validacao_pdv", "diagnostico_entrada",
+                       "lead_avaliacao", "brainstorming_dados_pdv")
+# Catálogo dos planos por nível (b3e9d6c1f7a2): nasce com os dados de referência que a própria
+# revisão grava (níveis, funcionalidades e a matriz cumulativa), nunca com dado de cliente.
+CATALOGO_PLANOS = {"plano_nivel": 4, "funcionalidade": 15, "plano_funcionalidade": 38}
 TABELAS_POR_EMPRESA = ("regime_contratual", "contrato", "cobertura_paga", "evento_contratual")
 UTC = timezone.utc
 SAO_PAULO = ZoneInfo("America/Sao_Paulo")
@@ -279,15 +284,18 @@ class _PrivateCluster:
                 url = db.engine.url
                 self.check("private_engine", url.get_backend_name() == "postgresql"
                            and (url.host, url.port) == ("127.0.0.1", port))
-            self._etapa_migracao_legada()
-            self._etapa_instante_utc()
-            self._etapa_acesso()
-            self._etapa_reconciliacao_concorrente()
-            self._etapa_contratacao_concorrente()
-            self._etapa_prorrogacao_concorrente()
-            self._etapa_exclusao_permanente()
-            self._etapa_downgrade()
+            self._etapas()
             return app
+
+    def _etapas(self):
+        self._etapa_migracao_legada()
+        self._etapa_instante_utc()
+        self._etapa_acesso()
+        self._etapa_reconciliacao_concorrente()
+        self._etapa_contratacao_concorrente()
+        self._etapa_prorrogacao_concorrente()
+        self._etapa_exclusao_permanente()
+        self._etapa_downgrade()
 
     # ------------------------------------------------------------------ apoio
     @contextlib.contextmanager
@@ -447,7 +455,9 @@ class _PrivateCluster:
     @staticmethod
     def _limpar_cache_esquema():
         import contract_policy
+        import preferencias_usuario
         contract_policy._esquema_por_engine.clear()
+        preferencias_usuario._esquema_por_engine.clear()
 
     def _nova_empresa(self, nome, *, status="ATIVA", deletado_em=None, senha=False):
         from models import Empresa, Usuario
@@ -654,12 +664,15 @@ class _PrivateCluster:
         depois = self._contagens()
         self.check("migration_preserves_legacy_counts",
                    set(depois) == set(antes) | set(TABELAS_CONTRATUAIS) | set(TABELAS_POSTERIORES)
+                   | set(CATALOGO_PLANOS)
                    and all(depois[tabela] == quantidade for tabela, quantidade in antes.items())
                    and antes["empresa"] == 4 and antes["analise"] == 5,
                    f"antes={antes} depois={depois}")
         self.check("migration_creates_no_contract_data",
-                   all(depois[tabela] == 0 for tabela in TABELAS_CONTRATUAIS + TABELAS_POSTERIORES),
-                   str({tabela: depois[tabela] for tabela in TABELAS_CONTRATUAIS + TABELAS_POSTERIORES}))
+                   all(depois[tabela] == 0 for tabela in TABELAS_CONTRATUAIS + TABELAS_POSTERIORES)
+                   and all(depois[tabela] == n for tabela, n in CATALOGO_PLANOS.items()),
+                   str({tabela: depois[tabela] for tabela in (*TABELAS_CONTRATUAIS, *TABELAS_POSTERIORES,
+                                                              *CATALOGO_PLANOS)}))
         esperados = {"E1": "ATIVA", "E2": "SUSPENSA", "E3": "CANCELADA", "E4": "EXCLUIDA"}
         with self._sessao() as sessao:
             situacoes = {nome: obter_situacao_contratual(sessao.get(Empresa, self.ids[nome][0]), instante=T0,
@@ -1241,7 +1254,7 @@ class _PrivateCluster:
                     conexao.execute(text(comando))
         # O downgrade até e4c004a26b01 remove as tabelas contratuais E as posteriores
         # (sessao_autenticada é descendente da migração contratual na cadeia).
-        removidas = set(TABELAS_CONTRATUAIS) | set(TABELAS_POSTERIORES)
+        removidas = set(TABELAS_CONTRATUAIS) | set(TABELAS_POSTERIORES) | set(CATALOGO_PLANOS)
         legado = {tabela: n for tabela, n in self._contagens().items() if tabela not in removidas}
         self._migrar(downgrade, REVISAO_ANTERIOR)
         self._limpar_cache_esquema()
@@ -1273,6 +1286,7 @@ class _PrivateCluster:
         self.check("upgrade_again_after_downgrade",
                    self._revisao() == self.head and com_esquema and diferencas == []
                    and all(contagens[tabela] == 0 for tabela in TABELAS_CONTRATUAIS + TABELAS_POSTERIORES)
+                   and all(contagens[tabela] == n for tabela, n in CATALOGO_PLANOS.items())
                    and {t: n for t, n in contagens.items() if t not in removidas} == legado
                    and resposta.status_code == 302 and self._acesso("E1", T0) is True,
                    f"revisão={self._revisao()} diferencas={repr(diferencas)[:300]} login={resposta.status_code}")

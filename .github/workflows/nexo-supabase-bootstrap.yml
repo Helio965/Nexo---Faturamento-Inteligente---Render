@@ -72,6 +72,7 @@ jobs:
           import os
           from urllib.parse import urlsplit, parse_qs, unquote
           from sqlalchemy import create_engine, text
+          from sqlalchemy.engine import make_url
 
           expected_user = "postgres.mgjdsbcohboxzcbicbuc"
           expected_host = "aws-0-us-west-2.pooler.supabase.com"
@@ -92,7 +93,10 @@ jobs:
                   raise SystemExit(f"{key} não corresponde ao projeto e método esperados; nada foi modificado.")
               print(f"{key}: projeto, pooler, porta e TLS validados.")
 
-          engine = create_engine(os.environ["DIRECT_URL"], connect_args={"connect_timeout": 15})
+          # As três formas de URI validadas acima usam o driver instalado no projeto.
+          # SQLAlchemy 2.1 usa psycopg por padrão, mas aqui instalamos psycopg2.
+          direct_url = make_url(os.environ["DIRECT_URL"]).set(drivername="postgresql+psycopg2")
+          engine = create_engine(direct_url, connect_args={"connect_timeout": 15})
           try:
               with engine.connect() as conn:
                   tables = set(conn.execute(text(
@@ -100,9 +104,9 @@ jobs:
                   )).scalars())
           finally:
               engine.dispose()
-          if tables and "alembic_version" not in tables:
+          if tables:
               raise SystemExit(
-                  "O esquema public não está vazio e não possui alembic_version. "
+                  "O esquema public não está vazio; bootstrap é exclusivo de banco novo. "
                   "Interrompido para proteger dados pré-existentes."
               )
           print("Conexão de migração válida; estrutura inicial verificada sem alterações.")

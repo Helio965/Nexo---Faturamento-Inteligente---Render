@@ -18,10 +18,11 @@ e type-safe que o estilo Column antigo).
 from datetime import datetime, date, timezone
 from decimal import Decimal
 from typing import Optional
+import uuid
 
 from sqlalchemy import (
-    String, Integer, Boolean, Date, DateTime, Numeric, Text, LargeBinary,
-    ForeignKey, ForeignKeyConstraint, CheckConstraint, UniqueConstraint, Index, text,
+    String, Integer, Boolean, Date, DateTime, Numeric, Text, LargeBinary, Uuid,
+    ForeignKey, ForeignKeyConstraint, CheckConstraint, UniqueConstraint, Index, false, text, true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -1022,4 +1023,380 @@ class HistoricoPrecoPlano(db.Model):
     __table_args__ = (
         CheckConstraint("valor_novo >= 0", name="ck_historico_preco_valor"),
         Index("ix_historico_preco_plano", "id_plano", "alterado_em"),
+    )
+
+
+# =====================================================================
+# 20. PreferenciaUsuario  (avisos que o próprio usuário escolhe receber)
+# =====================================================================
+class PreferenciaUsuario(db.Model):
+    """
+    Escolhas de aviso de um usuário. Tabela própria, e não coluna em Usuario,
+    pelo mesmo motivo de RegimeContratual: o código chega à produção antes da
+    migração sem quebrar nenhuma consulta de Usuario. Sem a linha valem os
+    padrões (tudo ligado). Avisos de segurança não têm escolha: saem sempre.
+    """
+    __tablename__ = "preferencia_usuario"
+
+    id_usuario: Mapped[int] = mapped_column(
+        ForeignKey("usuario.id_usuario", ondelete="CASCADE"), primary_key=True, autoincrement=False
+    )
+    lembrete_renovacao: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    alerta_chamado: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=true())
+    data_atualizacao: Mapped[datetime] = mapped_column(InstanteUTC(), nullable=False)
+
+
+# =====================================================================
+# 21. DocumentoLegal  (Termos de Uso e Política de Privacidade, por versão)
+# =====================================================================
+TIPOS_DOCUMENTO_LEGAL = ("TERMOS_USO", "POLITICA_PRIVACIDADE")
+
+
+class DocumentoLegal(db.Model):
+    """
+    Uma versão publicada de um documento. O texto é escrito pelo ADMIN e
+    exibido como texto puro, nunca como HTML. Registro imutável: salvar cria a
+    versão seguinte e a de maior número é a vigente, para que todo aceite
+    continue apontando para o texto que a pessoa de fato leu.
+    """
+    __tablename__ = "documento_legal"
+
+    id_documento: Mapped[int] = mapped_column(primary_key=True)
+    tipo: Mapped[str] = mapped_column(String(30), nullable=False)
+    versao: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Rótulo exibido (v1.0, v1.1, v2.0): o admin escolhe, ao publicar, entre revisão e nova
+    # versão. Ordem e vigência seguem a sequência `versao`; qualquer versão nova pede aceite.
+    versao_maior: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    versao_menor: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    conteudo: Mapped[str] = mapped_column(Text, nullable=False)
+    publicado_em: Mapped[datetime] = mapped_column(InstanteUTC(), nullable=False)
+    id_usuario_admin: Mapped[int] = mapped_column(ForeignKey("usuario.id_usuario"), nullable=False)
+
+    publicado_por = relationship("Usuario")
+
+    __table_args__ = (
+        CheckConstraint("tipo IN ('TERMOS_USO', 'POLITICA_PRIVACIDADE')", name="ck_documento_tipo"),
+        CheckConstraint("versao >= 1", name="ck_documento_versao"),
+        CheckConstraint("length(trim(conteudo)) > 0", name="ck_documento_conteudo"),
+        CheckConstraint("versao_maior >= 1", name="ck_documento_versao_maior"),
+        CheckConstraint("versao_menor >= 0", name="ck_documento_versao_menor"),
+        UniqueConstraint("tipo", "versao", name="uq_documento_tipo_versao"),
+        Index("uq_documento_tipo_rotulo", "tipo", "versao_maior", "versao_menor", unique=True),
+    )
+
+    @property
+    def rotulo_versao(self) -> str:
+        return f"v{self.versao_maior}.{self.versao_menor}"
+
+
+# =====================================================================
+# 22. AceiteDocumento  (quem aceitou qual versão, e quando)
+# =====================================================================
+class AceiteDocumento(db.Model):
+    """Aceite explícito de uma versão de DocumentoLegal, feito pelo próprio usuário.
+    Nunca é presumido: sem a linha, a tela diz que não há aceite registrado."""
+    __tablename__ = "aceite_documento"
+
+    id_aceite: Mapped[int] = mapped_column(primary_key=True)
+    id_usuario: Mapped[int] = mapped_column(
+        ForeignKey("usuario.id_usuario", ondelete="CASCADE"), nullable=False,
+    )
+    id_documento: Mapped[int] = mapped_column(ForeignKey("documento_legal.id_documento"), nullable=False)
+    # Instante em UTC, exibido no horário de Brasília. O IP vem da requisição do aceite, já
+    # corrigido pelo ProxyFix; os aceites anteriores à revisão a8d3f6b91c24 ficam sem IP.
+    aceito_em: Mapped[datetime] = mapped_column(InstanteUTC(), nullable=False)
+    ip_usuario: Mapped[Optional[str]] = mapped_column(String(45))
+
+    documento = relationship("DocumentoLegal")
+
+    __table_args__ = (
+        UniqueConstraint("id_usuario", "id_documento", name="uq_aceite_usuario_documento"),
+        Index("ix_aceite_documento", "id_documento"),
+    )
+
+
+# =====================================================================
+# 23. ConfiguracaoSistema  (ajustes feitos pelo ADMIN em Configurações)
+# =====================================================================
+CHAVES_CONFIGURACAO_SISTEMA = ("suporte_bcc_email",)
+
+
+class ConfiguracaoSistema(db.Model):
+    """Ajuste do sistema por chave. Valor NULL = desligado; a linha guarda quem mexeu por último."""
+    __tablename__ = "configuracao_sistema"
+
+    chave: Mapped[str] = mapped_column(String(60), primary_key=True)
+    valor: Mapped[Optional[str]] = mapped_column(Text)
+    atualizado_em: Mapped[datetime] = mapped_column(InstanteUTC(), nullable=False)
+    id_usuario_admin: Mapped[int] = mapped_column(ForeignKey("usuario.id_usuario"), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("chave IN ('suporte_bcc_email')", name="ck_configuracao_chave"),
+    )
+
+
+# =====================================================================
+# 24. ValidacaoPdv  (trava do total do PDV)
+# =====================================================================
+class ValidacaoPdv(db.Model):
+    """
+    Conferência do faturamento calculado pelo ETL com o total que o PDV mostra. Uma
+    linha por análise: nasce no envio do relatório de VENDAS (PENDENTE) e recebe o
+    resultado no processamento (CONCLUIDO ou DIVERGENTE_PDV).
+
+    O CONCLUIDO daqui só diz que os totais batem. Quem decide a publicação continua
+    sendo o ADMIN, em Analise.status_analise, e DIVERGENTE_PDV ou PENDENTE a impedem.
+
+    Tabela própria, e não coluna ou status em Analise, pelo mesmo motivo de
+    RegimeContratual: o código chega à produção antes da migração sem quebrar nenhuma
+    consulta. Sem relationship em Analise: a linha sai com a análise por ON DELETE
+    CASCADE, e excluir uma análise não consulta esta tabela. Ver validacao_pdv.py.
+    """
+    __tablename__ = "validacao_pdv"
+
+    id_analise: Mapped[int] = mapped_column(
+        ForeignKey("analise.id_analise", ondelete="CASCADE", name="fk_validacao_pdv_analise"),
+        primary_key=True, autoincrement=False,
+    )
+    valor_pdv_informado: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    # Sem precisão, como os KPIs em IndicadorAnalise: o arquivo não tem teto, e justamente o
+    # valor absurdo precisa virar DIVERGENTE_PDV em vez de estourar a coluna no processamento.
+    faturamento_bruto_calculado: Mapped[Optional[Decimal]] = mapped_column(Numeric)
+    diferenca: Mapped[Optional[Decimal]] = mapped_column(Numeric)
+    # Parcelas do relatório que explicam o total ao consultor; nulas quando não houver coluna de situação.
+    valor_devolucoes: Mapped[Optional[Decimal]] = mapped_column(Numeric)
+    valor_cancelado: Mapped[Optional[Decimal]] = mapped_column(Numeric)
+    status_validacao: Mapped[str] = mapped_column(String(20), nullable=False, default="PENDENTE")
+    id_usuario_informante: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("usuario.id_usuario", ondelete="SET NULL", name="fk_validacao_pdv_informante")
+    )
+    informado_em: Mapped[datetime] = mapped_column(InstanteUTC(), nullable=False)
+    validado_em: Mapped[Optional[datetime]] = mapped_column(InstanteUTC())
+
+    __table_args__ = (
+        CheckConstraint("valor_pdv_informado >= 0", name="ck_validacao_pdv_valor"),
+        CheckConstraint("status_validacao IN ('PENDENTE', 'CONCLUIDO', 'DIVERGENTE_PDV')",
+                        name="ck_validacao_pdv_status"),
+        CheckConstraint(
+            "(status_validacao = 'PENDENTE' AND faturamento_bruto_calculado IS NULL "
+            "AND diferenca IS NULL AND validado_em IS NULL) OR "
+            "(status_validacao <> 'PENDENTE' AND faturamento_bruto_calculado IS NOT NULL "
+            "AND diferenca IS NOT NULL AND diferenca >= 0 AND validado_em IS NOT NULL)",
+            name="ck_validacao_pdv_resultado",
+        ),
+    )
+
+
+# =====================================================================
+# Planos por nível de inteligência (entitlements) e Raio-X de entrada
+# =====================================================================
+class PlanoNivel(db.Model):
+    """
+    Nível de acesso de cada plano: posição na hierarquia (BRONZE < PRATA < OURO <
+    CUSTOM) e quantos meses de histórico o plano mantém (NULL = sem limite).
+
+    Liga-se ao plano comercial pelo código (plano.nome_plano = plano_nivel.codigo),
+    sem coluna, FK ou CHECK novos em `plano`: a tabela existente continua com preço,
+    frequência e contratos, e o código chega à produção antes da migração sem quebrar
+    nenhuma consulta. CUSTOM existe aqui como nível; nenhuma empresa fica nele enquanto
+    o CHECK de plano.nome_plano não o aceitar. Ver entitlements.py.
+    """
+    __tablename__ = "plano_nivel"
+
+    codigo: Mapped[str] = mapped_column(String(20), primary_key=True)
+    nome: Mapped[str] = mapped_column(String(60), nullable=False)
+    modelo_atendimento: Mapped[str] = mapped_column(String(60), nullable=False)
+    atendimento: Mapped[str] = mapped_column(String(255), nullable=False)
+    nivel_hierarquico: Mapped[int] = mapped_column(Integer, nullable=False)
+    limite_historico_meses: Mapped[Optional[int]] = mapped_column(Integer)
+    criado_em: Mapped[datetime] = mapped_column(InstanteUTC(), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("nivel_hierarquico", name="uq_plano_nivel_hierarquia"),
+        CheckConstraint("length(codigo) BETWEEN 2 AND 20", name="ck_plano_nivel_codigo"),
+        CheckConstraint("nivel_hierarquico >= 1", name="ck_plano_nivel_hierarquia"),
+        CheckConstraint("limite_historico_meses IS NULL OR limite_historico_meses >= 1",
+                        name="ck_plano_nivel_historico"),
+    )
+
+
+class Funcionalidade(db.Model):
+    """Recurso que um plano pode liberar, identificado pela `chave` usada no código."""
+    __tablename__ = "funcionalidade"
+
+    id_funcionalidade: Mapped[int] = mapped_column(primary_key=True)
+    chave: Mapped[str] = mapped_column(String(60), nullable=False)
+    nome: Mapped[str] = mapped_column(String(120), nullable=False)
+    descricao: Mapped[str] = mapped_column(String(500), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("chave", name="uq_funcionalidade_chave"),
+        CheckConstraint("length(chave) BETWEEN 3 AND 60", name="ck_funcionalidade_chave"),
+    )
+
+
+class PlanoFuncionalidade(db.Model):
+    """Quais funcionalidades cada nível libera. A migração grava a matriz cumulativa:
+    cada nível tem as do nível abaixo."""
+    __tablename__ = "plano_funcionalidade"
+
+    codigo_plano: Mapped[str] = mapped_column(
+        ForeignKey("plano_nivel.codigo", name="fk_plano_funcionalidade_plano"),
+        primary_key=True, autoincrement=False,
+    )
+    id_funcionalidade: Mapped[int] = mapped_column(
+        ForeignKey("funcionalidade.id_funcionalidade", name="fk_plano_funcionalidade_funcionalidade"),
+        primary_key=True, autoincrement=False,
+    )
+
+    __table_args__ = (
+        Index("ix_plano_funcionalidade_funcionalidade", "id_funcionalidade"),
+    )
+
+
+class DiagnosticoEntrada(db.Model):
+    """
+    Último Raio-X de entrada de cada empresa (um por empresa: o novo substitui o anterior).
+
+    Guarda só agregados e as listas resumidas do resultado (JSON em `resultado`); os
+    arquivos enviados são lidos no processo isolado do ETL e descartados. A linha sai com
+    a empresa por ON DELETE CASCADE, como a validacao_pdv sai com a análise: a exclusão
+    permanente da empresa não precisa consultar esta tabela. Ver raio_x.py.
+    """
+    __tablename__ = "diagnostico_entrada"
+
+    id_empresa: Mapped[int] = mapped_column(
+        ForeignKey("empresa.id_empresa", ondelete="CASCADE", name="fk_diagnostico_entrada_empresa"),
+        primary_key=True, autoincrement=False,
+    )
+    id_usuario: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("usuario.id_usuario", ondelete="SET NULL", name="fk_diagnostico_entrada_usuario")
+    )
+    gerado_em: Mapped[datetime] = mapped_column(InstanteUTC(), nullable=False)
+    versao_regras: Mapped[str] = mapped_column(String(40), nullable=False)
+    arquivos: Mapped[int] = mapped_column(Integer, nullable=False)
+    periodo_inicio: Mapped[Optional[date]] = mapped_column(Date)
+    periodo_fim: Mapped[Optional[date]] = mapped_column(Date)
+    indice_saude: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2))
+    # Sem precisão, como os KPIs: o arquivo não tem teto e o valor não pode estourar a coluna.
+    valor_recuperavel: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
+    plano_recomendado: Mapped[str] = mapped_column(
+        ForeignKey("plano_nivel.codigo", name="fk_diagnostico_entrada_plano"), nullable=False,
+    )
+    resultado: Mapped[str] = mapped_column(Text, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("arquivos >= 1", name="ck_diagnostico_entrada_arquivos"),
+        CheckConstraint("indice_saude IS NULL OR (indice_saude >= 0 AND indice_saude <= 100)",
+                        name="ck_diagnostico_entrada_indice"),
+        CheckConstraint("valor_recuperavel >= 0", name="ck_diagnostico_entrada_recuperavel"),
+        CheckConstraint("periodo_inicio IS NULL OR periodo_fim IS NULL OR periodo_inicio <= periodo_fim",
+                        name="ck_diagnostico_entrada_periodo"),
+        Index("ix_diagnostico_entrada_usuario", "id_usuario"),
+    )
+
+
+# =====================================================================
+# Avaliação de Cenário: captação de leads (revisão f4c2a8e1d9b6)
+# =====================================================================
+STATUS_LEAD_AVALIACAO = ("pendente", "em_processamento", "concluido", "processamento_manual",
+                         "convertido", "expirado")
+
+
+class LeadAvaliacao(db.Model):
+    """
+    Quem pediu a Avaliação de Cenário (ainda não é cliente) e o resumo do resultado.
+
+    O contato (nome, e-mail, WhatsApp e loja) é dado pessoal: a tabela tem RLS no
+    PostgreSQL, e os dados do PDV do lead (BrainstormingDadosPdv) saem em 30 dias se ele não
+    converter (leads_avaliacao.expurgar_dados_pdv). O resumo fica: score de saúde cadastral
+    (0 a 100), vazamento total em R$, plano recomendado e os três blocos de prioridade
+    (urgência, atenção e eletiva) em JSON. Score e vazamento ficam nulos até a avaliação
+    terminar. O nome da coluna do vazamento segue a especificação (com cifrão); o atributo
+    Python é vazamento_total_reais.
+    """
+    __tablename__ = "lead_avaliacao"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
+    nome_contato: Mapped[str] = mapped_column(String(120), nullable=False)
+    email: Mapped[str] = mapped_column(String(254), nullable=False)
+    whatsapp: Mapped[Optional[str]] = mapped_column(String(20))
+    nome_loja: Mapped[str] = mapped_column(String(120), nullable=False)
+    score_saude_cadastral: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2))
+    vazamento_total_reais: Mapped[Optional[Decimal]] = mapped_column("vazamento_total_r$", Numeric(12, 2))
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="pendente",
+                                        server_default=text("'pendente'"))
+    plano_recomendado_codigo: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("plano_nivel.codigo", name="fk_lead_avaliacao_plano")
+    )
+    resumo_urgencia_json: Mapped[Optional[str]] = mapped_column(Text)
+    resumo_atencao_json: Mapped[Optional[str]] = mapped_column(Text)
+    resumo_eletiva_json: Mapped[Optional[str]] = mapped_column(Text)
+    criado_em: Mapped[datetime] = mapped_column(InstanteUTC(), nullable=False, default=agora_utc,
+                                                server_default=func.current_timestamp())
+    atualizado_em: Mapped[datetime] = mapped_column(InstanteUTC(), nullable=False, default=agora_utc,
+                                                    onupdate=agora_utc, server_default=func.current_timestamp())
+
+    dados_pdv = relationship("BrainstormingDadosPdv", back_populates="lead",
+                             cascade="all, delete-orphan", passive_deletes=True)
+
+    __table_args__ = (
+        CheckConstraint("status IN (" + ", ".join(f"'{s}'" for s in STATUS_LEAD_AVALIACAO) + ")",
+                        name="ck_lead_avaliacao_status"),
+        CheckConstraint("score_saude_cadastral IS NULL OR (score_saude_cadastral >= 0 "
+                        "AND score_saude_cadastral <= 100)", name="ck_lead_avaliacao_score"),
+        CheckConstraint('"vazamento_total_r$" IS NULL OR "vazamento_total_r$" >= 0',
+                        name="ck_lead_avaliacao_vazamento"),
+        CheckConstraint("length(trim(nome_contato)) > 0 AND length(trim(nome_loja)) > 0",
+                        name="ck_lead_avaliacao_nomes"),
+        CheckConstraint("email LIKE '%_@_%'", name="ck_lead_avaliacao_email"),
+        CheckConstraint("whatsapp IS NULL OR length(whatsapp) BETWEEN 10 AND 20", name="ck_lead_avaliacao_whatsapp"),
+        Index("ix_lead_avaliacao_plano", "plano_recomendado_codigo"),
+        Index("ix_lead_avaliacao_status", "status"),
+        Index("ix_lead_avaliacao_email", "email"),
+    )
+
+
+class BrainstormingDadosPdv(db.Model):
+    """
+    Uma linha por produto e ano de exercício do PDV enviado pelo lead: quantidade, venda
+    bruta, custo médio registrado, as marcas de venda sem custo, abaixo do custo e omissão
+    no ERP, e o vazamento estimado da linha (coluna `vazamento_estimado_r$`, atributo
+    vazamento_estimado_reais). Sai com o lead (ON DELETE CASCADE) e, se o lead não
+    converter, em 30 dias pelo expurgo, que mantém o resumo em LeadAvaliacao.
+    """
+    __tablename__ = "brainstorming_dados_pdv"
+
+    id: Mapped[uuid.UUID] = mapped_column(Uuid(), primary_key=True, default=uuid.uuid4)
+    lead_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("lead_avaliacao.id", ondelete="CASCADE", name="fk_brainstorming_dados_pdv_lead"),
+        nullable=False,
+    )
+    ano_exercicio: Mapped[int] = mapped_column(Integer, nullable=False)
+    codigo_produto: Mapped[Optional[str]] = mapped_column(String(60))
+    descricao_produto: Mapped[str] = mapped_column(String(200), nullable=False)
+    quantidade: Mapped[Decimal] = mapped_column(Numeric(14, 3), nullable=False)
+    valor_venda_bruto: Mapped[Decimal] = mapped_column(Numeric(14, 2), nullable=False)
+    custo_medio_registrado: Mapped[Optional[Decimal]] = mapped_column(Numeric(14, 4))
+    flag_venda_sem_custo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False,
+                                                       server_default=false())
+    flag_venda_abaixo_custo: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False,
+                                                          server_default=false())
+    flag_omissao_erp: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    vazamento_estimado_reais: Mapped[Decimal] = mapped_column("vazamento_estimado_r$", Numeric(12, 2),
+                                                              nullable=False, default=Decimal("0"),
+                                                              server_default=text("0"))
+    criado_em: Mapped[datetime] = mapped_column(InstanteUTC(), nullable=False, default=agora_utc,
+                                                server_default=func.current_timestamp())
+
+    lead = relationship("LeadAvaliacao", back_populates="dados_pdv")
+
+    __table_args__ = (
+        CheckConstraint("ano_exercicio BETWEEN 2000 AND 2100", name="ck_brainstorming_dados_pdv_ano"),
+        CheckConstraint("length(trim(descricao_produto)) > 0", name="ck_brainstorming_dados_pdv_descricao"),
+        CheckConstraint("custo_medio_registrado IS NULL OR custo_medio_registrado >= 0",
+                        name="ck_brainstorming_dados_pdv_custo"),
+        CheckConstraint('"vazamento_estimado_r$" >= 0', name="ck_brainstorming_dados_pdv_vazamento"),
+        Index("ix_brainstorming_dados_pdv_lead", "lead_id"),
+        Index("ix_brainstorming_dados_pdv_criado_em", "criado_em"),
     )
