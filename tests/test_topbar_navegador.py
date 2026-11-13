@@ -10,7 +10,9 @@ oculto (sem mudar o fluxo). O controle positivo, logo abaixo do cabeçalho,
 precisa mudar de fato; assim a comparação não passa sem conteúdo atrás da barra.
 """
 
+import base64
 import io
+import json
 import math
 from pathlib import Path
 import unittest
@@ -130,6 +132,20 @@ class TopbarNavegadorTests(NavegadorCase):
         pagina.evaluate("document.querySelector('.page').style.removeProperty('visibility')")
         # Inclui topo, dois cantos, centro, título, sino e borda inferior.
         diferenca = _maior_diferenca(visivel.crop(caixa), oculto.crop(caixa))
+        if diferenca > 3:
+            # Evidência das capturas já realizadas: não muda o ensaio ou seu limite.
+            imagens = {}
+            for nome, imagem in (("visivel", visivel.crop(caixa)),
+                                  ("oculto", oculto.crop(caixa)),
+                                  ("diferenca", ImageChops.difference(visivel, oculto).crop(caixa))):
+                arquivo = io.BytesIO()
+                imagem.save(arquivo, format="PNG")
+                imagens[nome] = base64.b64encode(arquivo.getvalue()).decode("ascii")
+            print("TOPBAR_DIAGNOSTICO=" + json.dumps({
+                "geometria": medida, "caixa": caixa, "maximo": diferenca,
+                "bbox": ImageChops.difference(visivel, oculto).crop(caixa).getbbox(),
+                "imagens_png_base64": imagens,
+            }), flush=True)
         self.assertLessEqual(diferenca, 3, f"conteúdo alterou pixels protegidos em até {diferenca}/255")
         controle = (caixa[0], caixa[3] + 24, caixa[2], caixa[3] + 90)
         self.assertGreater(_maior_diferenca(visivel.crop(controle), oculto.crop(controle)), 100,
