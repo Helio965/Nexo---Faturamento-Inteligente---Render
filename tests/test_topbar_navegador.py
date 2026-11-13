@@ -73,6 +73,10 @@ def _maior_diferenca(a, b):
 
 @unittest.skipUnless(_BROWSER, "Defina NEXO_TEST_BROWSER=1 e instale o Playwright.")
 class TopbarNavegadorTests(NavegadorCase):
+    # Ocultar .page pode alternar LCD RGB e cinza nos glifos em Chromium/Linux.
+    # Rasterização uniforme preserva a comparação integral, sem filtrar pixels.
+    CHROMIUM_ARGS = ("--disable-lcd-text",)
+
     def _sessao(self, email=ADMIN, tema="dark", largura=1366, altura=768, sem_filtro=False):
         pagina = self.abrir(largura, altura)
         if sem_filtro:
