@@ -4,8 +4,8 @@ Navegador real (Chromium/Playwright) para a etapa de 28/10/2026:
   * Gerenciamento de análises: listagem sem lixeira, botão Editar, cartões de
     empresa com busca e teclado, seleção, análises só da empresa, modal de
     confirmação (cancelar não exclui; confirmar exclui só a escolhida), volta.
-  * Topbar global com desfoque gradual: duas camadas decorativas (forte no topo
-    com máscara em degradê, suave na base), faixa de ponta a ponta da área
+  * Topbar global com vidro uniforme e proteção até o topo: desfoque forte sem
+    máscara e acabamento arredondado, nas margens laterais da área
     principal, título legível, sino e menu acima do cabeçalho, sem interceptar
     cliques; em todas as páginas autenticadas e em 320–1920 px.
   * Bordas: divisórias com recuo nas pontas, realce de linha arredondado, coluna
@@ -187,7 +187,7 @@ class GerenciamentoNavegadorTests(NavegadorCase):
             pagina.context.close()
 
     # ----------------------------------------------------------------- topbar
-    def test_topbar_com_blur_gradual_em_todas_as_paginas(self):
+    def test_topbar_com_vidro_uniforme_em_todas_as_paginas(self):
         for largura, altura in ((1920, 1080), (1366, 768), (768, 1024), (390, 844), (320, 568)):
             for email, caminhos in PAGINAS_TOPBAR.items():
                 pagina = self.abrir(largura, altura)
@@ -202,10 +202,10 @@ class GerenciamentoNavegadorTests(NavegadorCase):
                     self.assertIsNotNone(m, ctx)
                     self.assertTrue(m["suporte"], "Chromium deve suportar backdrop-filter")
                     self.assertEqual(m["sticky"], "sticky", ctx)
-                    # Duas camadas decorativas: forte com máscara em degradê, suave inteira; nenhuma intercepta cliques.
+                    # Vidro uniforme, sem enfraquecer a base; acabamento sem filtro redundante.
                     self.assertIn("blur(26px)", m["forte"]["filtro"], ctx)
-                    self.assertIn("linear-gradient", m["forte"]["mascara"], ctx)
-                    self.assertIn("blur(8px)", m["suave"]["filtro"], ctx)
+                    self.assertEqual(m["forte"]["mascara"], "none", ctx)
+                    self.assertEqual(m["suave"]["filtro"], "none", ctx)
                     self.assertEqual(m["suave"]["mascara"], "none", ctx)
                     self.assertEqual(m["forte"]["eventos"], "none", ctx)
                     self.assertEqual(m["suave"]["eventos"], "none", ctx)
@@ -222,7 +222,7 @@ class GerenciamentoNavegadorTests(NavegadorCase):
                     else:
                         self.assertLessEqual(m["x0"], 12, ctx)
                         self.assertGreaterEqual(m["x1"], m["vw"] - 12, ctx)
-                    self.assertGreaterEqual(m["y0"], 0, ctx)
+                    self.assertAlmostEqual(m["y0"], 0, delta=1, msg=ctx)
                     self.assertTrue(m["titulo_visivel"], f"{ctx}: título encoberto ({m['titulo_texto']})")
                     self.assertTrue(m["titulo_texto"], ctx)
                 pagina.context.close()

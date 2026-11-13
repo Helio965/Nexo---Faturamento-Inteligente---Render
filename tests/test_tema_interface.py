@@ -143,9 +143,9 @@ class FolhaClaraTests(unittest.TestCase):
                 self.assertGreaterEqual(_razao(tokens["--campo-borda"], tokens[fundo]), 3)
 
     def test_ramos_sem_desfoque_e_com_transparencia_reduzida_ficam_claros(self):
-        """Nesses ramos nexo.css pinta a topbar de escuro: a folha clara também os cobre."""
-        self.assertRegex(FOLHA, r"@media \(prefers-reduced-transparency: reduce\) \{\s*html\[data-theme=\"light\"\] \.topbar \{ background: #ffffff")
-        self.assertRegex(FOLHA, r"@supports not \(\(backdrop-filter: blur\(1px\)\).*\{\s*html\[data-theme=\"light\"\] \.topbar \{ background: #ffffff")
+        """O fallback pinta a camada arredondada; o fundo dos cantos continua protegido."""
+        self.assertRegex(FOLHA, r"@media \(prefers-reduced-transparency: reduce\) \{\s*html\[data-theme=\"light\"\] \.topbar::before \{ background: #ffffff")
+        self.assertRegex(FOLHA, r"@supports not \(\(backdrop-filter: blur\(1px\)\).*\{\s*html\[data-theme=\"light\"\] \.topbar::before \{ background: #ffffff")
 
     def test_indicador_de_foco_dos_componentes_sobre_outros_fundos(self):
         """Medidos em pixels por tests/test_tema_navegador.py; aqui, só que as regras continuam na folha."""

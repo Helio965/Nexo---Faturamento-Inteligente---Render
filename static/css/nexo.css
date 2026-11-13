@@ -73,7 +73,6 @@
   --glass-blur:     blur(18px) saturate(150%);
   --glass-blur-sm:  blur(12px) saturate(140%);
   --topbar-blur-forte: blur(26px) saturate(160%);
-  --topbar-blur-suave: blur(8px) saturate(130%);
   --shadow-glass:   0 18px 44px -22px rgba(3, 0, 12, 0.9), 0 2px 10px -4px rgba(3, 0, 12, 0.5);
   --radius-lg:      22px;
   --radius-xl:      26px;
@@ -260,19 +259,23 @@ a { text-decoration: none; }
    competir com o conteúdo. O pseudoelemento fixo não rola com a página.
    Sem isolation/z-index no shell: um contexto de empilhamento aqui prenderia
    os modais do Bootstrap abaixo do .modal-backdrop (anexado ao <body>). */
-.app-shell { display: flex; min-height: 100vh; }
+.app-shell {
+  display: flex; min-height: 100vh;
+  /* O mesmo cenário opaco protege o topo sem desenhar uma faixa retangular. */
+  --shell-background:
+    radial-gradient(1100px 700px at 82% -10%, rgba(168, 85, 247, 0.22), transparent 62%),
+    radial-gradient(900px 600px at -8% 108%, rgba(56, 189, 248, 0.08), transparent 60%),
+    linear-gradient(180deg, rgba(8, 6, 18, 0.42) 0%, rgba(8, 6, 18, 0.12) 48%, rgba(8, 6, 18, 0.62) 100%),
+    url("../img/painel/nexo-fundo-crepusculo.jpg") center 62% / cover no-repeat,
+    var(--bg);
+}
 .app-shell::before {
   content: "";
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background:
-    radial-gradient(1100px 700px at 82% -10%, rgba(168, 85, 247, 0.22), transparent 62%),
-    radial-gradient(900px 600px at -8% 108%, rgba(56, 189, 248, 0.08), transparent 60%),
-    linear-gradient(180deg, rgba(8, 6, 18, 0.42) 0%, rgba(8, 6, 18, 0.12) 48%, rgba(8, 6, 18, 0.62) 100%),
-    url("../img/painel/nexo-fundo-crepusculo.jpg") center 62% / cover no-repeat,
-    var(--bg);
+  background: var(--shell-background);
 }
 
 /* Sidebar flutuante em vidro */
@@ -429,25 +432,16 @@ button.nav-logout { width: 100%; background: transparent; font: inherit; text-al
   flex-direction: column;
 }
 
-/* Topbar: faixa contínua de vidro, de ponta a ponta da área principal (começa no
-   limite da sidebar e vai até a borda direita), com DESFOQUE GRADUAL: no topo o
-   conteúdo que passa atrás fica bem desfocado e um pouco mais escuro (protege o
-   título, o sino e o usuário); na base o desfoque é suave e a superfície mais
-   translúcida, sem degraus visíveis. O desfoque fica em duas camadas decorativas
-   (::before forte, com máscara em degradê; ::after suave, inteira) e não no
-   próprio .topbar: um backdrop-filter no pai limitaria o que as camadas "veem"
-   e cortaria o menu do sino. As camadas não interceptam cliques.
-   As camadas cobrem também a caixa da borda (inset: -1px) e o anel da borda e o
-   brilho interno são pintados pela camada de cima (::after): se ficassem no
-   próprio .topbar, sairiam POR BAIXO do desfoque (brilho invisível) e a borda de
-   1 px ficaria sobre conteúdo nítido, sem desfoque. Custo: dois backdrop-filter
-   de largura total; quem prefere menos efeitos tem o fallback de
-   prefers-reduced-transparency (uma superfície quase opaca, sem desfoque). */
+/* Topbar arredondada, sem afastamento vertical e com as margens laterais originais.
+   A proteção recompõe o fundo do shell inclusive nos cantos, sem receber eventos.
+   Só essa decoração é recortada: o header permanece livre para o menu do sino.
+   O cenário é fixo à viewport, sem depender de background-attachment no celular.
+   Vidro uniforme em ::before; anel e brilho em ::after, acima do desfoque. */
 .topbar {
-  position: sticky; top: var(--shell-gap);
+  position: sticky; top: 0;
   height: var(--topbar-h);
   display: flex; align-items: center; gap: 16px;
-  margin: var(--shell-gap) var(--shell-gap) 0 0;
+  margin: 0 var(--shell-gap) 0 0;
   padding: 0 14px 0 24px;
   background: transparent;
   border: 1px solid transparent;
@@ -455,44 +449,46 @@ button.nav-logout { width: 100%; background: transparent; font: inherit; text-al
   box-shadow: var(--shadow-glass);
   z-index: 1020;
 }
+.topbar-shield {
+  position: absolute; inset: -1px;
+  clip-path: inset(0);
+  pointer-events: none; z-index: -2;
+}
+.topbar-shield::before {
+  content: ""; position: fixed; inset: 0;
+  background: var(--shell-background);
+}
 .topbar::before, .topbar::after {
   content: ""; position: absolute; inset: -1px; border-radius: inherit;
   pointer-events: none; z-index: -1;
 }
-/* Camada forte: desfoque intenso + véu escuro, 100 % no topo → 0 % na base. */
+/* Sem máscara: a base recebe a mesma proteção que o topo. */
 .topbar::before {
-  background: linear-gradient(180deg, rgba(12, 8, 26, 0.66) 0%, rgba(14, 10, 30, 0.46) 60%, rgba(16, 12, 32, 0.30) 100%);
+  background: rgba(14, 10, 30, 0.66);
   -webkit-backdrop-filter: var(--topbar-blur-forte);
   backdrop-filter: var(--topbar-blur-forte);
-  -webkit-mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.9) 30%, rgba(0, 0, 0, 0.45) 68%, rgba(0, 0, 0, 0.06) 100%);
-  mask-image: linear-gradient(180deg, #000 0%, rgba(0, 0, 0, 0.9) 30%, rgba(0, 0, 0, 0.45) 68%, rgba(0, 0, 0, 0.06) 100%);
 }
-/* Camada suave: desfoque leve em toda a altura, para a base nunca ficar "crua". */
+/* Acabamento translúcido, sem um segundo filtro de largura total. */
 .topbar::after {
   background: rgba(16, 12, 30, 0.22);
-  -webkit-backdrop-filter: var(--topbar-blur-suave);
-  backdrop-filter: var(--topbar-blur-suave);
   /* Anel da borda e brilho interno, por cima do desfoque. */
   box-shadow: inset 0 0 0 1px var(--glass-border), var(--glass-shine);
 }
-/* Sem backdrop-filter (ou com transparência reduzida): superfície quase opaca,
-   num único degradê, sem camadas. */
+/* Sem filtro, a superfície arredondada é opaca; a proteção dos cantos continua. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .topbar {
-    background: linear-gradient(180deg, rgba(14, 10, 28, 0.97) 0%, rgba(17, 13, 32, 0.93) 100%);
-    border-color: var(--glass-border); box-shadow: var(--shadow-glass), var(--glass-shine);
+  .topbar::before {
+    background: linear-gradient(180deg, #0e0a1c 0%, #110d20 100%);
   }
-  .topbar::before, .topbar::after { display: none; }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .topbar {
-    background: linear-gradient(180deg, rgba(14, 10, 28, 0.98) 0%, rgba(17, 13, 32, 0.96) 100%);
-    border-color: var(--glass-border); box-shadow: var(--shadow-glass), var(--glass-shine);
+  .topbar::before {
+    background: linear-gradient(180deg, #0e0a1c 0%, #110d20 100%);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
-  .topbar::before, .topbar::after { display: none; }
 }
-.topbar-title { font-size: 1.12rem; font-weight: 700; flex: 1; min-width: 0; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.topbar-title small { display: block; font-size: 0.68rem; font-weight: 600; color: #a49cc4; letter-spacing: 0.12em; text-transform: uppercase; }
+.topbar-title { font-size: 1.16rem; line-height: 1.2; font-weight: 700; flex: 1; min-width: 0; letter-spacing: -0.01em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.topbar-title small { display: block; font-size: 0.68rem; line-height: 1.25; margin-bottom: 2px; font-weight: 600; color: #a49cc4; letter-spacing: 0.12em; text-transform: uppercase; }
 .topbar-right { display: flex; align-items: center; gap: 12px; }
 .nav-toggle {
   display: none;
@@ -1392,7 +1388,7 @@ body:has(> .nexobot) .nexo-toast-wrap { bottom: 96px; }
   .main-area { margin-left: 0; }
   .nav-toggle { display: grid; place-items: center; }
   .page { padding: 20px 12px 32px; }
-  .topbar { margin: 10px 10px 0; top: 10px; padding: 0 10px 0 10px; border-radius: 18px; height: 60px; }
+  .topbar { margin: 0 10px; padding: 0 10px 0 10px; border-radius: 18px; height: 60px; }
   .user-meta { display: none; }
   .user-chip { padding: 3px; }
 }
@@ -1452,7 +1448,7 @@ body:has(> .nexobot) .nexo-toast-wrap { bottom: 96px; }
     --glass-chrome: #140f27;
   }
   .sidebar { background: #140f27; }
-  .app-shell::before { background: var(--bg); }
+  .app-shell { --shell-background: var(--bg); }
   .bell-menu { background: #140f27; }
 }
 
