@@ -60,6 +60,30 @@ ResultadoETL = namedtuple(
 # Quantos produtos do topo do ranking persistir/exibir na Curva ABC.
 TOP_N_CURVA_ABC = 20
 
+# Detalhamento por produto (operação "calculate_detailed" do worker isolado):
+# ranking completo e movimentação compras x vendas, persistidos à parte em
+# produto_desempenho_analise. NÃO altera o resultado financeiro (top-20, chaves e
+# valores idênticos aos da operação "calculate"). Há teto de linhas por análise
+# (volume no banco) e uma reserva do orçamento de saída do worker
+# (max_output_bytes) para o resultado principal: o detalhamento nunca derruba o
+# processamento, no máximo é registrado de forma parcial (e isso é declarado).
+LIMITE_PRODUTOS_DETALHADOS = 5000
+RESERVA_SAIDA_RESULTADO = 256 * 1024
+VERSAO_DETALHAMENTO = 1
+# Códigos compactos da situação de cada produto na comparação compras x vendas.
+SITUACOES_DETALHAMENTO = {
+    "C": "COMPARAVEL",
+    "S": "SEM_VENDA_CORRESPONDENTE",
+    "D": "UNIDADE_DIVERGENTE",
+    "M": "UNIDADE_AMBIGUA",
+    "Q": "QUANTIDADE_INVALIDA",
+}
+COLUNAS_DETALHAMENTO = (
+    "chave", "nome", "posicao", "classe", "faturamento", "quantidade_vendida",
+    "percentual_individual", "percentual_acumulado", "quantidade_comprada",
+    "unidade_venda", "unidade_compra", "situacao", "diferenca", "posicao_movimentacao",
+)
+
 # Limiares do Princípio de Pareto (Curva ABC) sobre o faturamento ACUMULADO:
 #   Classe A (Estratégicos): até 80%
 #   Classe B (Táticos):      de 80% a 95%
@@ -407,6 +431,79 @@ def _filtrar_linhas_validas(df: pd.DataFrame, chave: str) -> pd.DataFrame:
 
 
 # =====================================================================
+# 5b) Unidade de medida (opcional; usada só no detalhamento por produto)
+# =====================================================================
+# A comparação de unidades compradas x vendidas só é confiável quando as
+# unidades são as mesmas. A coluna é reconhecida por cabeçalho EXATO (nunca por
+# fragmento: "Vr Unitário" e "Fundo" não podem ser confundidos), fora das
+# colunas já mapeadas, e só é aceita se os valores parecerem unidades de medida
+# — uma coluna "Unidade" com nomes de loja/filial é ignorada.
+_CABECALHOS_UNIDADE = frozenset({
+    "un", "und", "unid", "unidade", "unidades", "um", "u m", "un med", "unid med",
+    "unidade medida", "unidade de medida", "unid medida", "unid de medida", "un medida",
+})
+_SINONIMOS_UNIDADE = {
+    "UN": "UN", "UND": "UN", "UNID": "UN", "UNIDADE": "UN", "UNIDADES": "UN", "U": "UN", "UNI": "UN",
+    "PC": "PC", "PCS": "PC", "PECA": "PC", "PECAS": "PC",
+    "CX": "CX", "CXA": "CX", "CAIXA": "CX", "CAIXAS": "CX",
+    "PCT": "PCT", "PACOTE": "PCT", "PACOTES": "PCT",
+    "KG": "KG", "KGS": "KG", "QUILO": "KG", "QUILOS": "KG", "KILO": "KG", "KILOS": "KG",
+    "G": "G", "GR": "G", "GRS": "G", "GRAMA": "G", "GRAMAS": "G",
+    "L": "L", "LT": "L", "LTS": "L", "LITRO": "L", "LITROS": "L", "ML": "ML",
+    "M": "M", "MT": "M", "MTS": "M", "METRO": "M", "METROS": "M", "M2": "M2", "M3": "M3",
+    "FD": "FD", "FARDO": "FD", "FARDOS": "FD", "DZ": "DZ", "DUZIA": "DZ",
+    "SC": "SC", "SACO": "SC", "SACOS": "SC", "FR": "FR", "FRASCO": "FR", "GL": "GL", "GALAO": "GL",
+    "LATA": "LATA", "BD": "BD", "BALDE": "BD", "BJ": "BJ", "BANDEJA": "BJ", "RL": "RL", "ROLO": "RL",
+    "PAR": "PAR", "KIT": "KIT", "CJ": "CJ", "CONJUNTO": "CJ", "TB": "TB", "TUBO": "TB",
+    "DP": "DP", "DISPLAY": "DP", "EMB": "EMB", "EMBALAGEM": "EMB",
+}
+# Embalagem com fator ("CX12", "FD6"): mesma família, mas fatores diferentes
+# NÃO são a mesma unidade (CX12 ≠ CX6), então o código é mantido como está.
+_RE_UNIDADE_FATOR = re.compile(r"^(" + "|".join(sorted(_SINONIMOS_UNIDADE, key=len, reverse=True)) + r")(\d{1,4})$")
+_UNIDADE_MULTIPLA = "*"
+_LIMIAR_COLUNA_UNIDADE = 0.8
+_AMOSTRA_COLUNA_UNIDADE = 2000
+
+
+def _normalizar_unidade(valor):
+    """'Un.' -> 'UN'; 'Caixa' -> 'CX'; 'cx12' -> 'CX12'; vazio -> None."""
+    if valor is None:
+        return None
+    texto = re.sub(r"[^A-Z0-9]", "", _strip_acentos(str(valor)).upper())
+    if not texto or texto in ("NAN", "NONE"):
+        return None
+    if texto in _SINONIMOS_UNIDADE:
+        return _SINONIMOS_UNIDADE[texto]
+    fator = _RE_UNIDADE_FATOR.match(texto)
+    if fator:
+        return _SINONIMOS_UNIDADE[fator.group(1)] + fator.group(2)
+    return texto[:12]
+
+
+def _unidade_reconhecida(normalizada) -> bool:
+    return bool(normalizada) and (normalizada in _SINONIMOS_UNIDADE.values()
+                                  or bool(_RE_UNIDADE_FATOR.match(normalizada)))
+
+
+def _detectar_coluna_unidade(df_bruto: pd.DataFrame, idx_cab: int, linhas_cab: int, mapa: dict):
+    """Índice da coluna de unidade de medida, ou None. Não altera o mapa canônico."""
+    usadas = set(mapa.values())
+    cabecalho = [_norm_chave(v) for v in df_bruto.iloc[idx_cab].tolist()]
+    if linhas_cab == 2 and idx_cab + 1 < len(df_bruto):
+        segunda = [_norm_chave(v) for v in df_bruto.iloc[idx_cab + 1].tolist()]
+        cabecalho = [(a + " " + b).strip() for a, b in zip(cabecalho, segunda)]
+    dados = df_bruto.iloc[idx_cab + linhas_cab:]
+    for coluna, texto in enumerate(cabecalho):
+        if coluna in usadas or texto not in _CABECALHOS_UNIDADE or coluna >= dados.shape[1]:
+            continue
+        amostra = [u for u in (_normalizar_unidade(v) for v in
+                               dados.iloc[:_AMOSTRA_COLUNA_UNIDADE, coluna].tolist()) if u]
+        if amostra and sum(map(_unidade_reconhecida, amostra)) / len(amostra) >= _LIMIAR_COLUNA_UNIDADE:
+            return coluna
+    return None
+
+
+# =====================================================================
 # 6) Carregadores específicos (Vendas / Compras)
 # =====================================================================
 def _validar_vendas(mapa: dict) -> bool:
@@ -427,13 +524,26 @@ def _validar_compras(mapa: dict) -> bool:
     return tem_chave and (tem_total or tem_derivavel)
 
 
-def carregar_vendas(caminho: str) -> pd.DataFrame:
+def _anexar_detalhamento(df: pd.DataFrame, bruto: pd.DataFrame) -> pd.DataFrame:
+    """Modo detalhado: unidade normalizada e período do cabeçalho lido da MESMA
+    matriz já carregada (sem reler o arquivo). Não altera linhas nem valores."""
+    if "_unidade" in df.columns:
+        df["_unidade"] = df["_unidade"].map(_normalizar_unidade)
+    df.attrs["periodo_arquivo"] = _extrair_periodo_base(bruto)
+    return df
+
+
+def carregar_vendas(caminho: str, detalhado: bool = False) -> pd.DataFrame:
     nome = os.path.basename(caminho)
     bruto = _ler_bruto(caminho)
     if bruto.empty:
         raise ETLValidationError(f"O arquivo de vendas '{nome}' está totalmente vazio.")
 
     idx, mapa, linhas_cab = _detectar_cabecalho(bruto, ALIAS_VENDAS, _validar_vendas)
+    if detalhado:
+        coluna_unidade = _detectar_coluna_unidade(bruto, idx, linhas_cab, mapa)
+        if coluna_unidade is not None:
+            mapa = {**mapa, "_unidade": coluna_unidade}
     df = _construir_df_canonico(bruto, idx, mapa, linhas_cab)
     df = _filtrar_linhas_validas(df, "produto")
 
@@ -467,14 +577,16 @@ def carregar_vendas(caminho: str) -> pd.DataFrame:
         raise ETLValidationError(
             f"Relatório de VENDAS '{nome}' sem nomes de produto válidos após a limpeza."
         )
-    return df
+    return _anexar_detalhamento(df, bruto) if detalhado else df
 
 
-def carregar_compras(caminho: str):
+def carregar_compras(caminho: str, detalhado: bool = False):
     """
     Retorna (df_compras, coluna_valor_usada).
     `coluna_valor_usada` ∈ {"produtos_total", "valor_nf"} — produtos_total
     tem preferência (valor "puro" dos itens; valor_nf inclui frete/imposto).
+    Com detalhado=True também traz a unidade de medida (se reconhecida) e o
+    período do cabeçalho; linhas e valores são os mesmos do modo padrão.
     """
     nome = os.path.basename(caminho)
     bruto = _ler_bruto(caminho)
@@ -482,6 +594,10 @@ def carregar_compras(caminho: str):
         raise ETLValidationError(f"O arquivo de compras '{nome}' está totalmente vazio.")
 
     idx, mapa, linhas_cab = _detectar_cabecalho(bruto, ALIAS_COMPRAS, _validar_compras)
+    if detalhado:
+        coluna_unidade = _detectar_coluna_unidade(bruto, idx, linhas_cab, mapa)
+        if coluna_unidade is not None:
+            mapa = {**mapa, "_unidade": coluna_unidade}
     df = _construir_df_canonico(bruto, idx, mapa, linhas_cab)
     # Chave de validade de linha: fornecedor (NF-level) ou, na ausência dele,
     # produto (item-level) — alinhado ao validador.
@@ -513,7 +629,7 @@ def carregar_compras(caminho: str):
         df["qtde_comprada"] = _converter_serie(df["qtde_comprada"]).fillna(0.0)
     if "produto" in df.columns:
         df["_prod_norm"] = df["produto"].map(_normalizar_produto)
-    return df, coluna_valor
+    return (_anexar_detalhamento(df, bruto) if detalhado else df), coluna_valor
 
 
 # =====================================================================
@@ -568,15 +684,13 @@ def _detectar_periodo_arquivo(caminho: str):
 # =====================================================================
 # 6b) Curva ABC (Princípio de Pareto) sobre o faturamento por produto
 # =====================================================================
-def _classificar_curva_abc(grupo: pd.DataFrame) -> dict:
+def _ranking_abc(grupo: pd.DataFrame):
     """
-    Recebe o DataFrame já agregado por produto (colunas: _prod_norm, qtde, fat,
-    nome) e devolve um dict com:
-      - "produtos": lista (ordenada por faturamento desc) de dicts com posicao,
-        nome, faturamento, quantidade, perc_individual, perc_acumulado e classe.
-        Truncada em TOP_N_CURVA_ABC para persistência/exibição.
-      - "resumo": agregados por classe (qtd de produtos, faturamento e % do total)
-        calculados sobre o UNIVERSO COMPLETO de produtos (não só o top-N).
+    Ranking Pareto do UNIVERSO COMPLETO de produtos elegíveis (faturamento > 0):
+    devolve (base, total) com perc_ind, perc_acum e classe por produto, em ordem
+    decrescente de faturamento, ou (None, 0.0) sem produto elegível. Fonte única
+    da classificação: alimenta o top-N persistido em produto_curva_abc e o
+    detalhamento completo (produto_desempenho_analise) com o mesmo critério.
 
     Regra Pareto: ordena por faturamento desc, acumula o percentual e classifica
     A (<=80%), B (<=95%), C (resto). O produto líder é sempre Classe A — garante
@@ -585,7 +699,7 @@ def _classificar_curva_abc(grupo: pd.DataFrame) -> dict:
     base = grupo[grupo["fat"] > 0].sort_values("fat", ascending=False).reset_index(drop=True)
     total = float(base["fat"].sum())
     if base.empty or total <= 0:
-        return {"produtos": [], "resumo": []}
+        return None, 0.0
 
     # Percentual individual e ACUMULADO calculados VETORIALMENTE no pandas:
     # cumsum sobre o ranking decrescente de faturamento = curva de Pareto.
@@ -602,6 +716,24 @@ def _classificar_curva_abc(grupo: pd.DataFrame) -> dict:
         default="C",
     )
     base.loc[0, "classe"] = "A"
+    return base, total
+
+
+def _classificar_curva_abc(grupo: pd.DataFrame) -> dict:
+    """
+    Recebe o DataFrame já agregado por produto (colunas: _prod_norm, qtde, fat,
+    nome) e devolve um dict com:
+      - "produtos": lista (ordenada por faturamento desc) de dicts com posicao,
+        nome, faturamento, quantidade, perc_individual, perc_acumulado e classe.
+        Truncada em TOP_N_CURVA_ABC para persistência/exibição.
+      - "resumo": agregados por classe (qtd de produtos, faturamento e % do total)
+        calculados sobre o UNIVERSO COMPLETO de produtos (não só o top-N).
+
+    A classificação vem de _ranking_abc (mesmo critério do detalhamento).
+    """
+    base, total = _ranking_abc(grupo)
+    if base is None:
+        return {"produtos": [], "resumo": []}
 
     # Resumo por classe via groupby vetorizado (universo completo).
     agg = base.groupby("classe")["fat"].agg(["count", "sum"])
@@ -648,10 +780,18 @@ def calcular_kpis_em_memoria(caminho_vendas: str, caminho_compras: str) -> Resul
 
 
 def _calcular_kpis_local(caminho_vendas: str, caminho_compras: str) -> ResultadoETL:
+    """Cálculo financeiro oficial (operação "calculate" do worker isolado)."""
+    return _calcular_kpis_e_bases(caminho_vendas, caminho_compras)[0]
+
+
+def _calcular_kpis_e_bases(caminho_vendas: str, caminho_compras: str, detalhado: bool = False):
+    """Devolve (ResultadoETL, bases). O ResultadoETL é o MESMO nos dois modos;
+    com detalhado=True, `bases` traz os DataFrames já agregados para o
+    detalhamento por produto (sem reler os arquivos). Sem detalhamento, None."""
     nome_v = os.path.basename(caminho_vendas)
 
-    df_v = carregar_vendas(caminho_vendas)
-    df_c, col_valor_c = carregar_compras(caminho_compras)
+    df_v = carregar_vendas(caminho_vendas, detalhado=detalhado)
+    df_c, col_valor_c = carregar_compras(caminho_compras, detalhado=detalhado)
 
     # ---- VENDAS: agregação por produto normalizado ----
     grupo = (
@@ -692,7 +832,14 @@ def _calcular_kpis_local(caminho_vendas: str, caminho_compras: str) -> Resultado
     curva_abc = _classificar_curva_abc(grupo)
 
     # ---- Período da base (cabeçalho do relatório): vendas tem prioridade ----
-    periodo_base = _detectar_periodo_arquivo(caminho_vendas) or _detectar_periodo_arquivo(caminho_compras)
+    if detalhado:
+        # Mesma extração (_extrair_periodo_base) sobre a MESMA matriz já lida em
+        # carregar_*: resultado idêntico, sem reler os arquivos.
+        periodo_vendas = df_v.attrs.get("periodo_arquivo")
+        periodo_compras = df_c.attrs.get("periodo_arquivo")
+        periodo_base = periodo_vendas or periodo_compras
+    else:
+        periodo_base = _detectar_periodo_arquivo(caminho_vendas) or _detectar_periodo_arquivo(caminho_compras)
     periodo_base_inicio = periodo_base[0] if periodo_base else None
     periodo_base_fim = periodo_base[1] if periodo_base else None
 
@@ -737,8 +884,10 @@ def _calcular_kpis_local(caminho_vendas: str, caminho_compras: str) -> Resultado
         )
 
     # ---- Telemetria (em memória, NÃO persistida — sem campo no DER V4) ----
-    colunas_v = [c for c in df_v.columns if c != "_prod_norm"]
-    colunas_c = [c for c in df_c.columns if c != "_prod_norm"]
+    # Colunas internas (prefixo "_": _prod_norm e, no modo detalhado, _unidade)
+    # não são colunas do relatório e ficam fora da telemetria nos dois modos.
+    colunas_v = [c for c in df_v.columns if not c.startswith("_")]
+    colunas_c = [c for c in df_c.columns if not c.startswith("_")]
     telemetria = {
         "coluna_valor_compras": col_valor_c,
         "colunas_vendas": colunas_v,
@@ -790,19 +939,262 @@ def _calcular_kpis_local(caminho_vendas: str, caminho_compras: str) -> Resultado
         "periodo_base_inicio": periodo_base_inicio,
         "periodo_base_fim": periodo_base_fim,
     }
-    return ResultadoETL(
+    resultado = ResultadoETL(
         sucesso=True,
         mensagem="Cálculo concluído em memória.",
         kpis=kpis,
         telemetria=telemetria,
         alertas=alertas,
     )
+    if not detalhado:
+        return resultado, None
+    return resultado, {
+        "grupo": grupo, "df_v": df_v, "df_c": df_c,
+        "periodo_vendas": periodo_vendas, "periodo_compras": periodo_compras,
+    }
+
+
+# =====================================================================
+# 7b) Detalhamento por produto (ranking completo + movimentação)
+# =====================================================================
+def chave_produto(produto_normalizado: str) -> str:
+    """Identificador estável e compacto do produto (16 hex) a partir da chave de
+    agrupamento do ETL (_normalizar_produto). Usado para casar o mesmo produto
+    entre períodos sem trafegar nem indexar o nome normalizado inteiro."""
+    import hashlib
+    return hashlib.blake2b(str(produto_normalizado).encode("utf-8"), digest_size=8).hexdigest()
+
+
+def _unidade_por_produto(df: pd.DataFrame):
+    """Unidade de cada produto (_prod_norm -> código), ou None sem coluna de
+    unidade. Mais de uma unidade para o mesmo produto vira _UNIDADE_MULTIPLA; um
+    produto com alguma linha sem unidade fica sem unidade conhecida (None): parte
+    da quantidade teria unidade desconhecida, e a comparação não é validada."""
+    if "_unidade" not in df.columns or "_prod_norm" not in df.columns:
+        return None
+    base = df[df["_prod_norm"] != ""]
+    if base.empty:
+        return pd.Series(dtype=object)
+    import numpy as np
+    agg = base.groupby("_prod_norm")["_unidade"].agg(["nunique", "first", "count", "size"])
+    unidade = np.where(agg["nunique"] == 1, agg["first"], _UNIDADE_MULTIPLA).astype(object)
+    unidade[(agg["count"] < agg["size"]).to_numpy()] = None
+    return pd.Series(unidade, index=agg.index, dtype=object)
+
+
+def _num(valor, casas: int):
+    """float finito arredondado, ou None (NaN/inf nunca cruzam o processo)."""
+    try:
+        numero = float(valor)
+    except (TypeError, ValueError):
+        return None
+    if numero != numero or numero in (float("inf"), float("-inf")):
+        return None
+    return round(numero, casas)
+
+
+def _montar_detalhamento(bases: dict, orcamento_bytes: int) -> dict:
+    """
+    Ranking completo da Curva ABC + movimentação compras x vendas por produto,
+    em formato compacto (linhas posicionais) e limitado por:
+      - LIMITE_PRODUTOS_DETALHADOS linhas (volume no banco);
+      - `orcamento_bytes` de JSON (o worker tem teto de saída).
+    A ordem de corte intercala as duas listas (melhor posição no ranking ou na
+    movimentação primeiro); os prefixos contínuos registrados de cada lista são
+    informados para que nenhuma consulta exiba buracos como se fossem completos.
+
+    Correspondência compras x vendas: pela MESMA chave normalizada do KPI de
+    saldo estimado. A diferença em unidades só é calculada (situação "C") quando
+    o produto aparece nos dois relatórios, as unidades não divergem e as
+    quantidades são válidas; nos demais casos a linha é registrada com a
+    situação, sem número artificial. Se um relatório tem coluna de unidade, um
+    produto sem unidade nele não é comparado (situação "M"): unidade
+    desconhecida não vira comparação validada. Linhas de compra sem produto ou
+    com descrição que não é produto (frete, taxas, juros: a mesma lista que o
+    relatório de vendas descarta) ficam fora do detalhamento.
+    """
+    import json
+    import numpy as np
+
+    grupo, df_v, df_c = bases["grupo"], bases["df_v"], bases["df_c"]
+    ranking, total_abc = _ranking_abc(grupo)
+
+    fatos = grupo[["_prod_norm", "nome", "qtde", "fat"]].copy()
+    unidades_v = _unidade_por_produto(df_v)
+    fatos["un_v"] = fatos["_prod_norm"].map(unidades_v) if unidades_v is not None else None
+    if ranking is not None:
+        posicoes = ranking[["_prod_norm", "perc_ind", "perc_acum", "classe"]].copy()
+        posicoes["posicao"] = np.arange(1, len(ranking) + 1)
+        fatos = fatos.merge(posicoes, on="_prod_norm", how="left")
+    else:
+        fatos["perc_ind"] = np.nan
+        fatos["perc_acum"] = np.nan
+        fatos["classe"] = None
+        fatos["posicao"] = np.nan
+
+    compras_por_produto = ("produto" in df_c.columns and "_prod_norm" in df_c.columns
+                           and "qtde_comprada" in df_c.columns)
+    produtos_compras = None
+    if compras_por_produto:
+        compras_prod = (
+            df_c[df_c["produto"].notna() & (df_c["_prod_norm"] != "")
+                 & ~df_c["_prod_norm"].isin(_NAO_PRODUTOS)]
+            .groupby("_prod_norm")
+            .agg(qtde_comprada=("qtde_comprada", "sum"), nome_c=("produto", "first"))
+            .reset_index()
+        )
+        compras_prod["nome_c"] = compras_prod["nome_c"].map(_nome_exibivel)
+        unidades_c = _unidade_por_produto(df_c)
+        compras_prod["un_c"] = compras_prod["_prod_norm"].map(unidades_c) if unidades_c is not None else None
+        produtos_compras = int(len(compras_prod))
+        fatos = fatos.merge(compras_prod, on="_prod_norm", how="outer")
+        fatos["nome"] = fatos["nome"].fillna(fatos["nome_c"])
+    else:
+        fatos["qtde_comprada"] = np.nan
+        fatos["un_c"] = None
+
+    em_compras = fatos["qtde_comprada"].notna()
+    em_vendas = fatos["qtde"].notna()
+    un_v = fatos["un_v"].where(fatos["un_v"].notna(), None)
+    un_c = fatos["un_c"].where(fatos["un_c"].notna(), None)
+    sem_unidade = ((un_v.isna() & (unidades_v is not None))
+                   | (un_c.isna() & bool(compras_por_produto and "_unidade" in df_c.columns)))
+    ambigua = (un_v == _UNIDADE_MULTIPLA) | (un_c == _UNIDADE_MULTIPLA) | sem_unidade
+    divergente = un_v.notna() & un_c.notna() & (un_v != un_c)
+    invalida = (fatos["qtde_comprada"] <= 0) | (fatos["qtde"] < 0)
+    fatos["situacao"] = np.select(
+        [~em_compras, ~em_vendas, ambigua, divergente, invalida],
+        ["", "S", "M", "D", "Q"], default="C")
+    fatos["diferenca"] = np.where(fatos["situacao"] == "C",
+                                  fatos["qtde_comprada"] - fatos["qtde"], np.nan)
+
+    # Ordem da movimentação: comparáveis por maior diferença; depois as demais
+    # situações (sem número), por quantidade comprada.
+    mov = fatos[em_compras].copy()
+    mov["_ordem_sit"] = (mov["situacao"] != "C").astype(int)
+    mov["_dif_ord"] = mov["diferenca"].fillna(0.0)
+    mov = mov.sort_values(["_ordem_sit", "_dif_ord", "qtde_comprada", "nome"],
+                          ascending=[True, False, False, True], kind="mergesort")
+    fatos["posicao_mov"] = np.nan
+    fatos.loc[mov.index, "posicao_mov"] = np.arange(1, len(mov) + 1)
+
+    relevantes = fatos[fatos["posicao"].notna() | fatos["posicao_mov"].notna()].copy()
+    relevantes["prioridade"] = relevantes[["posicao", "posicao_mov"]].min(axis=1)
+    relevantes = relevantes.sort_values(["prioridade", "posicao", "posicao_mov"], kind="mergesort")
+    # itertuples não aceita nomes iniciados por "_": a chave segue como "prod_norm".
+    relevantes = relevantes.rename(columns={"_prod_norm": "prod_norm"})
+
+    linhas, usados = [], 2
+    limite_bytes = max(0, int(orcamento_bytes))
+    for registro in relevantes.itertuples(index=False):
+        if len(linhas) >= LIMITE_PRODUTOS_DETALHADOS:
+            break
+        posicao = int(registro.posicao) if registro.posicao == registro.posicao else None
+        pos_mov = int(registro.posicao_mov) if registro.posicao_mov == registro.posicao_mov else None
+        situacao = registro.situacao or None
+        linha = [
+            chave_produto(registro.prod_norm),
+            _nome_exibivel(registro.nome),
+            posicao,
+            registro.classe if posicao is not None else None,
+            _num(registro.fat, 2) if registro.qtde == registro.qtde else None,
+            _num(registro.qtde, 4),
+            _num(registro.perc_ind, 2) if posicao is not None else None,
+            _num(registro.perc_acum, 2) if posicao is not None else None,
+            _num(registro.qtde_comprada, 4),
+            registro.un_v if isinstance(registro.un_v, str) else None,
+            registro.un_c if isinstance(registro.un_c, str) else None,
+            situacao,
+            _num(registro.diferenca, 4) if situacao == "C" else None,
+            pos_mov,
+        ]
+        tamanho = len(json.dumps(linha, ensure_ascii=True, allow_nan=False)) + 1
+        if usados + tamanho > limite_bytes:
+            break
+        usados += tamanho
+        linhas.append(linha)
+
+    def _prefixo(indice: int) -> int:
+        valores = sorted(linha[indice] for linha in linhas if linha[indice] is not None)
+        contiguo = 0
+        for valor in valores:
+            if valor != contiguo + 1:
+                break
+            contiguo = valor
+        return contiguo
+
+    total_ranking = int(len(ranking)) if ranking is not None else 0
+    total_mov = int(em_compras.sum())
+    por_situacao = fatos.loc[em_compras, "situacao"].value_counts()
+    totais_situacao = {letra: int(por_situacao.get(letra, 0)) for letra in ("C", "S", "D", "M", "Q")}
+    ranking_registrado = _prefixo(2)
+    movimentacao_registrada = _prefixo(13)
+    contagem = {"A": 0, "B": 0, "C": 0}
+    soma = {"A": 0.0, "B": 0.0, "C": 0.0}
+    if ranking is not None:
+        agg = ranking.groupby("classe")["fat"].agg(["count", "sum"])
+        contagem = {c: int(agg["count"].get(c, 0)) for c in ("A", "B", "C")}
+        soma = {c: float(agg["sum"].get(c, 0.0)) for c in ("A", "B", "C")}
+    periodo_v, periodo_c = bases.get("periodo_vendas"), bases.get("periodo_compras")
+    resumo = {
+        "versao": VERSAO_DETALHAMENTO,
+        "abc_total_produtos": total_ranking,
+        "abc_faturamento_total": _num(total_abc, 2) or 0.0,
+        "abc_produtos_a": contagem["A"], "abc_produtos_b": contagem["B"], "abc_produtos_c": contagem["C"],
+        "abc_faturamento_a": _num(soma["A"], 2) or 0.0,
+        "abc_faturamento_b": _num(soma["B"], 2) or 0.0,
+        "abc_faturamento_c": _num(soma["C"], 2) or 0.0,
+        "produtos_vendas": int(len(grupo)),
+        "produtos_compras": produtos_compras,
+        "compras_por_produto": bool(compras_por_produto),
+        "unidade_vendas_informada": "_unidade" in df_v.columns,
+        "unidade_compras_informada": bool(compras_por_produto and "_unidade" in df_c.columns),
+        "periodo_vendas_inicio": periodo_v[0] if periodo_v else None,
+        "periodo_vendas_fim": periodo_v[1] if periodo_v else None,
+        "periodo_compras_inicio": periodo_c[0] if periodo_c else None,
+        "periodo_compras_fim": periodo_c[1] if periodo_c else None,
+        "produtos_registrados": len(linhas),
+        "ranking_registrado": ranking_registrado,
+        "movimentacao_total": total_mov,
+        "movimentacao_registrada": movimentacao_registrada,
+        "movimentacao_comparaveis": totais_situacao["C"],
+        "movimentacao_sem_venda": totais_situacao["S"],
+        "movimentacao_unidade_divergente": totais_situacao["D"],
+        "movimentacao_unidade_ambigua": totais_situacao["M"],
+        "movimentacao_quantidade_invalida": totais_situacao["Q"],
+        "registro_limitado": bool(ranking_registrado < total_ranking or movimentacao_registrada < total_mov),
+    }
+    return {"resumo": resumo, "colunas": list(COLUNAS_DETALHAMENTO), "produtos": linhas}
+
+
+def calcular_com_detalhamento_local(caminho_vendas: str, caminho_compras: str,
+                                    orcamento_bytes: int) -> dict:
+    """Operação "calculate_detailed" do worker: o MESMO ResultadoETL da operação
+    "calculate" e, à parte, o detalhamento por produto. Qualquer falha do
+    detalhamento (inclusive de memória) é isolada: o resultado financeiro segue
+    e o detalhamento volta nulo com um código seguro."""
+    resultado, bases = _calcular_kpis_e_bases(caminho_vendas, caminho_compras, detalhado=True)
+    import json
+    tamanho_resultado = len(json.dumps(resultado._asdict(), ensure_ascii=True, default=str))
+    orcamento = int(orcamento_bytes) - tamanho_resultado - RESERVA_SAIDA_RESULTADO
+    detalhamento, erro = None, None
+    if orcamento <= 0:
+        erro = "orcamento"
+    else:
+        try:
+            detalhamento = _montar_detalhamento(bases, orcamento)
+        except MemoryError:
+            erro = "memoria"
+        except Exception as falha:  # nunca derruba o resultado financeiro
+            logger.warning("Detalhamento por produto indisponível (%s).", type(falha).__name__)
+            erro = "detalhamento"
+    return {"resultado": resultado._asdict(), "detalhamento": detalhamento, "detalhamento_erro": erro}
 
 
 # =====================================================================
 # 8) Persistência (somente KPIs finais) + orquestrador oficial
 # =====================================================================
-def _persistir_indicadores(db_session, id_analise: int, kpis: dict) -> None:
+def _persistir_indicadores(db_session, id_analise: int, kpis: dict):
     from models import IndicadorAnalise
     indicador = db_session.execute(
         select(IndicadorAnalise).where(IndicadorAnalise.id_analise == id_analise)
@@ -826,6 +1218,7 @@ def _persistir_indicadores(db_session, id_analise: int, kpis: dict) -> None:
     indicador.periodo_base_inicio = kpis.get("periodo_base_inicio")
     indicador.periodo_base_fim = kpis.get("periodo_base_fim")
     indicador.data_geracao = datetime.now(timezone.utc)
+    return indicador
 
 
 def _persistir_curva_abc(db_session, id_analise: int, kpis: dict) -> None:
@@ -856,20 +1249,120 @@ def _persistir_curva_abc(db_session, id_analise: int, kpis: dict) -> None:
         ))
 
 
+def calcular_kpis_detalhados_em_memoria(caminho_vendas: str, caminho_compras: str):
+    """(ResultadoETL, detalhamento|None) no processo isolado. O ResultadoETL é o
+    mesmo de calcular_kpis_em_memoria; o detalhamento já vem validado."""
+    from etl_runtime import run_calculation_detailed
+    try:
+        return run_calculation_detailed(caminho_vendas, caminho_compras, get_limits())
+    except ETLInputError as erro:
+        raise ETLValidationError(erro.safe_message, erro.code) from None
+
+
+# Falhas da execução detalhada que não dependem do arquivo e podem não ocorrer
+# no cálculo sem detalhamento (o original é refeito nesses casos).
+_CODIGOS_REFAZER_SEM_DETALHAMENTO = frozenset({"output", "timeout", "worker"})
+
+
+def _detalhamento_disponivel(db_session) -> bool:
+    """As tabelas do detalhamento existem? A consulta ao catálogo roda num
+    SAVEPOINT próprio: uma falha aqui nunca contamina a transação do ETL e só
+    desliga o detalhamento (o processamento financeiro segue como antes)."""
+    try:
+        from detalhamento_produtos import esquema_detalhamento_disponivel
+        with db_session.begin_nested():
+            return esquema_detalhamento_disponivel(db_session)
+    except Exception as erro:  # noqa: BLE001 - detecção nunca bloqueia o ETL
+        logger.warning("Verificação do detalhamento por produto indisponível (%s).", type(erro).__name__)
+        return False
+
+
+def _apagar_detalhamento(db_session, id_analise: int) -> None:
+    """Remove o detalhamento de processamentos anteriores da análise. "fetch" tira
+    da sessão os objetos já carregados dessas linhas (a regravação pode reutilizar
+    as mesmas chaves primárias, como no SQLite)."""
+    from sqlalchemy import delete
+    from models import IndicadorComplementarAnalise, ProdutoDesempenhoAnalise
+    opcoes = {"synchronize_session": "fetch"}
+    db_session.execute(delete(ProdutoDesempenhoAnalise).where(ProdutoDesempenhoAnalise.id_analise == id_analise),
+                       execution_options=opcoes)
+    db_session.execute(delete(IndicadorComplementarAnalise)
+                       .where(IndicadorComplementarAnalise.id_analise == id_analise), execution_options=opcoes)
+
+
+def _inserir_detalhamento(db_session, id_analise: int, detalhamento, versao_processamento: int) -> None:
+    """Grava o detalhamento novo, marcado com a versão de indicador_analise do
+    mesmo processamento (as linhas anteriores já foram apagadas)."""
+    from sqlalchemy import insert
+    from models import IndicadorComplementarAnalise, ProdutoDesempenhoAnalise
+    if detalhamento is None:
+        return
+    db_session.add(IndicadorComplementarAnalise(id_analise=id_analise, versao_processamento=versao_processamento,
+                                                **detalhamento["resumo"]))
+    if detalhamento["produtos"]:
+        db_session.execute(insert(ProdutoDesempenhoAnalise),
+                           [{"id_analise": id_analise, **linha} for linha in detalhamento["produtos"]])
+    db_session.flush()
+
+
+def _persistir_detalhamento(db_session, id_analise: int, detalhamento, versao_processamento: int) -> None:
+    """Regrava o detalhamento em DOIS SAVEPOINTs: primeiro apaga o anterior,
+    depois grava o novo. Se a gravação falhar, a análise fica SEM detalhamento
+    (nunca volta o de outro processamento). Erro de banco aqui (ex.: tabelas
+    removidas com o processo no ar) desfaz só o detalhamento: os KPIs e a Curva
+    ABC top-20 seguem gravados, e a disponibilidade do esquema volta a ser
+    conferida na próxima vez. Outros erros sobem (falha fechada do ETL). Como
+    defesa adicional, o portal ignora detalhamento de outra versão do indicador."""
+    from sqlalchemy.exc import SQLAlchemyError
+    from detalhamento_produtos import esquecer_esquema_detalhamento
+    for etapa in ("apagar", "gravar"):
+        try:
+            with db_session.begin_nested():
+                if etapa == "apagar":
+                    _apagar_detalhamento(db_session, id_analise)
+                else:
+                    _inserir_detalhamento(db_session, id_analise, detalhamento, versao_processamento)
+        except SQLAlchemyError as erro:
+            esquecer_esquema_detalhamento(db_session)
+            logger.warning("Detalhamento por produto não gravado (%s); KPIs preservados.", type(erro).__name__)
+            return
+
+
 def processar_arquivos_analise(caminho_vendas: str, caminho_compras: str,
                                id_analise: int, db_session) -> ResultadoETL:
     """
     Orquestrador oficial (assinatura imutável). Calcula em memória e persiste
     APENAS os KPIs finais. NÃO comita (caller controla transação) e NÃO
     persiste linhas processadas. Em falha, retorna sucesso=False sem gravar.
+
+    Com as tabelas do detalhamento disponíveis (migração 5a9c3e7d1b42), usa a
+    operação "calculate_detailed": o MESMO resultado financeiro + o detalhamento
+    por produto. Sem elas, segue exatamente o caminho anterior ("calculate").
     """
     try:
-        resultado = calcular_kpis_em_memoria(caminho_vendas, caminho_compras)
+        detalhar = _detalhamento_disponivel(db_session)
+        detalhamento = None
+        if detalhar:
+            try:
+                resultado, detalhamento = calcular_kpis_detalhados_em_memoria(caminho_vendas, caminho_compras)
+            except ETLValidationError as erro:
+                if erro.code not in _CODIGOS_REFAZER_SEM_DETALHAMENTO:
+                    raise
+                # Saída, tempo ou recursos do worker esgotados na execução detalhada:
+                # o cálculo financeiro original é refeito sem o detalhamento, que
+                # nunca impede um processamento que daria certo sem ele. Erros de
+                # arquivo (código próprio) falhariam igual e sobem direto.
+                logger.warning("Detalhamento por produto descartado (%s); cálculo refeito sem ele.", erro.code)
+                resultado = calcular_kpis_em_memoria(caminho_vendas, caminho_compras)
+        else:
+            resultado = calcular_kpis_em_memoria(caminho_vendas, caminho_compras)
         # Somente o processo pai recebe a Session. O SAVEPOINT mantém KPIs/ABC
         # anteriores intactos em falha, sem soltar o lock externo da análise.
         with db_session.begin_nested():
-            _persistir_indicadores(db_session, id_analise, resultado.kpis)
+            indicador = _persistir_indicadores(db_session, id_analise, resultado.kpis)
             _persistir_curva_abc(db_session, id_analise, resultado.kpis)
+            if detalhar:
+                _persistir_detalhamento(db_session, id_analise, detalhamento, indicador.versao_processamento)
             db_session.flush()
         return resultado._replace(
             mensagem="Processamento concluído. KPIs consolidados + Curva ABC persistidos."

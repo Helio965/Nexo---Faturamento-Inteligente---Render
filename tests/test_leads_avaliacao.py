@@ -19,6 +19,15 @@ from tests.deploy_support import ROOT, DeployTestCase
 AGORA = datetime(2026, 11, 8, 12, 0, tzinfo=timezone.utc)
 REVISAO = "f4c2a8e1d9b6"
 REVISAO_ANTERIOR = "b3e9d6c1f7a2"
+# Revisões posteriores à dos leads (ex.: 5a9c3e7d1b42, detalhamento por produto da Visão
+# Geral) ficam acima dela: o banco migrado está no head atual, que contém REVISAO.
+HEAD = "5a9c3e7d1b42"
+
+
+def _cadeia_ate(revisao_final):
+    from alembic.script import ScriptDirectory
+    scripts = ScriptDirectory(str(ROOT / "migrations"))
+    return {script.revision for script in scripts.walk_revisions(base="base", head=revisao_final)}
 
 
 class _LeadsCase(DeployTestCase):
@@ -52,7 +61,8 @@ class _LeadsCase(DeployTestCase):
 class EsquemaTests(_LeadsCase):
     def test_tabelas_colunas_e_indices_da_revisao(self):
         inspetor = inspect(self.db.engine)
-        self.assertEqual(self.db.session.scalar(text("SELECT version_num FROM alembic_version")), REVISAO)
+        self.assertEqual(self.db.session.scalar(text("SELECT version_num FROM alembic_version")), HEAD)
+        self.assertIn(REVISAO, _cadeia_ate(HEAD))
         colunas = {c["name"] for c in inspetor.get_columns("lead_avaliacao")}
         self.assertEqual(colunas, {
             "id", "nome_contato", "email", "whatsapp", "nome_loja", "score_saude_cadastral", "vazamento_total_r$",
@@ -251,6 +261,8 @@ class DowngradeTests(_LeadsCase):
             self._migrar("downgrade", REVISAO_ANTERIOR)
         self.assertEqual(saida.exception.code, 1)
         self.assertIn("Downgrade da Avaliação de Cenário recusado", registro.output[0])
+        # Cada revisão é confirmada à parte: as posteriores (vazias) já desceram e a
+        # recusa deixa o banco exatamente na revisão dos leads, com os dados intactos.
         self.assertEqual(self.db.session.scalar(text("SELECT version_num FROM alembic_version")), REVISAO)
         self.assertEqual(self.db.session.scalar(text("SELECT count(*) FROM brainstorming_dados_pdv")), 1)
         self.db.session.execute(text("DELETE FROM lead_avaliacao"))

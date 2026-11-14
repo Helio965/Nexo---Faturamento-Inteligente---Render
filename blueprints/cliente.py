@@ -31,7 +31,7 @@ from functools import wraps
 
 from flask import (
     Blueprint, render_template, abort, request, redirect, url_for, flash, current_app,
-    Response, g, make_response,
+    Response, g, make_response, jsonify,
 )
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
@@ -57,7 +57,9 @@ from contract_policy import (
     pode_consultar_analise, pode_enviar_relatorio, pode_exportar_pdf,
 )
 from insights import gerar_semaforos
+import detalhamento_produtos
 from notifications import notificar_admins
+from painel_cliente import montar_painel
 from preferencias_usuario import salvar_preferencias
 from pdf_export import gerar_pdf_analise
 import storage
@@ -132,26 +134,6 @@ def _abc_chart(analise, limite: int = 10) -> dict | None:
     }
 
 
-def _historico_temporal(analises) -> dict | None:
-    """
-    Série temporal Vendas (faturamento) x Compras (volume comprado) ao longo das
-    análises CONCLUIDAS que a política permite consultar — alimenta o gráfico
-    de linha comparativo. Recebe só análises já autorizadas: nenhum período não
-    pago entra no agregado. Precisa de >= 2 pontos para fazer sentido.
-    """
-    linhas = sorted(
-        ((a, a.indicador) for a in analises if a.indicador is not None),
-        key=lambda par: (par[0].ano_referencia, par[0].mes_referencia, par[0].id_analise),
-    )
-    if len(linhas) < 2:
-        return None
-    return {
-        "labels": [f"{a.mes_referencia:02d}/{a.ano_referencia}" for a, _ in linhas],
-        "vendas": [float(ind.faturamento_total or 0) for _, ind in linhas],
-        "compras": [float(ind.total_comprado or 0) for _, ind in linhas],
-    }
-
-
 def _auditoria(analise) -> dict | None:
     """
     Metadados de origem dos dados de UMA análise: empresa, arquivos importados
@@ -181,14 +163,20 @@ def dashboard():
     empresa = current_user.empresa  # garantido pelo CHECK do banco
     situacao = _situacao_cliente()
 
-    # Análises publicadas (CONCLUIDO) que a política permite consultar: no
-    # regime contratual, só as de períodos integralmente pagos. A primeira é a
-    # "última devolutiva"; a lista alimenta o histórico recente e o gráfico.
+    # Análises com devolutiva PUBLICADA (CONCLUIDO + relatorio.publicado, o mesmo
+    # critério do Histórico e da página da análise) que a política permite
+    # consultar: no regime contratual, só as de períodos integralmente pagos. A
+    # primeira é a "última devolutiva"; a lista alimenta o histórico recente e as
+    # séries históricas. Uma análise CONCLUIDO sem publicação (dado legado ou
+    # manual) nunca expõe o rascunho do relatório aqui.
     analises = filtrar_analises_consultaveis(situacao, db.session.execute(
         select(Analise)
+        .join(RelatorioAnalise, RelatorioAnalise.id_analise == Analise.id_analise)
         .where(Analise.id_empresa == empresa.id_empresa)
         .where(Analise.status_analise == "CONCLUIDO")
-        .order_by(Analise.data_conclusao.desc().nullslast(), Analise.data_criacao.desc())
+        .where(RelatorioAnalise.publicado.is_(True))
+        .order_by(Analise.data_conclusao.desc().nullslast(), Analise.data_criacao.desc(),
+                  Analise.id_analise.desc())
         .options(selectinload(Analise.indicador), selectinload(Analise.relatorio))
     ).scalars().all())
     analise = analises[0] if analises else None
@@ -201,37 +189,83 @@ def dashboard():
         .order_by(Analise.data_criacao.desc())
     ).scalars().all()
 
-    # Dados para os gráficos Plotly e semáforos. Só montamos quando há indicador real.
-    dashboard_data = None
-    semaforos = []
-    if analise and analise.indicador:
-        ind: IndicadorAnalise = analise.indicador
-        dashboard_data = {
-            "comparativo": {
-                "labels": ["Compras", "Vendas"],
-                "values": [float(ind.total_comprado or 0), float(ind.faturamento_total or 0)],
-            },
-            "pressao_estoque": float(ind.saldo_estimado_compras_vendas or 0),
-            "curva_abc": _abc_chart(analise),
-            "historico": _historico_temporal(analises),
-        }
-        semaforos = gerar_semaforos(ind, analise.curva_abc)
-
     # Auditoria de origem dos dados (COM QUE BASE/ARQUIVO/PERÍODO foi gerado).
     auditoria = _auditoria(analise)
 
-    return render_template(
+    # Inteligência comercial da Visão Geral (painel_cliente + inteligencia_comercial):
+    # só existe quando há indicador real processado pelo ETL.
+    painel = None
+    if analise and analise.indicador:
+        try:
+            painel = montar_painel(analise, analises, auditoria, situacao)
+        except SQLAlchemyError as erro:
+            # Tabelas do detalhamento removidas com o processo no ar: o painel
+            # volta a conferir o esquema e a página segue com o que é básico.
+            db.session.rollback()
+            detalhamento_produtos.esquecer_esquema_detalhamento()
+            current_app.logger.warning("Visão Geral sem detalhamento (%s).", type(erro).__name__)
+            painel = montar_painel(analise, analises, auditoria, situacao)
+
+    resposta = make_response(render_template(
         "cliente/dashboard.html",
         empresa=empresa,
         analise=analise,
         analises=analises,
         analises_em_andamento=analises_em_andamento,
-        dashboard_data=dashboard_data,
-        semaforos=semaforos,
+        painel=painel,
         auditoria=auditoria,
         situacao=situacao,
         aviso_renovacao=configuracoes_conta.aviso_renovacao(current_user, situacao),
-    )
+    ))
+    return resposta
+
+
+@cliente_bp.route("/analise/<int:id_analise>/produtos")
+@cliente_required
+# Consulta paginada (25 itens): o limite cobre a navegação normal e barra varreduras.
+@limiter.limit("120 per minute", key_func=chave_limite_usuario)
+def analise_produtos(id_analise):
+    """Página JSON da consulta completa da Visão Geral: ranking da Curva ABC ou
+    movimentação compras x vendas de UMA análise publicada da empresa da sessão.
+
+    Mesmas guardas da página da análise: empresa da sessão, CONCLUIDO, devolutiva
+    publicada e período autorizado pela política contratual. Nenhum parâmetro
+    escolhe a empresa; filtros inválidos caem no padrão."""
+    analise = db.session.get(Analise, id_analise)
+    if (
+        analise is None
+        or analise.id_empresa != current_user.empresa.id_empresa
+        or analise.status_analise != "CONCLUIDO"
+        or analise.relatorio is None
+        or not analise.relatorio.publicado
+    ):
+        abort(404)
+    situacao = _situacao_cliente()
+    if not pode_consultar_analise(situacao, analise):
+        abort(403)
+    try:
+        # Compras por produto: também o período do relatório de compras precisa
+        # estar coberto (regime contratual); senão a visão volta indisponível.
+        complemento = detalhamento_produtos.complemento_vigente(analise)
+        dados = detalhamento_produtos.consultar_produtos(
+            analise,
+            request.args.get("visao", "ranking"),
+            pagina=request.args.get("pagina", 1),
+            classe=request.args.get("classe"),
+            filtro=request.args.get("filtro"),
+            busca=request.args.get("busca"),
+            complemento=complemento,
+            compras_autorizadas=detalhamento_produtos.movimentacao_autorizada(situacao, complemento),
+        )
+    except SQLAlchemyError as erro:
+        db.session.rollback()
+        detalhamento_produtos.esquecer_esquema_detalhamento()
+        current_app.logger.warning("Consulta de produtos indisponível (%s).", type(erro).__name__)
+        return jsonify(erro="Consulta indisponível no momento. Tente novamente."), 503
+    resposta = jsonify(detalhamento_produtos.serializar_consulta(dados))
+    resposta.headers["Cache-Control"] = "no-store"
+    resposta.headers["X-Content-Type-Options"] = "nosniff"
+    return resposta
 
 
 @cliente_bp.route("/guia")

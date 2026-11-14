@@ -1,0 +1,129 @@
+{#
+  Componentes da Visão Geral do cliente (inteligência comercial).
+  Os dados chegam prontos de painel_cliente.py; aqui só há apresentação.
+  `fmt` são os formatadores pt-BR de inteligencia_comercial.FORMATADORES.
+#}
+{% import "_macros.html" as m %}
+{% set TITULOS = {'A': 'estratégicos', 'B': 'intermediários', 'C': 'complementares'} %}
+
+{# ---- Cabeçalho de seção (mesmo padrão visual de "Síntese executiva") ---- #}
+{%- macro secao_head(id_titulo, icone, titulo, sub=None) -%}
+<div class="nexo-card-head px-0 painel-secao-head">
+    <div>
+        <h2 id="{{ id_titulo }}"><i class="bi {{ icone }} text-purple" aria-hidden="true"></i> {{ titulo }}</h2>
+        {% if sub %}<p class="sub">{{ sub }}</p>{% endif %}
+    </div>
+</div>
+{%- endmacro -%}
+
+{# ---- Variação percentual frente ao período anterior comparável ---- #}
+{%- macro variacao(fmt, var, referencia, sentido_bom='alta') -%}
+{%- if var and not var.sem_base -%}
+{#- sentido_bom='neutra': a direção não é boa nem ruim por si (ex.: compras), cor neutra. -#}
+{%- set tom = 'is-estavel' if (var.direcao == 'estavel' or sentido_bom == 'neutra') else ('is-boa' if var.direcao == sentido_bom else 'is-ruim') -%}
+<span class="painel-variacao {{ tom }}">
+    <i class="bi {{ 'bi-arrow-up-right' if var.direcao == 'alta' else ('bi-arrow-down-right' if var.direcao == 'queda' else 'bi-dash') }}" aria-hidden="true"></i>
+    {{ fmt.pct(var.percentual, sinal=True) }} <span class="painel-variacao-ref">vs. {{ referencia }}</span>
+</span>
+{%- elif var and var.sem_base -%}
+<span class="painel-variacao is-estavel">Sem base percentual (período anterior sem valor)</span>
+{%- else -%}
+<span class="painel-variacao is-neutra">Sem período anterior comparável</span>
+{%- endif -%}
+{%- endmacro -%}
+
+{# ---- Rótulo textual do nível (a cor nunca é a única pista) ---- #}
+{%- macro nivel_rotulo(nivel) -%}
+{{ {'critico': 'Crítico', 'atencao': 'Atenção', 'oportunidade': 'Oportunidade', 'informativo': 'Informativo'}.get(nivel, 'Informativo') }}
+{%- endmacro -%}
+
+{# ---- Cartão de insight: o que aconteceu / por que importa / o que fazer / objetivo ---- #}
+{%- macro insight_card(card) -%}
+{%- set icone = {'critico': 'bi-exclamation-octagon-fill', 'atencao': 'bi-exclamation-triangle-fill', 'oportunidade': 'bi-graph-up-arrow', 'informativo': 'bi-info-circle-fill'}.get(card.nivel, 'bi-info-circle-fill') -%}
+<article class="semaforo-card insight-card s-{{ card.nivel }}" aria-labelledby="insight-{{ card.chave }}">
+    <div class="sc-head">
+        <span class="sc-dot"><i class="bi {{ icone }}" aria-hidden="true"></i></span>
+        <div class="insight-titulo">
+            <span class="insight-nivel">{{ nivel_rotulo(card.nivel) }}</span>
+            <h3 class="sc-title" id="insight-{{ card.chave }}">{{ card.titulo }}</h3>
+        </div>
+    </div>
+    <div class="sc-row"><span class="sc-key">O que aconteceu</span><span class="sc-val">{{ card.o_que }}</span></div>
+    <div class="sc-row"><span class="sc-key">Por que isso importa</span><span class="sc-val">{{ card.por_que }}</span></div>
+    <div class="sc-row"><span class="sc-key">O que fazer</span><span class="sc-val">{{ card.o_que_fazer }}</span></div>
+    <div class="sc-row"><span class="sc-key">Objetivo</span><span class="sc-val">{{ card.objetivo }}</span></div>
+</article>
+{%- endmacro -%}
+
+{# ---- Cartão de classe da Curva ABC ---- #}
+{%- macro classe_card(fmt, cartao) -%}
+<article class="classe-card classe-{{ cartao.classe|lower }}" aria-labelledby="classe-{{ cartao.classe|lower }}-titulo">
+    <div class="classe-card-head">
+        <span class="classe-letra" aria-hidden="true">{{ cartao.classe }}</span>
+        <div>
+            <h3 id="classe-{{ cartao.classe|lower }}-titulo">Classe {{ cartao.classe }}: {{ cartao.titulo }}</h3>
+            {% if cartao.percentual is not none %}
+            <p class="classe-numeros"><strong>{{ fmt.pct(cartao.percentual) }}</strong> do faturamento · {{ fmt.qtd(cartao.produtos) }} produto(s)</p>
+            {% else %}
+            <p class="classe-numeros">Participação indisponível nesta análise</p>
+            {% endif %}
+        </div>
+    </div>
+    <p class="classe-leitura">{{ cartao.leitura }}</p>
+    {% if cartao.destaques %}
+    <ul class="classe-destaques">
+        {% for d in cartao.destaques %}
+        <li><span class="classe-destaque-nome">{{ d.nome }}</span>
+            <span class="classe-destaque-valor">{{ fmt.moeda(d.faturamento) }}{% if d.percentual is not none %} · {{ fmt.pct(d.percentual) }}{% endif %}</span></li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% if cartao.recomendacao %}<p class="classe-recomendacao"><i class="bi bi-lightbulb" aria-hidden="true"></i> {{ cartao.recomendacao }}</p>{% endif %}
+</article>
+{%- endmacro -%}
+
+{# ---- Cartão de recomendação priorizada ---- #}
+{%- macro recomendacao_card(rec, ordem) -%}
+{%- set tom = {'Alta': 'is-alta', 'Média': 'is-media', 'Baixa': 'is-baixa'}.get(rec.prioridade, 'is-media') -%}
+<article class="recomendacao-card {{ tom }}" aria-labelledby="rec-{{ ordem }}-titulo">
+    <div class="recomendacao-head">
+        <span class="recomendacao-ordem" aria-hidden="true">{{ ordem }}</span>
+        <div>
+            <span class="recomendacao-prioridade">Prioridade {{ rec.prioridade|lower }}</span>
+            <h3 id="rec-{{ ordem }}-titulo">{{ rec.alvo }}</h3>
+        </div>
+    </div>
+    <dl class="recomendacao-dados">
+        <div><dt>Situação identificada</dt><dd>{{ rec.situacao }}</dd></div>
+        <div><dt>Justificativa</dt><dd>{{ rec.justificativa }}</dd></div>
+        <div><dt>Ação sugerida</dt><dd>{{ rec.acao }}</dd></div>
+        <div><dt>Objetivo comercial</dt><dd>{{ rec.objetivo }}</dd></div>
+    </dl>
+</article>
+{%- endmacro -%}
+
+{# ---- Linha da consulta do ranking (mesmo formato renderizado pelo JS) ---- #}
+{%- macro linha_ranking(fmt, p) -%}
+<tr>
+    <td class="t-mono t-mut">{{ p.posicao }}º</td>
+    <td class="painel-produto">{{ p.nome }}</td>
+    <td>{{ m.badge_abc(p.classe) }}</td>
+    <td class="text-end t-mono">{{ fmt.moeda(p.faturamento) }}</td>
+    <td class="text-end t-mono">{{ fmt.pct(p.percentual_individual, casas=2) }}</td>
+    <td class="text-end t-mono">{{ fmt.pct(p.percentual_acumulado, casas=2) }}</td>
+    <td class="text-end t-mono">{{ fmt.qtd(p.quantidade_vendida) }}</td>
+</tr>
+{%- endmacro -%}
+
+{# ---- Linha da movimentação ---- #}
+{%- macro linha_movimentacao(fmt, ln) -%}
+<tr>
+    <td class="painel-produto">{{ ln.nome }}{% if ln.classe %} {{ m.badge_abc(ln.classe) }}{% endif %}</td>
+    {# Cada quantidade com a unidade do seu relatório; sem unidade informada, só o número. #}
+    <td class="text-end t-mono">{{ fmt.qtd(ln.comprado) }}{% if ln.unidade_compra %} <span class="painel-unidade">{{ ln.unidade_compra }}</span>{% endif %}</td>
+    <td class="text-end t-mono">{{ fmt.qtd(ln.vendido) }}{% if ln.unidade_venda %} <span class="painel-unidade">{{ ln.unidade_venda }}</span>{% endif %}</td>
+    <td class="text-end t-mono">{% if ln.diferenca is not none %}{{ fmt.qtd_sinal(ln.diferenca) }}{% else %}<span class="t-mut">não calculada</span>{% endif %}</td>
+    <td><span class="painel-nivel-texto is-{{ ln.nivel }}">{{ ln.interpretacao }}</span></td>
+    <td>{{ ln.recomendacao or '—' }}</td>
+</tr>
+{%- endmacro -%}

@@ -208,7 +208,10 @@ class _ClusterDosLeads(_PrivateCluster):
         self.stage = "migração até head"
         self._migrar(upgrade, "head")
         self.head = ScriptDirectory(MIGRATIONS).get_current_head()
-        self.check("migration_reaches_head", self._revisao() == self.head == REVISAO_LEADS
+        # O head pode estar acima da revisão dos leads (ex.: 5a9c3e7d1b42, detalhamento por
+        # produto): o que se exige é estar no head e a revisão dos leads fazer parte da cadeia.
+        cadeia = {s.revision for s in ScriptDirectory(MIGRATIONS).walk_revisions(base="base", head=self.head)}
+        self.check("migration_reaches_head", self._revisao() == self.head and REVISAO_LEADS in cadeia
                    and set(TABELAS) <= self._tabelas() and self._funcao_existe(), f"revisão={self._revisao()}")
         diferencas = self._diferencas_metadata()
         self.check("metadata_matches_models", diferencas == [], repr(diferencas)[:400])

@@ -58,6 +58,12 @@ def main():
                 from etl_processor import _calcular_kpis_local
                 calculated = _calcular_kpis_local(*request["paths"])
                 result = calculated._asdict()
+            elif request["operation"] == "calculate_detailed" and len(request["paths"]) == 2:
+                # O mesmo resultado financeiro de "calculate" + o detalhamento por produto,
+                # que se ajusta ao orçamento de saída e nunca derruba o resultado principal.
+                from etl_processor import calcular_com_detalhamento_local
+                result = calcular_com_detalhamento_local(*request["paths"],
+                                                         orcamento_bytes=limits.max_output_bytes)
             elif request["operation"] == "raio_x" and request["paths"]:
                 # Raio-X de entrada: cada relatório passa pela mesma validação do upload antes
                 # de ser lido; a extensão vem do nome que o processo pai deu ao arquivo.
