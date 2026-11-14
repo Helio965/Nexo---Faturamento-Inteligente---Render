@@ -155,6 +155,8 @@ jobs:
         run: python -B -m unittest tests.postgresql_etl_resource_security -v
       - name: Configuracoes da conta, RLS e concorrencia no PostgreSQL isolado
         run: python -B -m unittest tests.postgresql_configuracoes -v
+      - name: Detalhamento por produto da Visao Geral, RLS e downgrade no PostgreSQL isolado
+        run: python -B -m unittest tests.postgresql_detalhamento_produtos -v
 
   supply-chain:
     name: security-sca-sast

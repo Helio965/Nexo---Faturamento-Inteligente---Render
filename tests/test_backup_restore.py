@@ -118,8 +118,9 @@ class PostgreSQLBackupRestoreTests(unittest.TestCase):
         # 19 tabelas do domínio + alembic_version + sessao_autenticada (SEC-001)
         # + as 4 das Configurações da conta + a da trava do total do PDV
         # + as 4 dos planos por nível e do Raio-X (b3e9d6c1f7a2)
-        # + as 2 da Avaliação de Cenário (f4c2a8e1d9b6).
-        self.assertEqual(report.get("tables"), 32)
+        # + as 2 da Avaliação de Cenário (f4c2a8e1d9b6)
+        # + as 2 do detalhamento por produto da Visão Geral (5a9c3e7d1b42).
+        self.assertEqual(report.get("tables"), 34)
         self.assertEqual(report.get("uploads"), 4)
         self.assertEqual(report.get("files"), 5)
         not_executed = report.get("not_executed", [])
@@ -209,7 +210,7 @@ class BackupDrillSafetyTests(unittest.TestCase):
             for tool in TOOLS:
                 _tool(Path(fake), tool).write_bytes(b"")
             for platform, approved, accepted in cases:
-                report = {"status": "ok", "tables": 32, "uploads": 4, "files": 5,  # espelha o ensaio real
+                report = {"status": "ok", "tables": 34, "uploads": 4, "files": 5,  # espelha o ensaio real
                           "checks": approved, "not_executed": ["etl"]}
                 completed = subprocess.CompletedProcess([], 0, stdout=json.dumps(report))
                 with self.subTest(platform=platform, checks=approved[-1:], accepted=accepted), \

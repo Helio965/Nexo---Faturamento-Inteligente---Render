@@ -31,7 +31,7 @@ Esse saldo estimado revela o **descasamento financeiro/operacional** entre compr
 
 ### 🔐 Governança de Dados & Privacidade
 
-- **Sem parsing linha a linha para o banco.** O motor de ETL lê os relatórios brutos do PDV com Pandas, mas **nunca grava transações item a item** (vendas individuais, notas de compra) nas tabelas do sistema — apenas os **KPIs agregados** (`indicador_analise`) e o ranking consolidado da Curva ABC (`produto_curva_abc`).
+- **Sem parsing linha a linha para o banco.** O motor de ETL lê os relatórios brutos do PDV com Pandas, mas **nunca grava transações item a item** (vendas individuais, notas de compra) nas tabelas do sistema — apenas os **KPIs agregados** (`indicador_analise`), o ranking consolidado da Curva ABC (`produto_curva_abc`) e, para a Visão Geral, os agregados por produto do período (`indicador_complementar_analise` e `produto_desempenho_analise`: faturamento, quantidades vendidas e compradas e classe ABC de cada produto, sem nota, venda ou linha individual).
 - **Arquivos brutos** ficam retidos via `storage.py` (no próprio Postgres, tabela `arquivo_armazenado`) apenas para permitir reprocessamento/auditoria do upload original — não são lidos novamente linha a linha pela aplicação fora do pipeline do ETL.
 - **Minimização de dados (LGPD):** o banco permanece enxuto, com apenas o necessário para o diagnóstico estratégico.
 
@@ -401,7 +401,7 @@ Template completo em [`.env.example`](.env.example).
 | **Resiliência do ETL** | Contrato de robustez (sucesso honesto **ou** recusa acionável, nunca fabricação de dado) | Evita o pior cenário de produção: uma análise "bem-sucedida" calculada sobre dados inventados. Ver [`docs/RELATORIO_COBERTURA_ETL.md`](docs/RELATORIO_COBERTURA_ETL.md). |
 | **Armazenamento de upload** | Abstração única em `storage.py`, bytes no Postgres (`arquivo_armazenado`) | Hosts gratuitos têm disco efêmero; no banco o arquivo sobrevive a deploys/reinícios e entra na mesma transação do registro que o cita. Continua sendo o ponto de troca único para *object storage* (Supabase Storage/S3) sem tocar nas rotas. |
 | **IA (devolutiva e suporte)** | Sempre com *fallback* determinístico local | O sistema nunca depende de uma API externa para funcionar — IA é um realce, não um requisito. |
-| **Persistência do ETL** | Apenas KPIs e ranking consolidados via ORM | Mantém o banco enxuto, alinhado à LGPD; dados transacionais brutos não são parseados linha a linha para tabelas do sistema. |
+| **Persistência do ETL** | Apenas KPIs, ranking consolidado e agregados por produto via ORM | Mantém o banco enxuto, alinhado à LGPD; dados transacionais brutos não são parseados linha a linha para tabelas do sistema. |
 
 ---
 

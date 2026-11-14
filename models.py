@@ -578,6 +578,161 @@ class ProdutoCurvaABC(db.Model):
 
 
 # =====================================================================
+# 9b. Detalhamento por produto (Visão Geral: inteligência comercial)
+# =====================================================================
+# Expand da revisão 5a9c3e7d1b42. As duas tabelas são DERIVADAS do processamento
+# (o ETL as regrava a cada execução) e complementam produto_curva_abc sem alterá-la:
+# o top-20 continua sendo o contrato do PDF, da página da análise e da devolutiva.
+#
+# Não há relationship em Analise de propósito: antes da migração nenhuma consulta
+# existente pode tocar estas tabelas (detalhamento_produtos.esquema_detalhamento_
+# disponivel decide quando lê-las), e a exclusão de uma análise as remove pela FK
+# ON DELETE CASCADE do banco, sem carregar milhares de linhas no ORM.
+class IndicadorComplementarAnalise(db.Model):
+    """Agregados do processamento que não cabem em indicador_analise (1:1 com a
+    análise): distribuição A/B/C sobre o UNIVERSO completo de produtos, contagens,
+    quanto do detalhamento foi registrado e o período lido de cada relatório.
+
+    `versao_processamento` é a versão de indicador_analise gerada no MESMO
+    processamento: o portal ignora um detalhamento de outra versão, para nunca
+    exibir dados de arquivos antigos ao lado dos KPIs atuais."""
+    __tablename__ = "indicador_complementar_analise"
+
+    id_indicador_complementar: Mapped[int] = mapped_column(primary_key=True)
+    id_analise: Mapped[int] = mapped_column(
+        ForeignKey("analise.id_analise", ondelete="CASCADE", name="fk_indicador_complementar_analise"),
+        nullable=False,
+    )
+    versao_metodologia: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    versao_processamento: Mapped[int] = mapped_column(Integer, nullable=False)
+    abc_total_produtos: Mapped[int] = mapped_column(Integer, nullable=False)
+    abc_faturamento_total: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
+    abc_produtos_a: Mapped[int] = mapped_column(Integer, nullable=False)
+    abc_produtos_b: Mapped[int] = mapped_column(Integer, nullable=False)
+    abc_produtos_c: Mapped[int] = mapped_column(Integer, nullable=False)
+    abc_faturamento_a: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
+    abc_faturamento_b: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
+    abc_faturamento_c: Mapped[Decimal] = mapped_column(Numeric, nullable=False)
+    produtos_vendas: Mapped[int] = mapped_column(Integer, nullable=False)
+    produtos_compras: Mapped[Optional[int]] = mapped_column(Integer)
+    compras_por_produto: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    unidade_vendas_informada: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    unidade_compras_informada: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    periodo_vendas_inicio: Mapped[Optional[date]] = mapped_column(Date)
+    periodo_vendas_fim: Mapped[Optional[date]] = mapped_column(Date)
+    periodo_compras_inicio: Mapped[Optional[date]] = mapped_column(Date)
+    periodo_compras_fim: Mapped[Optional[date]] = mapped_column(Date)
+    produtos_registrados: Mapped[int] = mapped_column(Integer, nullable=False)
+    ranking_registrado: Mapped[int] = mapped_column(Integer, nullable=False)
+    movimentacao_total: Mapped[int] = mapped_column(Integer, nullable=False)
+    movimentacao_registrada: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Totais por situação sobre TODOS os produtos comprados (não só os registrados).
+    movimentacao_comparaveis: Mapped[Optional[int]] = mapped_column(Integer)
+    movimentacao_sem_venda: Mapped[Optional[int]] = mapped_column(Integer)
+    movimentacao_unidade_divergente: Mapped[Optional[int]] = mapped_column(Integer)
+    movimentacao_unidade_ambigua: Mapped[Optional[int]] = mapped_column(Integer)
+    movimentacao_quantidade_invalida: Mapped[Optional[int]] = mapped_column(Integer)
+    registro_limitado: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    data_geracao: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.current_timestamp()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "abc_total_produtos >= 0 AND abc_produtos_a >= 0 AND abc_produtos_b >= 0 AND abc_produtos_c >= 0 "
+            "AND abc_produtos_a + abc_produtos_b + abc_produtos_c = abc_total_produtos",
+            name="ck_indicador_complementar_abc",
+        ),
+        CheckConstraint(
+            "produtos_registrados >= 0 AND ranking_registrado >= 0 AND ranking_registrado <= abc_total_produtos "
+            "AND movimentacao_registrada >= 0 AND movimentacao_registrada <= movimentacao_total",
+            name="ck_indicador_complementar_registro",
+        ),
+        CheckConstraint(
+            "(movimentacao_comparaveis IS NULL AND movimentacao_sem_venda IS NULL "
+            "AND movimentacao_unidade_divergente IS NULL AND movimentacao_unidade_ambigua IS NULL "
+            "AND movimentacao_quantidade_invalida IS NULL) OR ("
+            "movimentacao_comparaveis IS NOT NULL AND movimentacao_sem_venda IS NOT NULL "
+            "AND movimentacao_unidade_divergente IS NOT NULL AND movimentacao_unidade_ambigua IS NOT NULL "
+            "AND movimentacao_quantidade_invalida IS NOT NULL AND movimentacao_comparaveis >= 0 "
+            "AND movimentacao_sem_venda >= 0 AND movimentacao_unidade_divergente >= 0 "
+            "AND movimentacao_unidade_ambigua >= 0 AND movimentacao_quantidade_invalida >= 0 "
+            "AND movimentacao_comparaveis + movimentacao_sem_venda + movimentacao_unidade_divergente "
+            "+ movimentacao_unidade_ambigua + movimentacao_quantidade_invalida = movimentacao_total)",
+            name="ck_indicador_complementar_situacoes",
+        ),
+        UniqueConstraint("id_analise", name="uq_indicador_complementar_analise"),
+    )
+
+    @property
+    def periodos_divergentes(self) -> bool:
+        """Os dois relatórios declaram período e os períodos não coincidem."""
+        if not (self.periodo_vendas_inicio and self.periodo_vendas_fim
+                and self.periodo_compras_inicio and self.periodo_compras_fim):
+            return False
+        return (self.periodo_vendas_inicio, self.periodo_vendas_fim) != (
+            self.periodo_compras_inicio, self.periodo_compras_fim)
+
+
+def _produto_busca_padrao(contexto) -> str:
+    """Nome normalizado para a busca da Visão Geral (sem acentos, sem pontuação,
+    maiúsculas), com a mesma regra de agrupamento do ETL. Calculado na gravação
+    a partir de `produto_nome`, para qualquer forma de inserção."""
+    from etl_processor import _normalizar_produto
+    return _normalizar_produto(contexto.get_current_parameters().get("produto_nome"))[:255]
+
+
+class ProdutoDesempenhoAnalise(db.Model):
+    """Uma linha por produto relevante de uma análise: posição e classe no ranking
+    COMPLETO da Curva ABC (quando vendido com faturamento > 0) e/ou a comparação
+    entre unidades compradas e vendidas (quando consta do relatório de compras por
+    produto). `situacao_movimentacao` explica por que a diferença não foi
+    calculada quando é nula (sem correspondência, unidade divergente etc.)."""
+    __tablename__ = "produto_desempenho_analise"
+
+    id_produto_desempenho: Mapped[int] = mapped_column(primary_key=True)
+    id_analise: Mapped[int] = mapped_column(
+        ForeignKey("analise.id_analise", ondelete="CASCADE", name="fk_produto_desempenho_analise"),
+        nullable=False,
+    )
+    produto_chave: Mapped[str] = mapped_column(String(16), nullable=False)
+    produto_nome: Mapped[str] = mapped_column(String, nullable=False)
+    produto_busca: Mapped[str] = mapped_column(String(255), nullable=False, default=_produto_busca_padrao)
+    posicao_ranking: Mapped[Optional[int]] = mapped_column(Integer)
+    classe_abc: Mapped[Optional[str]] = mapped_column(String(1))
+    faturamento: Mapped[Optional[Decimal]] = mapped_column(Numeric)
+    quantidade_vendida: Mapped[Optional[Decimal]] = mapped_column(Numeric)
+    percentual_individual: Mapped[Optional[Decimal]] = mapped_column(Numeric)
+    percentual_acumulado: Mapped[Optional[Decimal]] = mapped_column(Numeric)
+    quantidade_comprada: Mapped[Optional[Decimal]] = mapped_column(Numeric)
+    unidade_venda: Mapped[Optional[str]] = mapped_column(String(12))
+    unidade_compra: Mapped[Optional[str]] = mapped_column(String(12))
+    situacao_movimentacao: Mapped[Optional[str]] = mapped_column(String(30))
+    diferenca_quantidade: Mapped[Optional[Decimal]] = mapped_column(Numeric)
+    posicao_movimentacao: Mapped[Optional[int]] = mapped_column(Integer)
+    data_geracao: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, server_default=func.current_timestamp()
+    )
+
+    __table_args__ = (
+        CheckConstraint("classe_abc IS NULL OR classe_abc IN ('A', 'B', 'C')", name="ck_produto_desempenho_classe"),
+        CheckConstraint(
+            "situacao_movimentacao IS NULL OR situacao_movimentacao IN ('COMPARAVEL', 'SEM_VENDA_CORRESPONDENTE', "
+            "'UNIDADE_DIVERGENTE', 'UNIDADE_AMBIGUA', 'QUANTIDADE_INVALIDA')",
+            name="ck_produto_desempenho_situacao",
+        ),
+        CheckConstraint("(posicao_ranking IS NULL) = (classe_abc IS NULL)", name="ck_produto_desempenho_ranking"),
+        CheckConstraint(
+            "diferenca_quantidade IS NULL OR situacao_movimentacao = 'COMPARAVEL'",
+            name="ck_produto_desempenho_diferenca",
+        ),
+        UniqueConstraint("id_analise", "produto_chave", name="uq_produto_desempenho_chave"),
+        UniqueConstraint("id_analise", "posicao_ranking", name="uq_produto_desempenho_posicao"),
+        UniqueConstraint("id_analise", "posicao_movimentacao", name="uq_produto_desempenho_movimentacao"),
+    )
+
+
+# =====================================================================
 # 10. ChamadoSuporte  (REATIVAÇÃO da tabela documentada chamado_suporte)
 # =====================================================================
 class ChamadoSuporte(db.Model):

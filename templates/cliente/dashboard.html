@@ -1,9 +1,14 @@
 {% extends "base.html" %}
 {% import "_macros.html" as m %}
 {% import "_auditoria.html" as audit %}
+{% import "cliente/_painel.html" as pm %}
 
 {% block title %}Visão Geral — NEXO{% endblock %}
 {% block page_title %}Visão Geral{% endblock %}
+
+{% block extra_css %}
+<link href="{{ url_for('static', filename='css/nexo-painel-cliente.css') }}?v=20261114" rel="stylesheet">
+{% endblock %}
 
 {% block content %}
 {% set suspensa = empresa and empresa.status_conta == 'SUSPENSA' %}
@@ -83,104 +88,418 @@
     </div>
 </div>
 {% else %}
-{# ---------------- Com análise publicada (dados reais de indicador_analise) ---------------- #}
-{% if analise.indicador %}
+{% set publicada = analise.relatorio.publicada if analise.relatorio else none %}
+{% if painel %}
 {% set ind = analise.indicador %}
-<div class="row g-3 mb-3">
-    <div class="col-12 col-sm-6 col-xl-4">
-        <div class="kpi-tile"><div class="kpi-top"><span class="kpi-label">Faturamento total</span><span class="kpi-icon is-green"><i class="bi bi-graph-up-arrow"></i></span></div><div class="kpi-value"><small>R$</small> {{ m.brl(ind.faturamento_total) }}</div></div>
-    </div>
-    <div class="col-12 col-sm-6 col-xl-4">
-        <div class="kpi-tile"><div class="kpi-top"><span class="kpi-label">Total comprado</span><span class="kpi-icon is-info"><i class="bi bi-bag-check"></i></span></div><div class="kpi-value"><small>R$</small> {{ m.brl(ind.total_comprado) }}</div></div>
-    </div>
-    <div class="col-12 col-sm-6 col-xl-4">
-        <div class="kpi-tile"><div class="kpi-top"><span class="kpi-label">Indicador de Pressão de Estoque</span><span class="kpi-icon is-amber"><i class="bi bi-box-seam"></i></span></div><div class="kpi-value"><small>R$</small> {{ m.brl(ind.saldo_estimado_compras_vendas) }}</div></div>
-    </div>
-</div>
-<div class="mb-4">{{ m.nota_pressao() }}</div>
+{% set p = painel %}
+{% set fmt = p.fmt %}
 
-{# ---------------- Síntese executiva: semáforos de risco (5W2H) ---------------- #}
-{% if semaforos %}
-<div class="nexo-card-head px-0 mb-2" style="border:none;">
-    <div><h2><i class="bi bi-stoplights text-purple"></i> Síntese executiva</h2><p class="sub">Indicadores de risco e oportunidade · ação direta</p></div>
-</div>
-<div class="semaforo-grid mb-4">
-    {% for card in semaforos %}{{ m.semaforo_card(card) }}{% endfor %}
-</div>
-{% endif %}
+{# ================= Navegação interna (âncoras; sem abas novas) ================= #}
+<nav class="painel-indice" aria-label="Seções da Visão Geral">
+    <a href="#indicadores">Indicadores</a>
+    <a href="#resumo-executivo">Resumo executivo</a>
+    <a href="#insights">Insights</a>
+    <a href="#curva-abc">Curva ABC</a>
+    <a href="#movimentacao">Movimentação</a>
+    <a href="#compras-vendas">Compras x Vendas</a>
+    <a href="#evolucao-faturamento">Evolução</a>
+    <a href="#recomendacoes">Ações recomendadas</a>
+    <a href="#historico-devolutiva">Histórico</a>
+</nav>
 
-<div class="row g-3 mb-4">
-    <div class="col-12 col-md-4">
-        <div class="kpi-tile"><div class="kpi-top"><span class="kpi-label">Produto mais vendido</span><span class="kpi-icon"><i class="bi bi-trophy"></i></span></div><div class="fw-bold mt-1">{{ ind.produto_mais_vendido_nome or '—' }}</div><div class="kpi-foot">{{ m.num(ind.produto_mais_vendido_quantidade) }} un</div></div>
-    </div>
-    <div class="col-12 col-md-4">
-        <div class="kpi-tile"><div class="kpi-top"><span class="kpi-label">Maior faturamento</span><span class="kpi-icon"><i class="bi bi-cash-stack"></i></span></div><div class="fw-bold mt-1">{{ ind.produto_maior_faturamento_nome or '—' }}</div><div class="kpi-foot">R$ {{ m.brl(ind.produto_maior_faturamento_valor) }}</div></div>
-    </div>
-    <div class="col-12 col-md-4">
-        <div class="kpi-tile"><div class="kpi-top"><span class="kpi-label">Maior saldo estimado parado</span><span class="kpi-icon"><i class="bi bi-archive"></i></span></div><div class="fw-bold mt-1">{{ ind.produto_maior_saldo_parado_nome or 'Não calculado' }}</div><div class="kpi-foot">{% if ind.saldo_estimado_parado is not none %}{{ m.num(ind.saldo_estimado_parado) }} un em saldo{% else %}compras sem produto + quantidade{% endif %}</div></div>
-    </div>
-</div>
-
-<div class="row g-3 mb-4">
-    <div class="col-12 col-xl-6">
-        <div class="nexo-card h-100">
-            <div class="nexo-card-head"><div><h2>Compras x Vendas</h2><p class="sub">Período mais recente</p></div></div>
-            <div class="nexo-card-body"><div id="chartCliente" class="chart-box sm"></div></div>
-        </div>
-    </div>
-    <div class="col-12 col-md-6 col-xl-3">
-        <div class="nexo-card h-100">
-            <div class="nexo-card-head"><div><h2>Indicador de Pressão de Estoque</h2><p class="sub">Sinal gerencial estimado</p></div></div>
-            <div class="nexo-card-body"><div id="chartPressaoCliente" class="chart-box sm"></div></div>
-        </div>
-    </div>
-    <div class="col-12 col-md-6 col-xl-3">
-        <div class="nexo-card h-100">
-            <div class="nexo-card-head"><div><h2>Relatório estratégico</h2><p class="sub">Última devolutiva</p></div></div>
-            <div class="nexo-card-body">
-                {% if analise.relatorio %}
-                {# SEC-003: somente a versão publicada chega ao cliente. #}
-                <div class="fw-bold mb-2">{{ analise.relatorio.publicada.titulo }}</div>
-                <p class="text-muted-2" style="font-size:0.9rem;">{{ (analise.relatorio.publicada.conclusao_estrategica or '')|truncate(160) }}</p>
-                {% endif %}
-                <a href="{{ url_for('cliente.analise', id_analise=analise.id_analise) }}" class="btn-nexo mt-2"><i class="bi bi-file-earmark-text"></i> Abrir análise completa</a>
+{# ================= 1. Indicadores principais ================= #}
+<section id="indicadores" class="painel-secao" aria-labelledby="titulo-indicadores">
+    {{ pm.secao_head('titulo-indicadores', 'bi-speedometer2', 'Indicadores principais', 'Período analisado: ' ~ p.periodo_texto) }}
+    <div class="row g-3 painel-kpis">
+        <div class="col-12 col-md-6 col-xl-4">
+            <div class="kpi-tile painel-kpi">
+                <div class="kpi-top"><span class="kpi-label">Faturamento do período</span><span class="kpi-icon is-info"><i class="bi bi-graph-up-arrow" aria-hidden="true"></i></span></div>
+                <div class="kpi-value">{% if p.faturamento is not none %}<small>R$</small> {{ m.brl(p.faturamento) }}{% else %}—{% endif %}</div>
+                <div class="kpi-foot">{% if p.faturamento is not none %}{{ pm.variacao(fmt, p.variacao_faturamento, p.referencia_anterior, 'alta') }}{% else %}<span class="painel-variacao is-neutra">Não informado nesta análise</span>{% endif %}</div>
+                <p class="painel-kpi-nota">Total de vendas do relatório no período {{ p.periodo_texto }}.{% if p.nota_duracao %} {{ p.nota_duracao }}{% endif %}</p>
             </div>
         </div>
-    </div>
-</div>
-
-{# ---------------- Curva ABC (Pareto) + histórico temporal ---------------- #}
-<div class="row g-3 mb-4">
-    <div class="col-12 col-xl-7">
-        <div class="nexo-card h-100">
-            <div class="nexo-card-head"><div><h2>Gráfico de Pareto · Curva ABC</h2><p class="sub">Faturamento por produto + % acumulado (Top 10)</p></div></div>
-            <div class="nexo-card-body">
-                {% if dashboard_data.curva_abc %}<div id="chartAbcCliente" class="chart-box sm"></div>
-                <div class="mt-2">{{ m.nota_abc() }}</div>
-                {% else %}<p class="text-muted-2 mb-0" style="font-size:0.9rem;">Curva ABC indisponível para o período.</p>{% endif %}
+        <div class="col-12 col-md-6 col-xl-4">
+            <div class="kpi-tile painel-kpi">
+                <div class="kpi-top"><span class="kpi-label">Total comprado</span><span class="kpi-icon is-amber"><i class="bi bi-bag-check" aria-hidden="true"></i></span></div>
+                <div class="kpi-value">{% if p.compras is not none %}<small>R$</small> {{ m.brl(p.compras) }}{% else %}—{% endif %}</div>
+                <div class="kpi-foot">{% if p.compras is not none %}{{ pm.variacao(fmt, p.variacao_compras, p.referencia_anterior, 'neutra') }}{% else %}<span class="painel-variacao is-neutra">Não informado nesta análise</span>{% endif %}</div>
+                <p class="painel-kpi-nota">Compras do mesmo período, conforme o relatório de compras.{% if p.nota_duracao and p.compras is not none %} {{ p.nota_duracao }}{% endif %}</p>
             </div>
         </div>
-    </div>
-    <div class="col-12 col-xl-5">
-        <div class="nexo-card h-100">
-            <div class="nexo-card-head"><div><h2>Histórico comparativo</h2><p class="sub">Vendas x Compras ao longo do tempo</p></div></div>
-            <div class="nexo-card-body">
-                {% if dashboard_data.historico %}<div id="chartHistoricoCliente" class="chart-box sm"></div>
-                {% else %}
-                <div class="empty-state" style="padding:24px 8px;">
-                    <div class="es-icon"><i class="bi bi-graph-up"></i></div>
-                    <p class="mb-0" style="font-size:0.9rem;">O histórico comparativo aparece a partir da 2ª análise publicada.</p>
+        <div class="col-12 col-md-6 col-xl-4">
+            {% set dif = p.diferenca or 0 %}
+            {# Faixa de ±5% do faturamento, a mesma dos insights desta página (o limiar de 5%
+               vem dos semáforos; a faixa de equilíbrio é própria da Visão Geral). #}
+            {% set nivel = p.nivel_pressao %}
+            <div class="kpi-tile painel-kpi">
+                <div class="kpi-top"><span class="kpi-label">Diferença entre compras e vendas</span><span class="kpi-icon {{ 'is-amber' if nivel == 'pressao' else ('is-green' if nivel == 'giro' else '') }}"><i class="bi bi-arrow-left-right" aria-hidden="true"></i></span></div>
+                <div class="kpi-value">{% if p.diferenca is not none %}<small>R$</small> {{ m.brl(p.diferenca) }}{% else %}—{% endif %}</div>
+                <div class="kpi-foot">
+                    <span class="painel-sinal {{ 'is-pressao' if nivel == 'pressao' else ('is-giro' if nivel == 'giro' else 'is-equilibrio') }}">{{ {'pressao': 'Pressão de estoque', 'giro': 'Giro saudável', 'equilibrio': 'Equilíbrio'}.get(nivel, 'Não calculado') }}</span>
+                    {% if p.diferenca_percentual is not none %}<span class="painel-kpi-detalhe">{{ fmt.pct(p.diferenca_percentual) }} do faturamento</span>{% endif %}
                 </div>
+                <p class="painel-kpi-nota">Indicador de Pressão de Estoque: total comprado menos faturamento. Positivo = comprou mais do que vendeu; até 5% do faturamento, para mais ou para menos, conta como equilíbrio. Não é lucro, prejuízo nem estoque físico.</p>
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-xl-4">
+            <div class="kpi-tile painel-kpi">
+                <div class="kpi-top"><span class="kpi-label">Produto com maior faturamento</span><span class="kpi-icon"><i class="bi bi-cash-stack" aria-hidden="true"></i></span></div>
+                {% if p.lider %}
+                <div class="painel-kpi-produto">{{ p.lider.nome }}</div>
+                <dl class="painel-kpi-dados">
+                    <div><dt>Faturamento</dt><dd>{{ fmt.moeda(p.lider.faturamento) }}</dd></div>
+                    <div><dt>Participação</dt><dd>{{ fmt.pct(p.lider.percentual_individual) }}</dd></div>
+                    {% if p.lider.quantidade_vendida is not none %}<div><dt>Qtde vendida</dt><dd>{{ fmt.qtd(p.lider.quantidade_vendida) }}</dd></div>{% endif %}
+                </dl>
+                {% if p.lider_coincide %}<p class="painel-kpi-nota"><i class="bi bi-link-45deg" aria-hidden="true"></i> Também é o produto mais vendido em quantidade.</p>{% endif %}
+                {% else %}
+                <div class="painel-kpi-produto">—</div>
+                <p class="painel-kpi-nota">Nenhum produto com faturamento positivo no período.</p>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-xl-4">
+            <div class="kpi-tile painel-kpi">
+                <div class="kpi-top"><span class="kpi-label">Produto mais vendido (quantidade)</span><span class="kpi-icon"><i class="bi bi-trophy" aria-hidden="true"></i></span></div>
+                {% if p.mais_vendido %}
+                <div class="painel-kpi-produto">{{ p.mais_vendido.nome }}</div>
+                <dl class="painel-kpi-dados">
+                    <div><dt>Qtde vendida</dt><dd>{{ fmt.qtd(p.mais_vendido.quantidade_vendida) }}</dd></div>
+                    {% if p.mais_vendido.posicao %}<div><dt>Faturamento</dt><dd>{{ p.mais_vendido.posicao }}º · {{ fmt.pct(p.mais_vendido.percentual_individual) }}</dd></div>{% endif %}
+                </dl>
+                <p class="painel-kpi-nota">{% if p.lider_coincide %}Lidera os dois rankings: quantidade e faturamento.{% else %}Ranking por quantidade vendida, diferente do ranking por faturamento.{% endif %}</p>
+                {% else %}
+                <div class="painel-kpi-produto">—</div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="col-12 col-md-6 col-xl-4">
+            {% set mov = p.movimentacao %}
+            <div class="kpi-tile painel-kpi">
+                <div class="kpi-top"><span class="kpi-label">Maior diferença: unidades compradas − vendidas</span><span class="kpi-icon is-amber"><i class="bi bi-box-seam" aria-hidden="true"></i></span></div>
+                {% if mov.destaque %}
+                <div class="painel-kpi-produto">{{ mov.destaque.nome }}</div>
+                <dl class="painel-kpi-dados">
+                    <div><dt>Comprado</dt><dd>{{ fmt.qtd_un(mov.destaque.comprado, mov.destaque.unidade_compra) }}</dd></div>
+                    <div><dt>Vendido</dt><dd>{{ fmt.qtd_un(mov.destaque.vendido, mov.destaque.unidade_venda) }}</dd></div>
+                    <div><dt>Diferença</dt><dd>{{ fmt.qtd_un(mov.destaque.diferenca, mov.destaque.unidade, sinal=True) }}</dd></div>
+                </dl>
+                <p class="painel-kpi-nota">Diferença entre quantidades informadas nos relatórios{% if mov.parcial %}, entre os produtos registrados{% endif %}; não é saldo de estoque físico.</p>
+                {% elif mov.legado %}
+                <div class="painel-kpi-produto">{{ mov.legado.nome }}</div>
+                <dl class="painel-kpi-dados"><div><dt>Estimativa</dt><dd>{{ fmt.qtd_sinal(mov.legado.diferenca) }}</dd></div></dl>
+                <p class="painel-kpi-nota">Estimativa gravada no processamento desta análise, sem conferência de correspondência entre os relatórios nem de unidade de medida; as quantidades por produto não estão armazenadas.</p>
+                {% elif mov.motivo == 'compras_sem_produto' %}
+                <div class="painel-kpi-produto">Não calculado</div>
+                <p class="painel-kpi-nota">O relatório de compras não traz produto e quantidade comprada.</p>
+                {% elif mov.motivo == 'compras_fora_da_cobertura' %}
+                <div class="painel-kpi-produto">Não exibido</div>
+                <p class="painel-kpi-nota">O relatório de compras desta análise abrange período fora da cobertura contratada.</p>
+                {% elif mov.disponivel %}
+                <div class="painel-kpi-produto">Nenhuma diferença positiva</div>
+                <p class="painel-kpi-nota">Entre os produtos comparáveis, nenhum teve mais unidades compradas do que vendidas.</p>
+                {% else %}
+                <div class="painel-kpi-produto">Não calculado</div>
+                <p class="painel-kpi-nota">Sem dados comparáveis de compras e vendas por produto nesta análise.</p>
                 {% endif %}
             </div>
         </div>
     </div>
-</div>
+    <div class="mt-3">{{ m.nota_pressao() }}</div>
+</section>
+
+{# ================= 2. Resumo executivo ================= #}
+<section id="resumo-executivo" class="painel-secao" aria-labelledby="titulo-resumo">
+    {{ pm.secao_head('titulo-resumo', 'bi-journal-text', 'Resumo Executivo', 'Leitura gerencial do período a partir dos dados processados') }}
+    <div class="nexo-card resumo-executivo{{ ' ia-doc' if publicada and publicada.gerado_por_ia }}">
+        <div class="nexo-card-body">
+            {% if publicada and publicada.resumo_executivo %}
+            <div class="resumo-bloco">
+                <h3 class="resumo-rotulo"><i class="bi bi-patch-check" aria-hidden="true"></i> Devolutiva publicada pela equipe NEXO</h3>
+                {% if publicada.gerado_por_ia %}
+                <p class="ia-banner"><i class="bi bi-stars" aria-hidden="true"></i> Gerado por <strong>Inteligência Artificial Nexo</strong> · síntese automática dos indicadores e da Curva ABC, revisada antes da publicação</p>
+                {% endif %}
+                <div class="rb-body">{{ publicada.resumo_executivo }}</div>
+            </div>
+            {% endif %}
+            {% if p.resumo_destaques %}
+            <div class="resumo-bloco">
+                <h3 class="resumo-rotulo"><i class="bi bi-list-check" aria-hidden="true"></i> Destaques calculados dos indicadores</h3>
+                <ul class="resumo-destaques">
+                    {% for frase in p.resumo_destaques %}<li>{{ frase }}</li>{% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+            <a href="{{ url_for('cliente.analise', id_analise=analise.id_analise) }}" class="btn-nexo mt-2"><i class="bi bi-file-earmark-text" aria-hidden="true"></i> Abrir devolutiva estratégica completa</a>
+        </div>
+    </div>
+</section>
+
+{# ================= 3. Insights e interpretações gerenciais ================= #}
+<section id="insights" class="painel-secao" aria-labelledby="titulo-insights">
+    {{ pm.secao_head('titulo-insights', 'bi-stoplights', 'Insights e interpretações gerenciais', 'Síntese executiva: o que aconteceu, por que importa, o que fazer e com qual objetivo') }}
+    {% if p.insights %}
+    <div class="insight-grid">
+        {% for card in p.insights %}{{ pm.insight_card(card) }}{% endfor %}
+    </div>
+    {% else %}
+    <div class="nexo-card"><div class="empty-state empty-state-sm"><p class="mb-0">Os indicadores desta análise não acionaram nenhuma interpretação adicional.</p></div></div>
+    {% endif %}
+</section>
+
+{# ================= 4. Curva ABC e análise dos produtos ================= #}
+{% set dist = p.distribuicao %}
+<section id="curva-abc" class="painel-secao" aria-labelledby="titulo-abc">
+    {{ pm.secao_head('titulo-abc', 'bi-bar-chart-steps', 'Curva ABC e análise dos produtos', 'Classificação pelo Princípio de Pareto sobre o faturamento de cada produto') }}
+    <div class="nexo-card mb-3">
+        <div class="nexo-card-head"><div>
+            <h3>Gráfico de Pareto</h3>
+            <p class="sub">{% if p.graficos.curva_abc %}{{ p.pareto_total }} produtos de maior faturamento{% if dist.disponivel and dist.total_produtos %} de {{ fmt.qtd(dist.total_produtos) }} com venda no período{% endif %} · barras = faturamento; % acumulado na linha (no celular, junto ao nome do produto){% else %}Sem produtos com faturamento positivo{% endif %}</p>
+        </div></div>
+        <div class="nexo-card-body">
+            {% if p.graficos.curva_abc %}
+            <div id="chartAbcCliente" class="chart-box painel-chart-pareto"></div>
+            <p class="painel-dica"><i class="bi bi-hand-index" aria-hidden="true"></i> Passe o mouse ou toque em uma barra para ver faturamento, classe e % acumulado. Os valores de todos os produtos estão na consulta abaixo.</p>
+            <div class="mt-2">{{ m.nota_abc() }}</div>
+            {% else %}
+            <p class="text-muted-2 mb-0">Curva ABC indisponível para o período.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if p.tem_produtos %}
+    <div class="nexo-card mb-3">
+        <div class="nexo-card-head"><div><h3>Distribuição do faturamento por classe</h3><p class="sub">Calculada sobre todos os produtos com venda no período</p></div></div>
+        <div class="nexo-card-body">
+            {% if dist.disponivel %}
+            <div class="painel-distribuicao">
+                <div id="chartDistribuicaoClasses" class="chart-box painel-chart-pizza"></div>
+                <dl class="painel-distribuicao-resumo">
+                    {% for c in dist.classes %}
+                    <div class="classe-{{ c.classe|lower }}">
+                        <dt><span class="classe-letra" aria-hidden="true">{{ c.classe }}</span> Classe {{ c.classe }} · {{ pm.TITULOS[c.classe] }}</dt>
+                        <dd><strong>{{ fmt.pct(c.percentual) }}</strong> do faturamento · {{ fmt.moeda(c.faturamento) }} · {{ fmt.qtd(c.produtos) }} produto(s){% if c.percentual_mix is not none %} ({{ fmt.pct(c.percentual_mix) }} do mix){% endif %}</dd>
+                    </div>
+                    {% endfor %}
+                    <div class="painel-distribuicao-total"><dt>Universo classificado</dt><dd>{{ fmt.qtd(dist.total_produtos) }} produto(s) com venda · {{ fmt.moeda(dist.faturamento_total) }}</dd></div>
+                </dl>
+            </div>
+            {% if dist.registro_limitado %}<p class="painel-dica">Percentuais exatos sobre o universo completo; a consulta por produto foi registrada até o limite operacional desta análise.</p>{% endif %}
+            {% else %}
+            <div class="empty-state empty-state-sm">
+                <div class="es-icon"><i class="bi bi-pie-chart" aria-hidden="true"></i></div>
+                {% if dist.motivo == 'ranking_parcial' %}
+                <p>Esta análise não tem o detalhamento completo da Curva ABC e armazenou só os {{ dist.armazenados_legado }} primeiros produtos do ranking. A participação de cada classe só é exibida quando calculada sobre todos os produtos; um novo processamento da análise disponibiliza a distribuição completa.</p>
+                {% else %}
+                <p>Não há produtos com faturamento positivo para distribuir entre as classes.</p>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    <div class="classe-cards mb-3">
+        {% for cartao in p.cartoes_classes %}{{ pm.classe_card(fmt, cartao) }}{% endfor %}
+    </div>
+
+    {# ---- Consulta completa do ranking (paginada no servidor) ---- #}
+    {% set consulta = p.consulta_ranking %}
+    <div class="table-wrap painel-consulta" data-consulta="ranking"
+         data-url="{{ url_for('cliente.analise_produtos', id_analise=analise.id_analise) }}">
+        <div class="nexo-card-head">
+            <div>
+                <h3 id="titulo-consulta-abc">Consulta dos produtos por classe</h3>
+                <p class="sub">{% if consulta.legado %}Ranking armazenado nesta análise ({{ consulta.registrados }} produto(s)){% elif consulta.completo %}Todos os {{ fmt.qtd(consulta.universo) }} produtos com venda, em ordem de faturamento{% else %}Os {{ fmt.qtd(consulta.registrados) }} primeiros de {{ fmt.qtd(consulta.universo) }} produtos (limite de registro desta análise){% endif %}</p>
+            </div>
+        </div>
+        <div class="painel-filtros" role="group" aria-label="Filtrar produtos por classe">
+            <button type="button" class="painel-filtro" data-classe="" aria-pressed="true">Todas</button>
+            <button type="button" class="painel-filtro" data-classe="A" aria-pressed="false">Classe A</button>
+            <button type="button" class="painel-filtro" data-classe="B" aria-pressed="false">Classe B</button>
+            <button type="button" class="painel-filtro" data-classe="C" aria-pressed="false">Classe C</button>
+            <label class="painel-busca"><span class="visually-hidden">Buscar produto pelo nome</span>
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input type="search" maxlength="80" placeholder="Buscar produto" autocomplete="off" data-busca>
+            </label>
+        </div>
+        <div class="table-responsive-x">
+            <table class="nexo-table" aria-labelledby="titulo-consulta-abc">
+                <thead><tr><th scope="col">#</th><th scope="col">Produto</th><th scope="col">Classe</th><th scope="col" class="text-end">Faturamento</th><th scope="col" class="text-end">% individual</th><th scope="col" class="text-end">% acumulado</th><th scope="col" class="text-end">Qtde vendida</th></tr></thead>
+                <tbody data-linhas>
+                    {% for item in consulta.itens %}{{ pm.linha_ranking(fmt, item) }}{% else %}<tr><td colspan="7" class="text-muted-2">Nenhum produto encontrado.</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="painel-paginacao">
+            <button type="button" class="btn-ghost btn-sm-x" data-pagina="anterior" {{ 'disabled' if consulta.pagina <= 1 }}><i class="bi bi-chevron-left" aria-hidden="true"></i> Anterior</button>
+            <span class="painel-paginacao-status" role="status" aria-live="polite" data-status>Página {{ consulta.pagina }} de {{ consulta.paginas }} · {{ fmt.qtd(consulta.total) }} produto(s)</span>
+            <button type="button" class="btn-ghost btn-sm-x" data-pagina="proxima" {{ 'disabled' if consulta.pagina >= consulta.paginas }}>Próxima <i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+        </div>
+    </div>
+    {% else %}
+    <div class="nexo-card">
+        <div class="empty-state empty-state-sm">
+            <div class="es-icon"><i class="bi bi-bar-chart-steps" aria-hidden="true"></i></div>
+            <p>Nenhum produto teve faturamento positivo neste período: não há classificação ABC, distribuição por classe nem produtos para consultar.</p>
+        </div>
+    </div>
+    {% endif %}
+</section>
+
+{# ================= 5. Movimentação dos produtos ================= #}
+<section id="movimentacao" class="painel-secao" aria-labelledby="titulo-movimentacao">
+    {{ pm.secao_head('titulo-movimentacao', 'bi-arrow-down-up', 'Movimentação dos produtos', 'Unidades compradas x vendidas no período, por produto') }}
+    {% if mov.disponivel %}
+    <div class="table-wrap painel-consulta" data-consulta="movimentacao"
+         data-url="{{ url_for('cliente.analise_produtos', id_analise=analise.id_analise) }}">
+        <div class="nexo-card-head"><div>
+            <h3 id="titulo-consulta-mov">Compras x vendas por produto</h3>
+            <p class="sub">{{ fmt.qtd(mov.total_comparaveis) }} produto(s) comparáveis{% if mov.parcial and not mov.contagem_completa %} entre os {{ fmt.qtd(mov.registrados) }} registrados{% endif %} de {{ fmt.qtd(mov.universo) }} comprados{% if mov.parcial %} · a consulta mostra os {{ fmt.qtd(mov.registrados) }} registrados{% endif %} · diferença = quantidade comprada − quantidade vendida</p>
+        </div></div>
+        {% if mov.ressalvas %}
+        <ul class="painel-ressalvas">{% for r in mov.ressalvas %}<li><i class="bi bi-info-circle" aria-hidden="true"></i> {{ r }}</li>{% endfor %}</ul>
+        {% endif %}
+        <p class="painel-dica painel-dica-consulta" id="dica-compras-acima">“Compras acima das vendas” reúne os produtos comparáveis que venderam menos de 90% do volume comprado; diferenças menores aparecem em “Todos comparáveis” como compras alinhadas às vendas.</p>
+        <div class="painel-filtros" role="group" aria-label="Filtrar a movimentação">
+            <button type="button" class="painel-filtro" data-filtro="acima" aria-pressed="true" aria-describedby="dica-compras-acima">Compras acima das vendas</button>
+            <button type="button" class="painel-filtro" data-filtro="comparaveis" aria-pressed="false">Todos comparáveis</button>
+            <button type="button" class="painel-filtro" data-filtro="sem_correspondencia" aria-pressed="false">Sem venda correspondente</button>
+            <button type="button" class="painel-filtro" data-filtro="unidades" aria-pressed="false">Unidade diferente ou ausente</button>
+            <button type="button" class="painel-filtro" data-filtro="invalidas" aria-pressed="false">Quantidade inválida</button>
+            <button type="button" class="painel-filtro" data-filtro="todas" aria-pressed="false">Todos os comprados</button>
+            <label class="painel-busca"><span class="visually-hidden">Buscar produto pelo nome</span>
+                <i class="bi bi-search" aria-hidden="true"></i>
+                <input type="search" maxlength="80" placeholder="Buscar produto" autocomplete="off" data-busca>
+            </label>
+        </div>
+        <div class="table-responsive-x">
+            <table class="nexo-table painel-tabela-mov" aria-labelledby="titulo-consulta-mov">
+                <thead><tr><th scope="col">Produto</th><th scope="col" class="text-end">Comprado</th><th scope="col" class="text-end">Vendido</th><th scope="col" class="text-end">Diferença</th><th scope="col">Interpretação</th><th scope="col">Recomendação</th></tr></thead>
+                <tbody data-linhas>
+                    {% for ln in p.consulta_movimentacao.itens %}{{ pm.linha_movimentacao(fmt, ln) }}{% else %}<tr><td colspan="6" class="text-muted-2">Nenhum produto comparável vendeu menos de 90% do volume comprado.</td></tr>{% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="painel-paginacao">
+            <button type="button" class="btn-ghost btn-sm-x" data-pagina="anterior" {{ 'disabled' if p.consulta_movimentacao.pagina <= 1 }}><i class="bi bi-chevron-left" aria-hidden="true"></i> Anterior</button>
+            <span class="painel-paginacao-status" role="status" aria-live="polite" data-status>Página {{ p.consulta_movimentacao.pagina }} de {{ p.consulta_movimentacao.paginas }} · {{ fmt.qtd(p.consulta_movimentacao.total) }} produto(s)</span>
+            <button type="button" class="btn-ghost btn-sm-x" data-pagina="proxima" {{ 'disabled' if p.consulta_movimentacao.pagina >= p.consulta_movimentacao.paginas }}>Próxima <i class="bi bi-chevron-right" aria-hidden="true"></i></button>
+        </div>
+    </div>
+    {% else %}
+    <div class="nexo-card">
+        <div class="empty-state empty-state-sm">
+            <div class="es-icon"><i class="bi bi-arrow-down-up" aria-hidden="true"></i></div>
+            {% if mov.motivo == 'compras_sem_produto' %}
+            <p>O relatório de compras desta análise está em nível de nota fiscal (fornecedor e valor) e não traz produto e quantidade comprada. Sem esses dados, o NEXO não compara compras e vendas por produto, em vez de estimar números.</p>
+            {% elif mov.motivo == 'compras_fora_da_cobertura' %}
+            <p>O relatório de compras desta análise abrange período fora da cobertura contratada; por isso as compras por produto não são exibidas. Fale com a equipe NEXO para revisar a análise ou a cobertura.</p>
+            {% else %}
+            <p>Esta análise não tem o detalhamento por produto armazenado: as quantidades compradas e vendidas de cada item não estão disponíveis.{% if mov.legado %} O processamento registrou, como estimativa, a maior diferença em “{{ mov.legado.nome }}” ({{ fmt.qtd_sinal(mov.legado.diferenca) }}), sem conferência de correspondência entre os relatórios nem de unidade de medida.{% endif %} Um novo processamento pode disponibilizar a comparação completa.</p>
+            {% endif %}
+        </div>
+    </div>
+    {% endif %}
+</section>
+
+{# ================= 6. Compras x Vendas ================= #}
+<section id="compras-vendas" class="painel-secao" aria-labelledby="titulo-cv">
+    {{ pm.secao_head('titulo-cv', 'bi-bar-chart', 'Compras x Vendas', 'Valores totais do período em reais') }}
+    <div class="row g-3">
+        <div class="col-12 col-xl-7">
+            <div class="nexo-card h-100">
+                <div class="nexo-card-head"><div><h3>Total comprado x total vendido</h3><p class="sub">{{ p.periodo_texto }}</p></div></div>
+                <div class="nexo-card-body">{% if p.graficos.comparativo %}<div id="chartCliente" class="chart-box painel-chart-cv"></div>{% else %}<p class="painel-texto painel-texto-mut">Total comprado ou total vendido não informado nesta análise: o gráfico não é desenhado com valores presumidos.</p>{% endif %}</div>
+            </div>
+        </div>
+        <div class="col-12 col-xl-5">
+            <div class="nexo-card h-100">
+                <div class="nexo-card-head"><div><h3>Interpretação</h3><p class="sub">Diferença monetária: compras − vendas</p></div></div>
+                <div class="nexo-card-body">
+                    <dl class="painel-cv-valores">
+                        <div><dt>Total comprado</dt><dd>{{ fmt.moeda(p.compras) }}</dd></div>
+                        <div><dt>Total vendido</dt><dd>{{ fmt.moeda(p.faturamento) }}</dd></div>
+                        <div><dt>Diferença</dt><dd>{{ fmt.moeda(p.diferenca, sinal=True) }}</dd></div>
+                    </dl>
+                    <p class="painel-texto">{% if p.diferenca is none %}Sem os dois totais informados, a diferença entre compras e vendas não foi calculada.{% elif dif > 0 %}No período, as compras superaram as vendas em {{ fmt.moeda(p.diferenca) }}{% if p.diferenca_percentual is not none %} ({{ fmt.pct(p.diferenca_percentual) }} do faturamento){% endif %}: parte do capital foi aplicada em mercadorias que ainda precisam ser vendidas ou que atenderão os próximos períodos.{% elif dif < 0 %}No período, as vendas superaram as compras em {{ fmt.moeda(-p.diferenca) }}: as vendas podem ter utilizado mercadorias compradas anteriormente, o que pede atenção à reposição.{% else %}Compras e vendas tiveram o mesmo valor no período.{% endif %}{% if dif != 0 and nivel == 'equilibrio' %} A diferença fica dentro da faixa de equilíbrio usada pelo NEXO (até 5% do faturamento).{% endif %}</p>
+                    <p class="painel-texto painel-texto-mut">A comparação usa o valor de compra e o valor de venda informados nos relatórios. A diferença não é lucro nem prejuízo e não mede o estoque físico.</p>
+                    {% if p.periodos_divergentes %}<p class="painel-texto painel-texto-mut"><i class="bi bi-exclamation-triangle" aria-hidden="true"></i> Os relatórios de compras e de vendas declaram períodos diferentes.</p>{% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+{# ================= 7. Evolução do faturamento ================= #}
+{% set evf = p.evolucao_faturamento %}
+<section id="evolucao-faturamento" class="painel-secao" aria-labelledby="titulo-evolucao">
+    {{ pm.secao_head('titulo-evolucao', 'bi-graph-up', 'Evolução do faturamento', 'Somente períodos publicados e comparáveis: mesmo tipo e duração típica (mensal de 28 a 31 dias, quinzenal de 13 a 16)') }}
+    <div class="nexo-card">
+        <div class="nexo-card-body">
+            {% if evf.disponivel %}
+            <div id="chartEvolucaoFaturamento" class="chart-box painel-chart-serie"></div>
+            {% set st = evf.estatisticas %}
+            <dl class="painel-estatisticas">
+                <div><dt>Maior faturamento</dt><dd>{{ fmt.moeda(st.maior.valor) }} <span>{{ st.maior.rotulo }}</span></dd></div>
+                <div><dt>Menor faturamento</dt><dd>{{ fmt.moeda(st.menor.valor) }} <span>{{ st.menor.rotulo }}</span></dd></div>
+                <div><dt>Média dos períodos</dt><dd>{{ fmt.moeda(st.media) }} <span>{{ st.quantidade }} períodos</span></dd></div>
+                <div><dt>Tendência</dt><dd>{{ {'crescente': 'Crescente', 'decrescente': 'Decrescente', 'oscilante': 'Oscilante', 'estavel': 'Estável', 'alta': 'Alta', 'queda': 'Queda'}.get(st.tendencia, '—') }}{% if st.variacao_acumulada and st.variacao_acumulada.percentual is not none %} <span>{{ fmt.pct(st.variacao_acumulada.percentual, sinal=True) }} no acumulado{% if st.por_dia %} da média diária{% endif %}</span>{% endif %}</dd></div>
+            </dl>
+            <div class="visually-hidden"><table>
+                <caption>Faturamento por período comparável</caption>
+                <thead><tr><th scope="col">Período</th><th scope="col">Datas</th><th scope="col">Faturamento</th></tr></thead>
+                <tbody>{% for ponto in p.serie.pontos %}<tr><th scope="row">{{ ponto.rotulo }}{% if ponto.atual %} (período desta análise){% endif %}</th><td>{{ fmt.data(ponto.inicio) }} a {{ fmt.data(ponto.fim) }}</td><td>{{ fmt.moeda(ponto.faturamento) }}</td></tr>{% endfor %}</tbody>
+            </table></div>
+            {% else %}
+            <div class="empty-state empty-state-sm">
+                <div class="es-icon"><i class="bi bi-graph-up" aria-hidden="true"></i></div>
+            </div>
+            {% endif %}
+            <p class="painel-texto">{{ evf.texto }}</p>
+        </div>
+    </div>
+</section>
+
+{# ================= 8. Evolução de compras e vendas ================= #}
+{% set evc = p.evolucao_compras_vendas %}
+<section id="evolucao-compras-vendas" class="painel-secao" aria-labelledby="titulo-evolucao-cv">
+    {{ pm.secao_head('titulo-evolucao-cv', 'bi-activity', 'Evolução de compras e vendas', 'Vendas (azul) e compras (âmbar) nos mesmos períodos comparáveis') }}
+    <div class="nexo-card">
+        <div class="nexo-card-body">
+            {% if evc.disponivel %}
+            <div id="chartHistoricoCliente" class="chart-box painel-chart-serie"></div>
+            <div class="visually-hidden"><table>
+                <caption>Vendas e compras por período comparável</caption>
+                <thead><tr><th scope="col">Período</th><th scope="col">Vendas</th><th scope="col">Compras</th></tr></thead>
+                <tbody>{% for ponto in p.serie.pontos %}<tr><th scope="row">{{ ponto.rotulo }}{% if ponto.atual %} (período desta análise){% endif %}</th><td>{{ fmt.moeda(ponto.faturamento) }}</td><td>{{ fmt.moeda(ponto.compras) }}</td></tr>{% endfor %}</tbody>
+            </table></div>
+            {% else %}
+            <div class="empty-state empty-state-sm">
+                <div class="es-icon"><i class="bi bi-activity" aria-hidden="true"></i></div>
+            </div>
+            {% endif %}
+            <p class="painel-texto">{{ evc.texto }}</p>
+        </div>
+    </div>
+</section>
+
+{# ================= 9. Ações recomendadas para o próximo ciclo ================= #}
+<section id="recomendacoes" class="painel-secao painel-destaque" aria-labelledby="titulo-recomendacoes">
+    {{ pm.secao_head('titulo-recomendacoes', 'bi-flag', 'Ações recomendadas para o próximo ciclo', 'Prioridades definidas a partir dos indicadores desta análise') }}
+    {% if p.recomendacoes %}
+    <div class="recomendacao-lista">
+        {% for rec in p.recomendacoes %}{{ pm.recomendacao_card(rec, loop.index) }}{% endfor %}
+    </div>
+    <p class="painel-dica">As recomendações orientam o planejamento e não garantem resultado financeiro; confirme cada ação com a realidade da sua operação.</p>
+    {% else %}
+    <div class="nexo-card"><div class="empty-state empty-state-sm"><p class="mb-0">Os dados desta análise não sustentam recomendações específicas além da devolutiva publicada.</p></div></div>
+    {% endif %}
+</section>
 {% else %}
 <div class="nexo-card mb-4">
     <div class="nexo-card-body d-flex flex-wrap align-items-center justify-content-between gap-3">
         <div>
-            <div class="fw-bold mb-1">{{ analise.relatorio.publicada.titulo if analise.relatorio else 'Análise publicada' }}</div>
+            <div class="fw-bold mb-1">{{ publicada.titulo if publicada else 'Análise publicada' }}</div>
             <p class="sub mb-0" style="color:var(--text-muted);font-size:0.9rem;">Sua devolutiva estratégica está disponível.</p>
         </div>
         <a href="{{ url_for('cliente.analise', id_analise=analise.id_analise) }}" class="btn-nexo"><i class="bi bi-file-earmark-text"></i> Abrir análise</a>
@@ -188,31 +507,50 @@
 </div>
 {% endif %}
 
-{% if analises and analises|length > 0 %}
-<div class="table-wrap">
-    <div class="nexo-card-head">
-        <div><h2>Histórico recente</h2><p class="sub">Suas análises publicadas</p></div>
-        <a href="{{ url_for('cliente.historico') }}" class="btn-ghost btn-sm-x"><i class="bi bi-clock-history"></i> Ver tudo</a>
+{# ================= 10. Histórico e devolutiva estratégica ================= #}
+<section id="historico-devolutiva" class="painel-secao" aria-labelledby="titulo-historico">
+    {{ pm.secao_head('titulo-historico', 'bi-clock-history', 'Histórico e devolutiva estratégica', 'Análises publicadas e liberadas para a sua empresa') }}
+    {% if painel %}
+    <div class="nexo-card mb-3">
+        <div class="nexo-card-head"><div><h3>Relatório estratégico</h3><p class="sub">Última devolutiva publicada</p></div></div>
+        <div class="nexo-card-body">
+            {% if publicada %}
+            {# SEC-003: somente a versão publicada chega ao cliente. #}
+            <div class="fw-bold mb-2">{{ publicada.titulo }}</div>
+            <p class="text-muted-2 painel-texto">{{ (publicada.conclusao_estrategica or '')|truncate(320) }}</p>
+            {% endif %}
+            <a href="{{ url_for('cliente.analise', id_analise=analise.id_analise) }}" class="btn-nexo mt-2"><i class="bi bi-file-earmark-text"></i> Abrir análise completa</a>
+        </div>
     </div>
-    <div class="table-responsive-x">
-        <table class="nexo-table">
-            <thead><tr><th>Período</th><th>Tipo</th><th>Status</th><th class="text-end">Ação</th></tr></thead>
-            <tbody>
-                {% for a in analises[:5] %}
-                <tr>
-                    <td class="t-mono t-mut t-periodo">{{ m.periodo(a.periodo_inicio, a.periodo_fim) }}</td>
-                    <td>{{ 'Quinzenal' if a.tipo_analise == 'QUINZENAL' else 'Mensal' }}</td>
-                    <td>{{ m.badge_analise(a.status_analise) }}</td>
-                    <td class="text-end">
-                        <a href="{{ url_for('cliente.analise', id_analise=a.id_analise) }}" class="btn-ghost btn-sm-x"><i class="bi bi-box-arrow-up-right"></i> Abrir</a>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    {% endif %}
+    {% if analises and analises|length > 0 %}
+    <div class="table-wrap">
+        <div class="nexo-card-head">
+            <div><h3>Histórico recente</h3><p class="sub">Suas análises publicadas</p></div>
+            <a href="{{ url_for('cliente.historico') }}" class="btn-ghost btn-sm-x"><i class="bi bi-clock-history"></i> Ver tudo</a>
+        </div>
+        <div class="table-responsive-x">
+            <table class="nexo-table">
+                <thead><tr><th>Período</th><th>Tipo</th><th>Status</th><th>Publicação</th><th>Análise</th><th class="text-end">Ação</th></tr></thead>
+                <tbody>
+                    {% for a in analises[:5] %}
+                    <tr>
+                        <td class="t-mono t-mut t-periodo">{{ m.periodo(a.periodo_inicio, a.periodo_fim) }}</td>
+                        <td>{{ 'Quinzenal' if a.tipo_analise == 'QUINZENAL' else 'Mensal' }}</td>
+                        <td>{{ m.badge_analise(a.status_analise) }}</td>
+                        <td class="t-mono t-mut">{{ a.relatorio.data_publicacao.strftime('%d/%m/%Y') if a.relatorio and a.relatorio.data_publicacao else '—' }}</td>
+                        <td class="t-mono t-mut">#{{ a.id_analise }}</td>
+                        <td class="text-end">
+                            <a href="{{ url_for('cliente.analise', id_analise=a.id_analise) }}" class="btn-ghost btn-sm-x"><i class="bi bi-box-arrow-up-right"></i> Abrir</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
-</div>
-{% endif %}
+    {% endif %}
+</section>
 {% endif %}
 
 {% if analises_em_andamento %}
@@ -250,162 +588,397 @@
 {% endblock %}
 
 {% block extra_js %}
-{% if analise and analise.indicador and dashboard_data %}
+{% if painel %}
 <script nonce="{{ csp_nonce }}">
-  const dashboardData = {{ dashboard_data|tojson }};
+  const dashboardData = {{ painel.graficos|tojson }};
+{% raw %}
+(function () {
+  'use strict';
+  if (typeof NEXO === 'undefined') return;
+  var dados = dashboardData || {};
+  var temPlotly = typeof Plotly !== 'undefined';
 
-  /* ---- Helpers locais de formatação BR (separador de milhar correto) ---- */
-  function nexoFmtBRL(v) {
-    return Number(v || 0).toLocaleString('pt-BR', {
-      minimumFractionDigits: 2, maximumFractionDigits: 2
-    });
-  }
-  function nexoFmtBRLshort(v) {
+  /* ---- Formatação pt-BR local (os valores já chegam arredondados do servidor) ---- */
+  function brl(v) { return NEXO.fmtBRL(v); }
+  function brlCurto(v) {
     var n = Number(v || 0);
     return Math.abs(n) >= 1000
       ? n.toLocaleString('pt-BR', { maximumFractionDigits: 0 })
       : n.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
   }
+  function pct(v, casas) {
+    return Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas }) + '%';
+  }
+  function largura(el) {
+    return (el && (el.clientWidth || (el.parentElement && el.parentElement.clientWidth))) || 600;
+  }
+  /* Rótulos de período longos ("1ª quinz. mar/2026") quebram em duas linhas. */
+  function rotuloEixo(texto) { return String(texto).replace(/^(\dª quinz\.)\s/, '$1<br>'); }
+  /* Mostra um rótulo a cada `passo` períodos para não sobrepor no celular. */
+  function marcasDoEixo(el, pontos) {
+    var util = Math.max(120, largura(el) - 90);
+    var passo = Math.max(1, Math.ceil(pontos.length / Math.max(2, Math.floor(util / 74))));
+    var vals = [], textos = [];
+    pontos.forEach(function (p, i) {
+      if ((pontos.length - 1 - i) % passo === 0) { vals.push(p.meio); textos.push(rotuloEixo(p.rotulo)); }
+    });
+    return { vals: vals, textos: textos };
+  }
+  /* Ponto nulo no meio de uma lacuna: interrompe a linha sem inventar valor. */
+  function comLacunas(pontos, campo) {
+    var x = [], y = [], extra = [];
+    pontos.forEach(function (p, i) {
+      if (i > 0 && p.lacuna_antes) {
+        var a = new Date(pontos[i - 1].fim + 'T12:00:00Z').getTime();
+        var b = new Date(p.inicio + 'T12:00:00Z').getTime();
+        x.push(new Date((a + b) / 2).toISOString().slice(0, 10)); y.push(null); extra.push(['', '']);
+      }
+      x.push(p.meio); y.push(p[campo]); extra.push([p.rotulo, p.periodo]);
+    });
+    return { x: x, y: y, extra: extra };
+  }
 
   /* ====================================================================
-     Gráfico 1 — Compras x Vendas (barras com data labels + animação)
-     - cores Hélio: âmbar (saída) / azul neon (entrada)
-     - tooltip dark com borda roxa do tema
-     - data labels em R$ no topo (sem precisar hover)
-     - animação cubic-in-out de y=0 até o valor real (~900ms)
+     Compras x Vendas (barras): âmbar = compras, azul = vendas, rótulos em R$
      ==================================================================== */
   (function () {
-    var labels = dashboardData.comparativo.labels;
-    var values = dashboardData.comparativo.values;
-    var cores  = [NEXO.colors.amber, NEXO.colors.info];  /* compras = âmbar, vendas = azul neon */
-    /* Faixa do eixo fixada pelo maior valor: o gráfico nasce em zero e anima
-       (redraw: false não recalcula o eixo), então sem isso as barras estourariam
-       a faixa [0, 1] e os rótulos do eixo ficariam sem sentido. */
+    var cv = dados.comparativo;
+    if (!cv || !document.getElementById('chartCliente')) return;
+    var values = cv.values;
     var topo = Math.max.apply(null, values.map(function (v) { return Number(v) || 0; }).concat([0]));
-    var faixa = [0, topo > 0 ? topo * 1.2 : 1];
-
     NEXO.plot('chartCliente', [{
-      type: 'bar',
-      x: labels,
-      y: labels.map(function () { return 0; }),   /* start at 0 para animar */
-      marker: {
-        color: cores,
-        line: { color: NEXO.colors.barEdge, width: 1 }
-      },
+      type: 'bar', x: cv.labels, y: values.map(function () { return 0; }),
+      marker: { color: [NEXO.colors.amber, NEXO.colors.info], line: { color: NEXO.colors.barEdge, width: 1 } },
       width: 0.5,
-      /* customdata leva o valor já formatado em pt-BR para a tooltip */
-      customdata: values.map(nexoFmtBRL),
+      customdata: values.map(brl),
       hovertemplate: '<b>%{x}</b><br>R$ %{customdata}<extra></extra>',
-      text: values.map(function (v) { return 'R$ ' + nexoFmtBRLshort(v); }),
+      text: values.map(function (v) { return 'R$ ' + brlCurto(v); }),
       textposition: 'outside',
       textfont: { color: NEXO.colors.textStrong, size: 12.5, family: 'JetBrains Mono, monospace' },
       cliponaxis: false
     }], {
-      yaxis: {
-        tickprefix: 'R$ ', tickformat: ',.0f',
-        range: faixa, fixedrange: true, automargin: true
-      },
+      yaxis: { tickprefix: 'R$ ', tickformat: ',.0f', range: [0, topo > 0 ? topo * 1.2 : 1], fixedrange: true, automargin: true },
       xaxis: { fixedrange: true, tickfont: { size: 13, color: NEXO.colors.textStrong } },
-      height: 260,
-      margin: { l: 64, r: 18, t: 32, b: 42 },
-      bargap: 0.45
+      height: 320, margin: { l: 64, r: 18, t: 32, b: 42 }, bargap: 0.45
     });
-    NEXO.descrever('chartCliente', 'Compras x Vendas do período: ' + labels.map(function (l, i) {
-      return l + ' R$ ' + nexoFmtBRL(values[i]);
-    }).join(', ') + '.');
-
-    if (typeof Plotly !== 'undefined') {
+    NEXO.descrever('chartCliente', 'Compras x Vendas do período: ' + cv.labels.map(function (l, i) {
+      return l + ' R$ ' + brl(values[i]);
+    }).join(', ') + '. Diferença (compras menos vendas): R$ ' + brl(dados.pressao_estoque) + '.');
+    if (temPlotly) {
       window.setTimeout(function () {
         var ms = NEXO.reduzMovimento ? 0 : 900;
-        Plotly.animate('chartCliente', {
-          data: [{ y: values }], traces: [0]
-        }, {
-          transition: { duration: ms, easing: 'cubic-in-out' },
-          frame: { duration: ms, redraw: false }
-        });
+        Plotly.animate('chartCliente', { data: [{ y: values }], traces: [0] },
+                       { transition: { duration: ms, easing: 'cubic-in-out' }, frame: { duration: ms, redraw: false } });
       }, 80);
     }
   })();
 
+  /* ---- Pareto da Curva ABC: barras horizontais + linha do % acumulado ---- */
+  if (dados.curva_abc) { NEXO.plotParetoAbc('chartAbcCliente', dados.curva_abc); }
+
   /* ====================================================================
-     Gráfico 2 — Indicador de Pressão de Estoque
-     - cor reativa ao SINAL do indicador:
-        +  comprou mais que vendeu  -> pressão real (âmbar)
-        −  vendeu mais que comprou  -> giro saudável (verde)
-        0  equilíbrio                -> cinza neutro
-     - subtítulo qualitativo abaixo do valor
-     - JetBrains Mono nos dígitos, animação ~1100ms
+     Distribuição do faturamento por classe (rosca) — universo completo
      ==================================================================== */
   (function () {
-    var v = Number(dashboardData.pressao_estoque || 0);
-    var cor, legenda;
-    var caixa = document.getElementById('chartPressaoCliente');
-    var digitos = ('R$ ' + Math.abs(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }) + (v < 0 ? '-' : '')).length;
-    function tamanhoNumero() {
-      var largura = caixa ? caixa.clientWidth : 240;
-      return Math.max(16, Math.min(32, Math.floor(largura / (digitos * 0.64))));
-    }
-    var tamanho = tamanhoNumero();
-    if (v > 0)      { cor = NEXO.colors.amberSoft; legenda = 'Pressão de estoque'; }
-    else if (v < 0) { cor = NEXO.colors.greenText; legenda = 'Giro saudável';      }
-    else            { cor = NEXO.colors.neutral;   legenda = 'Equilíbrio';          }
-
-    NEXO.plot('chartPressaoCliente', [{
-      type: 'indicator',
-      mode: 'number',
-      value: 0,   /* start at 0 para animar */
-      number: {
-        prefix: 'R$ ',
-        valueformat: ',.2f',
-        /* Tamanho proporcional à caixa: o valor nunca estoura o cartão estreito. */
-        font: { color: cor, size: tamanho, family: 'JetBrains Mono, monospace' }
-      },
-      title: {
-        text: '<span style="font-size:0.78rem;letter-spacing:0.04em;text-transform:uppercase;">'
-              + legenda + '</span>',
-        font: { color: NEXO.colors.text }
-      },
-      domain: { x: [0, 1], y: [0, 1] }
+    var d = dados.distribuicao;
+    var el = document.getElementById('chartDistribuicaoClasses');
+    if (!d || !el) return;
+    var tons = { A: NEXO.colors.abcA, B: NEXO.colors.abcB, C: NEXO.colors.abcC };
+    var nomes = { A: 'Classe A · estratégicos', B: 'Classe B · intermediários', C: 'Classe C · complementares' };
+    var indices = d.classes.map(function (_, i) { return i; }).filter(function (i) { return d.valores[i] > 0; });
+    var estreito = largura(el) < 420;
+    NEXO.plot('chartDistribuicaoClasses', [{
+      type: 'pie', hole: 0.56, sort: false, direction: 'clockwise', rotation: 90, automargin: true,
+      labels: indices.map(function (i) { return nomes[d.classes[i]]; }),
+      values: indices.map(function (i) { return d.valores[i]; }),
+      text: indices.map(function (i) { return d.classes[i] + ' · ' + pct(d.percentuais[i], 1); }),
+      textinfo: 'text', textposition: 'outside',
+      textfont: { color: NEXO.colors.textStrong, size: estreito ? 11.5 : 12.5 },
+      marker: { colors: indices.map(function (i) { return tons[d.classes[i]]; }), line: { color: NEXO.colors.sliceLine, width: 2 } },
+      customdata: indices.map(function (i) { return [d.produtos[i], brl(d.valores[i]), pct(d.percentuais[i], 1)]; }),
+      hovertemplate: '<b>%{label}</b><br>%{customdata[2]} do faturamento<br>R$ %{customdata[1]}<br>%{customdata[0]} produto(s)<extra></extra>'
     }], {
-      margin: { l: 10, r: 10, t: 18, b: 16 },
-      height: 240
-    }, { displayModeBar: false });  /* um número só: zoom e pan não fazem sentido */
-    NEXO.descrever('chartPressaoCliente', 'Indicador de Pressão de Estoque: R$ ' + nexoFmtBRL(v) + ' (' + legenda + ').');
-
-    if (typeof Plotly !== 'undefined') {
-      window.setTimeout(function () {
-        var ms = NEXO.reduzMovimento ? 0 : 1100;
-        Plotly.animate('chartPressaoCliente', {
-          data: [{ value: v }], traces: [0]
-        }, {
-          transition: { duration: ms, easing: 'cubic-in-out' },
-          frame: { duration: ms, redraw: false }
-        });
-      }, 150);
-      /* A grade muda de coluna ao redimensionar: o valor acompanha a nova largura. */
-      var esperaPressao;
-      window.addEventListener('resize', function () {
-        window.clearTimeout(esperaPressao);
-        esperaPressao = window.setTimeout(function () {
-          var novo = tamanhoNumero();
-          if (novo !== tamanho && caixa && caixa.data) {
-            tamanho = novo;
-            Plotly.restyle(caixa, { 'number.font.size': novo });
-          }
-        }, 150);
-      });
-    }
+      height: estreito ? 300 : 320,
+      margin: { l: 16, r: 16, t: 24, b: 16 },
+      /* A legenda textual é o resumo ao lado (classe, %, valor e produtos). */
+      showlegend: false,
+      annotations: [{
+        text: '<b>' + Number(d.total_produtos || 0).toLocaleString('pt-BR') + '</b><br>produtos', showarrow: false,
+        x: 0.5, y: 0.5, xref: 'paper', yref: 'paper', font: { color: NEXO.colors.textStrong, size: 13 }
+      }]
+    }, { displayModeBar: false });
+    NEXO.descrever('chartDistribuicaoClasses', 'Distribuição do faturamento por classe, sobre ' + d.total_produtos +
+      ' produtos: ' + d.classes.map(function (c, i) {
+        return 'classe ' + c + ' ' + pct(d.percentuais[i], 1) + ' (' + d.produtos[i] + ' produtos, R$ ' + brl(d.valores[i]) + ')';
+      }).join('; ') + '.');
   })();
 
-  /* ---- Gráfico 3 — Pareto da Curva ABC (barras + linha de % acumulado) ---- */
-  if (dashboardData.curva_abc) {
-    NEXO.plotParetoAbc('chartAbcCliente', dashboardData.curva_abc);
-  }
+  /* ====================================================================
+     Evolução do faturamento (barras por período comparável + média)
+     ==================================================================== */
+  (function () {
+    var h = dados.historico;
+    var el = document.getElementById('chartEvolucaoFaturamento');
+    if (!h || !el || !h.pontos || h.pontos.length < 2) return;
+    var pts = h.pontos;
+    var marcas = marcasDoEixo(el, pts);
+    var shapes = [], anotacoes = [];
+    if (h.media !== null && h.media !== undefined) {
+      shapes.push({ type: 'line', xref: 'paper', x0: 0, x1: 1, y0: h.media, y1: h.media,
+                    line: { color: NEXO.colors.lilac, width: 1.5, dash: 'dash' } });
+      anotacoes.push({ xref: 'paper', x: 1, xanchor: 'right', y: h.media, yanchor: 'bottom', showarrow: false,
+                       text: 'Média R$ ' + brlCurto(h.media), font: { color: NEXO.colors.textStrong, size: 11 } });
+    }
+    /* Cada barra ocupa 80% da duração do próprio período: um período sem análise
+       publicada aparece como espaço vazio, sem barra alargada para cobri-lo. */
+    var DIA_MS = 86400000;
+    var larguras = pts.map(function (p) { return (Date.parse(p.fim) - Date.parse(p.inicio) + DIA_MS) * 0.8; });
+    pts.forEach(function (p) {
+      if (p.atual) {
+        anotacoes.push({ x: p.meio, y: p.faturamento, yanchor: 'bottom', showarrow: false, text: '<b>Atual</b>',
+                         font: { color: NEXO.colors.textStrong, size: 11 } });
+      }
+    });
+    NEXO.plot('chartEvolucaoFaturamento', [{
+      type: 'bar', name: 'Faturamento', x: pts.map(function (p) { return p.meio; }),
+      y: pts.map(function (p) { return p.faturamento; }), width: larguras,
+      marker: { color: pts.map(function (p) { return p.atual ? NEXO.colors.barPurple : NEXO.colors.barInfo; }),
+                line: { color: NEXO.colors.barEdge, width: 1 } },
+      customdata: pts.map(function (p) { return [p.rotulo, p.periodo, p.atual ? ' · período desta análise' : '']; }),
+      hovertemplate: '<b>%{customdata[0]}</b>%{customdata[2]}<br>%{customdata[1]}<br>Faturamento: R$ %{y:,.2f}<extra></extra>'
+    }], {
+      height: 340, bargap: 0.35, hovermode: 'closest',
+      margin: { l: 64, r: 18, t: 24, b: 54 },
+      shapes: shapes, annotations: anotacoes,
+      xaxis: { type: 'date', tickmode: 'array', tickvals: marcas.vals, ticktext: marcas.textos, fixedrange: true,
+               tickfont: { size: 11.5, color: NEXO.colors.text }, automargin: true },
+      yaxis: { tickprefix: 'R$ ', tickformat: ',.0f', rangemode: 'tozero', fixedrange: true, automargin: true }
+    });
+    NEXO.descrever('chartEvolucaoFaturamento', 'Evolução do faturamento em ' + pts.length + ' períodos comparáveis: ' +
+      pts.map(function (p) {
+        return p.rotulo + (p.atual ? ' (período desta análise)' : '') + ' R$ ' + brl(p.faturamento);
+      }).join('; ') + '.');
+  })();
 
-  /* ---- Gráfico 4 — Histórico comparativo Vendas x Compras (linha) ---- */
-  if (dashboardData.historico) {
-    NEXO.plotLinhaTemporal('chartHistoricoCliente', dashboardData.historico);
+  /* ====================================================================
+     Evolução de compras e vendas (linhas; lacunas sem análise interrompem)
+     ==================================================================== */
+  (function () {
+    var h = dados.historico;
+    var el = document.getElementById('chartHistoricoCliente');
+    if (!h || !el || !h.pontos || h.pontos.length < 2) return;
+    var pts = h.pontos;
+    var vendas = comLacunas(pts, 'faturamento');
+    var compras = comLacunas(pts, 'compras');
+    var marcas = marcasDoEixo(el, pts);
+    NEXO.plot('chartHistoricoCliente', [
+      {
+        type: 'scatter', mode: 'lines+markers', name: 'Vendas', x: vendas.x, y: vendas.y, customdata: vendas.extra,
+        connectgaps: false,
+        line: { color: NEXO.colors.info, width: 2.5 },
+        marker: { size: 8, color: NEXO.colors.info, line: { color: NEXO.colors.markerLine, width: 2 } },
+        hovertemplate: '<b>Vendas</b> · %{customdata[0]}: R$ %{y:,.2f}<extra></extra>'
+      },
+      {
+        type: 'scatter', mode: 'lines+markers', name: 'Compras', x: compras.x, y: compras.y, customdata: compras.extra,
+        connectgaps: false,
+        line: { color: NEXO.colors.amber, width: 2.5, dash: 'dot' },
+        marker: { size: 9, symbol: 'diamond', color: NEXO.colors.amber, line: { color: NEXO.colors.markerLine, width: 2 } },
+        hovertemplate: '<b>Compras</b> · %{customdata[0]}: R$ %{y:,.2f}<extra></extra>'
+      }
+    ], {
+      height: 340, hovermode: 'closest', showlegend: true,
+      legend: { orientation: 'h', x: 0, y: 1.02, yanchor: 'bottom', font: { size: 12 } },
+      margin: { l: 64, r: 18, t: 40, b: 54 },
+      xaxis: Object.assign({ type: 'date', tickmode: 'array', tickvals: marcas.vals, ticktext: marcas.textos,
+                             fixedrange: true, tickfont: { size: 11.5, color: NEXO.colors.text }, automargin: true }, NEXO.spike),
+      yaxis: { tickprefix: 'R$ ', tickformat: ',.0f', rangemode: 'tozero', fixedrange: true, automargin: true }
+    });
+    NEXO.descrever('chartHistoricoCliente', 'Vendas e compras por período comparável: ' + pts.map(function (p) {
+      return p.rotulo + (p.atual ? ' (período desta análise)' : '') + ': vendas R$ ' + brl(p.faturamento)
+        + (p.compras === null ? '' : ', compras R$ ' + brl(p.compras));
+    }).join('; ') + '.');
+  })();
+
+  /* ====================================================================
+     Consultas paginadas (ranking completo e movimentação): JSON do próprio
+     portal, linhas montadas com textContent (nenhum HTML vindo dos dados).
+     ==================================================================== */
+  var TITULO_CLASSE = { A: 'Estratégico — núcleo do faturamento', B: 'Tático — faturamento intermediário', C: 'Operacional — cauda longa' };
+  var MENSAGENS_ERRO = {
+    sessao: 'Sua sessão precisa ser renovada: recarregue a página para continuar a consulta.',
+    limite: 'Muitas consultas em sequência: aguarde alguns instantes e tente novamente.',
+    indisponivel: 'Esta análise não está mais disponível para consulta. Recarregue a página.',
+    consulta: 'Não foi possível carregar a consulta agora. Tente novamente.'
+  };
+  function celula(texto, classe) {
+    var td = document.createElement('td');
+    if (classe) td.className = classe;
+    td.textContent = (texto === null || texto === undefined) ? '—' : String(texto);
+    return td;
   }
+  function selo(classe) {
+    var span = document.createElement('span');
+    span.className = 'abc-badge abc-' + String(classe || '').toLowerCase();
+    if (TITULO_CLASSE[classe]) span.title = TITULO_CLASSE[classe];
+    span.textContent = classe || '—';
+    return span;
+  }
+  function linhaRanking(item) {
+    var tr = document.createElement('tr');
+    tr.appendChild(celula(item.posicao + 'º', 't-mono t-mut'));
+    tr.appendChild(celula(item.nome, 'painel-produto'));
+    var td = document.createElement('td'); td.appendChild(selo(item.classe)); tr.appendChild(td);
+    tr.appendChild(celula(item.faturamento, 'text-end t-mono'));
+    tr.appendChild(celula(item.percentual_individual, 'text-end t-mono'));
+    tr.appendChild(celula(item.percentual_acumulado, 'text-end t-mono'));
+    tr.appendChild(celula(item.quantidade_vendida, 'text-end t-mono'));
+    return tr;
+  }
+  function linhaMovimentacao(item) {
+    var tr = document.createElement('tr');
+    var nome = celula(item.nome, 'painel-produto');
+    if (item.classe) { nome.appendChild(document.createTextNode(' ')); nome.appendChild(selo(item.classe)); }
+    tr.appendChild(nome);
+    /* Cada quantidade com a unidade do seu relatório; sem unidade, só o número. */
+    function comUnidade(td, unidade) {
+      if (unidade) {
+        var un = document.createElement('span'); un.className = 'painel-unidade'; un.textContent = unidade;
+        td.appendChild(document.createTextNode(' ')); td.appendChild(un);
+      }
+      return td;
+    }
+    tr.appendChild(comUnidade(celula(item.comprado, 'text-end t-mono'), item.unidade_compra));
+    tr.appendChild(comUnidade(celula(item.vendido, 'text-end t-mono'), item.unidade_venda));
+    var dif = celula(item.diferenca === null ? 'não calculada' : item.diferenca, 'text-end t-mono');
+    if (item.diferenca === null) dif.classList.add('t-mut');
+    tr.appendChild(dif);
+    var interp = document.createElement('td');
+    var span = document.createElement('span');
+    span.className = 'painel-nivel-texto is-' + item.nivel; span.textContent = item.interpretacao;
+    interp.appendChild(span); tr.appendChild(interp);
+    tr.appendChild(celula(item.recomendacao));
+    return tr;
+  }
+  /* Linhas novas recebem o rótulo da coluna (data-label) e os papéis de tabela que
+     o base.html aplica só às linhas da primeira renderização: no celular (cartões)
+     cada valor continua com o nome da coluna, e o leitor de tela, com o cabeçalho. */
+  function rotularLinhas(caixa) {
+    var tabela = caixa.querySelector('table');
+    if (!tabela) return;
+    var rotulos = Array.prototype.map.call(tabela.querySelectorAll('thead th'), function (th) {
+      return th.textContent.replace(/\s+/g, ' ').trim();
+    });
+    tabela.querySelectorAll('tbody tr').forEach(function (linha) {
+      linha.setAttribute('role', 'row');
+      Array.prototype.forEach.call(linha.cells, function (td, i) {
+        td.setAttribute('role', 'cell');
+        if (td.hasAttribute('colspan')) return;
+        if (!td.hasAttribute('data-label') && rotulos[i]) td.setAttribute('data-label', rotulos[i]);
+      });
+    });
+  }
+  function iniciarConsulta(caixa) {
+    var url = caixa.getAttribute('data-url');
+    var visao = caixa.getAttribute('data-consulta');
+    var corpo = caixa.querySelector('[data-linhas]');
+    var status = caixa.querySelector('[data-status]');
+    var anterior = caixa.querySelector('[data-pagina="anterior"]');
+    var proxima = caixa.querySelector('[data-pagina="proxima"]');
+    var busca = caixa.querySelector('[data-busca]');
+    var colunas = caixa.querySelectorAll('thead th').length || 1;
+    var estado = { pagina: 1, classe: '', filtro: visao === 'movimentacao' ? 'acima' : '', busca: '' };
+    /* `pendente` é o último pedido ainda sem resposta: uma nova ação parte dele (e
+       não do estado exibido), para duas ações seguidas não se anularem. */
+    var pendente = null;
+    var pedido = 0, espera = null;
+    function atual() { return pendente || estado; }
+    function vazio(texto) {
+      var tr = document.createElement('tr');
+      var td = celula(texto, 'text-muted-2'); td.colSpan = colunas; tr.appendChild(td);
+      return tr;
+    }
+    /* O estado (página, classe, filtro, busca) e o botão marcado só mudam quando a
+       resposta chega: uma falha mantém a tabela, o estado e a seleção coerentes. */
+    function aplicar(d, pedidoAplicado) {
+      estado.classe = pedidoAplicado.classe;
+      estado.filtro = pedidoAplicado.filtro;
+      estado.busca = pedidoAplicado.busca;
+      estado.pagina = d.pagina;
+      caixa.querySelectorAll('.painel-filtro').forEach(function (b) {
+        var valor = visao === 'ranking' ? (b.getAttribute('data-classe') || '') : (b.getAttribute('data-filtro') || 'acima');
+        b.setAttribute('aria-pressed', valor === (visao === 'ranking' ? estado.classe : estado.filtro) ? 'true' : 'false');
+      });
+      corpo.textContent = '';
+      if (d.indisponivel) { corpo.appendChild(vazio('Consulta indisponível para esta análise.')); }
+      else if (!d.itens.length) {
+        corpo.appendChild(vazio(d.completo === false && d.universo
+          ? 'Nenhum produto encontrado com esses filtros entre os ' + Number(d.registrados).toLocaleString('pt-BR')
+            + ' registrados de ' + Number(d.universo).toLocaleString('pt-BR') + '.'
+          : 'Nenhum produto encontrado com esses filtros.'));
+      }
+      d.itens.forEach(function (item) { corpo.appendChild(visao === 'ranking' ? linhaRanking(item) : linhaMovimentacao(item)); });
+      rotularLinhas(caixa);
+      status.textContent = 'Página ' + d.pagina + ' de ' + d.paginas + ' · ' + Number(d.total).toLocaleString('pt-BR') + ' produto(s)';
+      anterior.disabled = d.pagina <= 1;
+      proxima.disabled = d.pagina >= d.paginas;
+      if (typeof NEXO.ajustarLayout === 'function') NEXO.ajustarLayout();
+    }
+    function carregar(mudancas) {
+      var seq = ++pedido;
+      var alvo = Object.assign({}, atual(), mudancas || {});
+      pendente = alvo;
+      var params = new URLSearchParams({ visao: visao, pagina: String(alvo.pagina) });
+      if (alvo.classe) params.set('classe', alvo.classe);
+      if (alvo.filtro) params.set('filtro', alvo.filtro);
+      if (alvo.busca) params.set('busca', alvo.busca);
+      caixa.setAttribute('aria-busy', 'true');
+      fetch(url + '?' + params.toString(), { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+        .then(function (r) {
+          /* Fora de /api/, as respostas de erro vêm em HTML. 429: limite de consultas;
+             403/404: análise despublicada ou fora da cobertura. Sessão expirada ou aceite
+             de termos pendente chegam como página (redirecionamento ou modal): aviso
+             para recarregar. */
+          var tipo = r.headers.get('Content-Type') || '';
+          if (r.status === 429) throw new Error('limite');
+          if (r.status === 403 || r.status === 404) throw new Error('indisponivel');
+          if (r.redirected || tipo.indexOf('application/json') === -1) throw new Error(r.ok ? 'sessao' : 'consulta');
+          if (!r.ok) throw new Error('consulta');
+          return r.json();
+        })
+        .then(function (d) { if (seq === pedido) { pendente = null; aplicar(d, alvo); } })
+        .catch(function (erro) {
+          if (seq !== pedido) return;
+          /* Falha: volta ao estado exibido. O texto da busca só é restaurado se o campo
+             ainda mostra o termo que falhou (nada digitado depois é apagado). */
+          pendente = null;
+          if (busca && alvo.busca !== estado.busca && busca.value.trim().slice(0, 80) === alvo.busca) {
+            busca.value = estado.busca;
+          }
+          status.textContent = MENSAGENS_ERRO[erro && erro.message] || MENSAGENS_ERRO.consulta;
+        })
+        .then(function () { if (seq === pedido) caixa.removeAttribute('aria-busy'); });
+    }
+    caixa.querySelectorAll('.painel-filtro').forEach(function (botao) {
+      botao.addEventListener('click', function () {
+        if (visao === 'ranking') carregar({ pagina: 1, classe: botao.getAttribute('data-classe') || '' });
+        else carregar({ pagina: 1, filtro: botao.getAttribute('data-filtro') || 'acima' });
+      });
+    });
+    anterior.addEventListener('click', function () { if (atual().pagina > 1) carregar({ pagina: atual().pagina - 1 }); });
+    proxima.addEventListener('click', function () { carregar({ pagina: atual().pagina + 1 }); });
+    if (busca) {
+      busca.addEventListener('input', function () {
+        window.clearTimeout(espera);
+        espera = window.setTimeout(function () {
+          carregar({ pagina: 1, busca: busca.value.trim().slice(0, 80) });
+        }, 350);
+      });
+    }
+  }
+  document.querySelectorAll('.painel-consulta[data-consulta]').forEach(iniciarConsulta);
+})();
+{% endraw %}
 </script>
 {% endif %}
 {% endblock %}

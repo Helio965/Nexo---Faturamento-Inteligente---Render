@@ -1,0 +1,308 @@
+/* =====================================================================
+   NEXO — Visão Geral do cliente (inteligência comercial)
+   Complementa nexo.css/nexo-tema-claro.css sem redefinir componentes
+   globais: só classes novas do painel (prefixos painel-, insight-,
+   classe-, resumo-, recomendacao-). Cores vêm dos tokens do tema; as
+   poucas regras exclusivas do tema claro ficam no fim do arquivo.
+   ===================================================================== */
+
+/* ---- Navegação interna por âncoras (rolagem vertical preservada) ---- */
+.painel-indice {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 22px;
+}
+.painel-indice a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 6px 13px;
+    border-radius: 999px;
+    border: 1px solid var(--glass-border);
+    background: var(--glass);
+    color: var(--text-muted);
+    font-size: 0.84rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+}
+.painel-indice a:hover { color: var(--text); border-color: var(--glass-border-2); background: var(--primary-soft); }
+.painel-indice a:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+@media (max-width: 575.98px) {
+    .painel-indice { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 6px; scrollbar-width: thin; }
+    .painel-indice a { flex: 0 0 auto; }
+}
+
+/* ---- Seções verticais ---- */
+.painel-secao {
+    margin: 0 0 40px;
+    scroll-margin-top: calc(var(--topbar-h, 68px) + 28px);
+}
+.painel-secao-head { border: none; padding-top: 0; }
+.painel-secao-head h2 { margin: 0; }
+.painel-secao h3 { font-size: 1.01rem; font-weight: 700; margin: 0; }
+.painel-texto { font-size: 0.95rem; line-height: 1.6; color: var(--text); margin: 12px 0 0; max-width: 78ch; }
+.painel-texto-mut { color: var(--text-muted); font-size: 0.88rem; }
+.painel-dica { font-size: 0.84rem; color: var(--text-muted); margin: 10px 0 0; }
+.painel-dica-consulta { padding: 0 22px; }
+
+/* ---- Indicadores principais ---- */
+.painel-kpi { display: flex; flex-direction: column; gap: 6px; }
+.painel-kpi .kpi-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 2px; }
+.painel-kpi-nota { font-size: 0.8rem; line-height: 1.45; color: var(--text-muted); margin: 6px 0 0; }
+.painel-kpi-produto {
+    font-weight: 700;
+    font-size: 1.05rem;
+    line-height: 1.35;
+    color: var(--text);
+    overflow-wrap: anywhere;
+    margin-top: 4px;
+}
+.painel-kpi-dados { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 4px 0 0; }
+.painel-kpi-dados div { min-width: 0; }
+.painel-kpi-dados dt { font-size: 0.7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-muted); font-weight: 600; }
+.painel-kpi-dados dd { margin: 0; font-family: var(--font-mono); font-weight: 700; font-size: 0.95rem; color: var(--text); }
+.painel-kpi-detalhe { font-size: 0.8rem; color: var(--text-muted); }
+
+.painel-variacao {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    line-height: 1.3;
+    background: var(--primary-soft);
+    color: var(--text);
+}
+.painel-variacao-ref { font-weight: 500; color: var(--text-muted); }
+.painel-variacao.is-boa { background: var(--success-bg); color: var(--verde-texto, var(--success)); }
+.painel-variacao.is-ruim { background: var(--danger-bg); color: var(--vermelho-texto, var(--danger)); }
+.painel-variacao.is-estavel, .painel-variacao.is-neutra { background: var(--surface-3); color: var(--text-muted); font-weight: 600; }
+
+.painel-sinal { display: inline-flex; padding: 3px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; }
+.painel-sinal.is-pressao { background: var(--warning-bg); color: var(--ambar-texto, var(--warning)); }
+.painel-sinal.is-giro { background: var(--success-bg); color: var(--verde-texto, var(--success)); }
+.painel-sinal.is-equilibrio { background: var(--surface-3); color: var(--text-muted); }
+
+/* ---- Resumo executivo (destaque) ---- */
+.resumo-executivo { border: 1px solid var(--glass-border-2); box-shadow: var(--shadow-glass, var(--shadow)); }
+.resumo-bloco + .resumo-bloco { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--divisoria, var(--glass-border)); }
+.resumo-rotulo { display: flex; align-items: center; gap: 8px; font-size: 0.8rem !important; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); margin-bottom: 10px !important; }
+.resumo-executivo .rb-body { white-space: pre-line; font-size: 0.97rem; line-height: 1.65; color: var(--text); max-width: 85ch; }
+.resumo-destaques { margin: 0; padding-left: 1.15rem; display: grid; gap: 8px; max-width: 90ch; }
+.resumo-destaques li { font-size: 0.95rem; line-height: 1.55; color: var(--text); }
+.resumo-destaques li::marker { color: var(--primary); }
+.resumo-executivo .ia-banner { font-size: 0.82rem; color: var(--text-muted); margin: 0 0 10px; }
+
+/* ---- Insights (reaproveitam o semaforo-card) ---- */
+.insight-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+    gap: 16px;
+}
+.insight-card { height: 100%; }
+.insight-card .sc-head { align-items: flex-start; }
+.insight-titulo { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.insight-titulo .sc-title { font-size: 1rem; margin: 0; overflow-wrap: anywhere; }
+.insight-nivel { font-size: 0.68rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--text-muted); }
+.insight-card .sc-row { gap: 4px; }
+.insight-card .sc-val { overflow-wrap: anywhere; line-height: 1.5; }
+.semaforo-card.s-informativo { border-left-color: var(--info); }
+.semaforo-card.s-informativo .sc-dot { background: var(--info-bg); color: var(--info); }
+
+/* ---- Curva ABC ---- */
+.painel-chart-pareto { min-height: 360px; }
+.painel-chart-pizza { min-height: 320px; }
+.painel-chart-cv { min-height: 300px; }
+.painel-chart-serie { min-height: 320px; }
+
+/* Rosca + resumo das classes lado a lado; empilham abaixo de 992 px. */
+.painel-distribuicao { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: center; }
+@media (min-width: 992px) {
+    .painel-distribuicao { grid-template-columns: minmax(300px, 420px) minmax(0, 1fr); gap: 28px; }
+}
+.painel-distribuicao-resumo { display: grid; gap: 10px; margin: 0; }
+.painel-distribuicao-resumo > div {
+    padding: 12px 14px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    border-left: 4px solid var(--primary);
+    min-width: 0;
+}
+.painel-distribuicao-resumo > div.classe-b { border-left-color: color-mix(in srgb, var(--primary) 62%, transparent); }
+.painel-distribuicao-resumo > div.classe-c { border-left-color: color-mix(in srgb, var(--primary) 36%, transparent); }
+.painel-distribuicao-resumo dt { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--text); }
+.painel-distribuicao-resumo dt .classe-letra { width: 28px; height: 28px; border-radius: 9px; font-size: 0.9rem; }
+.painel-distribuicao-resumo dd { margin: 6px 0 0; font-size: 0.9rem; color: var(--text-muted); overflow-wrap: anywhere; }
+.painel-distribuicao-resumo dd strong { color: var(--text); font-family: var(--font-mono); }
+.painel-distribuicao-resumo > div.painel-distribuicao-total { border-left-color: var(--glass-border-2); background: transparent; border: 1px dashed var(--glass-border); }
+
+.classe-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr));
+    gap: 14px;
+}
+.classe-card {
+    border: 1px solid var(--glass-border);
+    border-left: 4px solid var(--primary);
+    border-radius: var(--radius);
+    background: var(--glass);
+    padding: 16px 18px;
+    min-width: 0;
+}
+.classe-card.classe-b { border-left-color: color-mix(in srgb, var(--primary) 62%, transparent); }
+.classe-card.classe-c { border-left-color: color-mix(in srgb, var(--primary) 36%, transparent); }
+.classe-card-head { display: flex; gap: 12px; align-items: flex-start; }
+.classe-letra {
+    flex: 0 0 auto;
+    width: 38px; height: 38px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 12px;
+    background: var(--primary-soft);
+    color: var(--text);
+    font-weight: 800;
+    font-size: 1.05rem;
+}
+.classe-card h3 { font-size: 0.98rem; }
+.classe-numeros { margin: 2px 0 0; font-size: 0.86rem; color: var(--text-muted); }
+.classe-numeros strong { color: var(--text); font-family: var(--font-mono); }
+.classe-leitura { margin: 10px 0 0; font-size: 0.9rem; line-height: 1.5; color: var(--text); }
+.classe-destaques { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 6px; }
+.classe-destaques li {
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 12px;
+    font-size: 0.86rem; padding: 6px 10px; border-radius: var(--radius-xs); background: var(--surface-2);
+}
+.classe-destaque-nome { font-weight: 600; color: var(--text); overflow-wrap: anywhere; min-width: 0; }
+.classe-destaque-valor { font-family: var(--font-mono); color: var(--text-muted); white-space: nowrap; }
+.classe-recomendacao { margin: 10px 0 0; font-size: 0.86rem; line-height: 1.5; color: var(--text-muted); }
+.classe-recomendacao .bi { color: var(--primary); }
+
+/* ---- Consultas (ranking e movimentação) ---- */
+.painel-consulta { margin-top: 4px; }
+.painel-filtros { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 14px 22px 4px; }
+.painel-filtro {
+    min-height: 34px;
+    padding: 5px 13px;
+    border-radius: 999px;
+    border: 1px solid var(--glass-border);
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.83rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+.painel-filtro:hover { color: var(--text); border-color: var(--glass-border-2); }
+/* Filtro ativo: borda de 2px na cor primária (contraste >= 3:1 com o fundo) e
+   marca de seleção, além do tom de fundo: o estado não depende só da cor suave. */
+.painel-filtro[aria-pressed="true"] {
+    background: var(--primary-soft);
+    color: var(--text);
+    border: 2px solid var(--primary);
+    padding: 4px 12px;
+}
+.painel-filtro[aria-pressed="true"]::before { content: "\2713"; content: "\2713" / ""; margin-right: 6px; font-weight: 700; }
+.painel-filtro:focus-visible, .painel-busca input:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.painel-busca { display: inline-flex; align-items: center; gap: 8px; margin-left: auto; min-width: min(100%, 240px); }
+.painel-busca .bi { color: var(--text-muted); }
+.painel-busca input {
+    width: 100%;
+    min-height: 36px;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--campo-borda, var(--glass-border-2));
+    background: var(--surface-2);
+    color: var(--text);
+    font-size: 0.88rem;
+}
+.painel-paginacao {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 12px 22px 16px;
+}
+.painel-paginacao-status { font-size: 0.85rem; color: var(--text-muted); }
+.painel-paginacao .btn-ghost[disabled] { opacity: .45; cursor: not-allowed; }
+.painel-consulta[aria-busy="true"] tbody { opacity: .55; transition: opacity .15s ease; }
+.painel-produto { overflow-wrap: anywhere; min-width: 160px; }
+.painel-unidade { font-size: 0.72rem; font-weight: 700; color: var(--text-muted); }
+.painel-tabela-mov td:nth-child(5), .painel-tabela-mov td:nth-child(6) { min-width: 200px; font-size: 0.86rem; line-height: 1.45; }
+.painel-nivel-texto.is-atencao { color: var(--ambar-texto, var(--warning)); font-weight: 600; }
+.painel-nivel-texto.is-oportunidade { color: var(--verde-texto, var(--success)); font-weight: 600; }
+.painel-nivel-texto.is-informativo { color: var(--text-muted); }
+.painel-ressalvas { list-style: none; margin: 0; padding: 14px 22px 0; display: grid; gap: 6px; }
+.painel-ressalvas li { font-size: 0.85rem; line-height: 1.45; color: var(--text-muted); }
+.painel-ressalvas .bi { color: var(--info); }
+
+/* ---- Compras x Vendas ---- */
+.painel-cv-valores { display: grid; gap: 10px; margin: 0; }
+.painel-cv-valores div { display: flex; justify-content: space-between; gap: 12px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.painel-cv-valores dt { font-weight: 600; color: var(--text-muted); font-size: 0.88rem; }
+.painel-cv-valores dd { margin: 0; font-family: var(--font-mono); font-weight: 700; color: var(--text); white-space: nowrap; }
+
+/* ---- Evolução histórica ---- */
+.painel-estatisticas {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+    gap: 10px;
+    margin: 14px 0 0;
+}
+.painel-estatisticas div { padding: 12px 14px; border-radius: var(--radius-sm); background: var(--surface-2); min-width: 0; }
+.painel-estatisticas dt { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); font-weight: 700; }
+.painel-estatisticas dd { margin: 4px 0 0; font-family: var(--font-mono); font-weight: 700; color: var(--text); overflow-wrap: anywhere; }
+.painel-estatisticas dd span { display: block; font-family: var(--font-sans); font-weight: 500; font-size: 0.8rem; color: var(--text-muted); }
+
+/* ---- Ações recomendadas (destaque) ---- */
+.painel-destaque {
+    padding: 20px;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--glass-border-2);
+    background: linear-gradient(160deg, var(--primary-soft), transparent 55%);
+}
+.recomendacao-lista { display: grid; gap: 14px; }
+.recomendacao-card {
+    border-radius: var(--radius);
+    border: 1px solid var(--glass-border);
+    border-left: 4px solid var(--warning);
+    background: var(--glass-strong, var(--glass));
+    padding: 16px 18px;
+    min-width: 0;
+}
+.recomendacao-card.is-alta { border-left-color: var(--danger); }
+.recomendacao-card.is-baixa { border-left-color: var(--info); }
+.recomendacao-head { display: flex; gap: 12px; align-items: flex-start; }
+.recomendacao-ordem {
+    flex: 0 0 auto; width: 34px; height: 34px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: var(--primary-soft); color: var(--text); font-weight: 800;
+}
+.recomendacao-prioridade { font-size: 0.7rem; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--text-muted); }
+.recomendacao-card.is-alta .recomendacao-prioridade { color: var(--vermelho-texto, var(--danger)); }
+.recomendacao-card.is-media .recomendacao-prioridade { color: var(--ambar-texto, var(--warning)); }
+.recomendacao-card h3 { font-size: 1rem; overflow-wrap: anywhere; }
+.recomendacao-dados { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 10px 20px; margin: 12px 0 0; }
+.recomendacao-dados dt { font-size: 0.72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); font-weight: 700; }
+.recomendacao-dados dd { margin: 3px 0 0; font-size: 0.92rem; line-height: 1.5; color: var(--text); overflow-wrap: anywhere; }
+
+@media (max-width: 575.98px) {
+    .painel-secao { margin-bottom: 32px; }
+    .painel-destaque { padding: 14px; }
+    .painel-filtros { padding: 12px 16px 4px; }
+    .painel-busca { margin-left: 0; width: 100%; }
+    .painel-paginacao { padding: 12px 16px 14px; }
+    .painel-ressalvas { padding: 12px 16px 0; }
+    .painel-dica-consulta { padding: 0 16px; }
+    .classe-card, .recomendacao-card { padding: 14px; }
+    .painel-produto { min-width: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .painel-indice a, .painel-consulta[aria-busy="true"] tbody { transition: none; }
+}
+
+/* ---- Tema claro: só onde o token sozinho não dá contraste suficiente ---- */
+html[data-theme="light"] .painel-indice a { background: var(--surface); }
+html[data-theme="light"] .classe-card,
+html[data-theme="light"] .recomendacao-card { background: var(--surface); }
+html[data-theme="light"] .painel-destaque { background: linear-gradient(160deg, var(--lilas-opaco, var(--primary-soft)), var(--surface) 60%); }
+html[data-theme="light"] .classe-letra,
+html[data-theme="light"] .recomendacao-ordem { color: var(--roxo-forte, var(--text)); }
