@@ -119,6 +119,7 @@
 
     {% block extra_head %}{% endblock %}
     {% block extra_css %}{% endblock %}
+    <link href="{{ url_for('static', filename='css/nexo-selecao.css') }}" rel="stylesheet">
 </head>
 <body{% if bloqueio_termos %} class="termos-bloqueio"{% endif %}>
 

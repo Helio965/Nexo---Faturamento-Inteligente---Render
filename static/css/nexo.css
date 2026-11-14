@@ -1463,26 +1463,7 @@ body:has(> .nexobot) .nexo-toast-wrap { bottom: 96px; }
   .auth-logo img { height: 88px; }
 }
 
-/* ===================== SELEÇÃO DE TEXTO (FASE 10) =================
-   Bloqueia seleção acidental do "chrome" da interface (sidebar, topbar,
-   cards, badges, botões, tabelas, KPIs, gráficos, títulos, menus, labels).
-   Reabilita seleção/edição em campos de formulário e conteúdo copiável. */
-.sidebar, .topbar, .page-head, .nexo-card-head,
-.kpi-tile, .kpi-label, .kpi-value, .kpi-foot,
-.nexo-badge, .plan-badge, .btn-nexo, .btn-ghost,
-.nav-item, .nav-section, .sidebar-brand, .brand-text, .user-chip, .sidebar-session,
-.nexo-table, .chart-box, .mock-tag, .empty-state, .dropzone {
-  -webkit-user-select: none;
-  -ms-user-select: none;
-  user-select: none;
-}
-/* Exceções: onde o usuário digita ou precisa copiar */
-input, textarea, select, option,
-.form-control, .relatorio-doc, .rb-body, .alert, .selectable {
-  -webkit-user-select: text;
-  -ms-user-select: text;
-  user-select: text;
-}
+/* Política compartilhada de seleção: css/nexo-selecao.css. */
 
 /* ===================================================================
    CURVA ABC — badges de classe (Princípio de Pareto)
