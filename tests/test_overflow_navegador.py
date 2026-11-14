@@ -212,6 +212,8 @@ _MEDIR = """() => {
 
 @unittest.skipUnless(_BROWSER, "Defina NEXO_TEST_BROWSER=1 e instale o Playwright para os testes de navegador.")
 class NavegadorCase(ContratosCase):
+    CHROMIUM_ARGS = ()
+
     def setUp(self):
         super().setUp()
         self.dados_extensos()
@@ -225,7 +227,9 @@ class NavegadorCase(ContratosCase):
         self.addCleanup(self._parar_servidor)
         self.pw = sync_playwright().start()
         self.addCleanup(self.pw.stop)
-        self.navegador = self.pw.chromium.launch(executable_path=os.environ.get("NEXO_TEST_CHROMIUM") or None)
+        self.navegador = self.pw.chromium.launch(
+            executable_path=os.environ.get("NEXO_TEST_CHROMIUM") or None,
+            args=list(self.CHROMIUM_ARGS))
         self.addCleanup(self.navegador.close)
         self.cdn_local = _copias_locais_da_cdn()
         self.plotly_local = _plotly_local()
