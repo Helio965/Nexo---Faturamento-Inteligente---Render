@@ -114,7 +114,7 @@ class LandingAnchorSingleMechanismTests(unittest.TestCase):
         for seletores, valor in regras:
             self.assertIn("var(--nexo-header-height)", valor)
             self.assertNotIn("header", seletores, "Controles do cabeçalho fixo não recebem margem de rolagem")
-        self.assertRegex(css, r":root\s*\{[^}]*--nexo-header-height\s*:\s*\d+px")
+        self.assertRegex(css, r":root\s*\{[^}]*--nexo-header-height\s*:")
 
     def test_script_measures_the_header_when_the_menu_changes_and_when_it_resizes(self):
         js = _sem_comentarios((_RAIZ / "static/js/landing.js").read_text(encoding="utf-8"))
@@ -152,7 +152,7 @@ class LandingAnchorAlignmentBrowserTests(DeployTestCase):
         self.assertEqual(self.errors, [], "Exceções JavaScript na landing")
 
     def page(self, largura, altura, *, javascript=True, movimento="no-preference", caminho="/",
-             landing=True, reter_plotly=None):
+             landing=True, reter_plotly=None, css_extra=None):
         context = self.browser.new_context(viewport={"width": largura, "height": altura},
                                            java_script_enabled=javascript, reduced_motion=movimento)
         self.addCleanup(context.close)
@@ -162,7 +162,10 @@ class LandingAnchorAlignmentBrowserTests(DeployTestCase):
 
         def route(rota):
             url = rota.request.url
-            if url.startswith(base):
+            if css_extra and url.startswith(base) and url.endswith("/static/css/landing.css"):
+                resposta = rota.fetch()  # simula uma preferência do navegador (ex.: fonte maior)
+                rota.fulfill(response=resposta, body=resposta.text() + "\n" + css_extra)
+            elif url.startswith(base):
                 rota.continue_()
             elif url == _PLOTLY and reter_plotly is not None:
                 reter_plotly.append(rota)  # o teste responde depois: página ainda carregando
@@ -178,10 +181,12 @@ class LandingAnchorAlignmentBrowserTests(DeployTestCase):
         return page
 
     def esperar_pagina_completa(self, page):
-        # Gráficos desenhados e fontes prontas: depois disso a altura do conteúdo não muda.
+        # Carregamento concluído, gráficos desenhados e fontes prontas: depois disso a altura
+        # do conteúdo não muda.
         page.wait_for_function("() => document.querySelectorAll('[data-chart-ready=true]').length === 3")
-        page.wait_for_function("() => document.documentElement.classList.contains('landing-smooth-scroll')")
+        page.wait_for_function("() => document.readyState === 'complete'")
         page.evaluate("() => document.fonts.ready.then(() => true)")
+        page.evaluate(_DOIS_QUADROS)
         self.esperar_rolagem(page)
 
     def esperar_rolagem(self, page, javascript=True):
@@ -435,9 +440,14 @@ class LandingAnchorAlignmentBrowserTests(DeployTestCase):
                     self.assert_alinhada(self.ir_pelo_menu(page, largura, secao), secao)
 
     def test_sem_javascript_as_ancoras_usam_a_altura_da_folha(self):
-        for largura, altura in ((1366, 768), (1024, 768), (820, 1180), (390, 844), (320, 568)):
-            with self.subTest(largura=largura):
-                page = self.page(largura, altura, javascript=False)
+        # A reserva da folha acompanha a fonte padrão do navegador (20 px = configuração "Grande").
+        casos = [(largura, altura, None) for largura, altura in
+                 ((1366, 768), (1024, 768), (820, 1180), (390, 844), (320, 568))]
+        casos += [(1366, 768, "html { font-size: 20px; }"), (820, 1180, "html { font-size: 20px; }"),
+                  (390, 844, "html { font-size: 20px; }")]
+        for largura, altura, css_extra in casos:
+            with self.subTest(largura=largura, fonte_maior=bool(css_extra)):
+                page = self.page(largura, altura, javascript=False, css_extra=css_extra)
                 self.assertTrue(page.locator("#landing-navigation").is_visible())
                 for secao in _IDA[1:] + ("inicio",):
                     page.locator(f'#landing-navigation a[href="#{secao}"]').click()

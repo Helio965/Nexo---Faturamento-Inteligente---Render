@@ -52,8 +52,13 @@
   --nexo-shadow:    0 10px 30px -12px rgba(0, 0, 0, 0.6);
   --nexo-shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
 
-  /* ---- Cabeçalho fixo: altura usada na rolagem até as âncoras ---- */
-  --nexo-header-height: 73px;
+  /* ---- Cabeçalho fixo: altura usada na rolagem até as âncoras ----
+     Reserva sem JavaScript, com a composição do cabeçalho em cada faixa:
+     borda de 1 px + padding vertical + item mais alto da linha (marca, links
+     ou botão Acessar Portal, cuja altura é a linha do texto + 24 px) e, até
+     992 px, a segunda linha com os links. Em rem, acompanha a fonte padrão do
+     navegador; com JavaScript, vale a altura medida pelo landing.js. */
+  --nexo-header-height: calc(25px + max(44px, 2.871rem, 1.518rem + 24px));
 }
 
 /* ============================================================
@@ -557,7 +562,7 @@ section { padding: 80px 0; position: relative; }
   #process-demo .summary-chart-card { margin-bottom: 0; }
 }
 @media (max-width: 1100px) {
-  :root { --nexo-header-height: 71px; }
+  :root { --nexo-header-height: calc(25px + max(44px, 1.683rem, 1.386rem + 24px)); }
   .nexo-header-inner { gap: 16px; }
   .nav-links { gap: 10px; }
   .nav-links a { font-size: 0.8rem; }
@@ -566,8 +571,8 @@ section { padding: 80px 0; position: relative; }
   .report-blocks { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 992px) {
-  /* Sem JavaScript, os links ficam abertos no cabeçalho (segunda linha). */
-  :root { --nexo-header-height: 186px; }
+  /* Sem JavaScript, os links ficam abertos no cabeçalho, em duas linhas de três. */
+  :root { --nexo-header-height: calc(52px + max(40px, 1.683rem, 1.386rem + 24px) + 2 * max(44px, 1.485rem + 20px)); }
   .nexo-header-inner { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; }
   .nexo-header-inner > .brand { grid-column: 1; grid-row: 1; }
   .header-actions { grid-column: 2; grid-row: 1; }
@@ -590,7 +595,7 @@ section { padding: 80px 0; position: relative; }
   .report-blocks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
-  :root { --nexo-header-height: 226px; }
+  :root { --nexo-header-height: calc(50px + max(44px, 1.5675rem, 1.287rem + 24px) + 3 * max(44px, 1.419rem + 20px)); }
   .container { padding-inline: 20px; }
   section { padding: 64px 0; }
   .hero { padding: 52px 0 60px; }
