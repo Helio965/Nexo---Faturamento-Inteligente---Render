@@ -119,8 +119,9 @@ class PostgreSQLBackupRestoreTests(unittest.TestCase):
         # + as 4 das Configurações da conta + a da trava do total do PDV
         # + as 4 dos planos por nível e do Raio-X (b3e9d6c1f7a2)
         # + as 2 da Avaliação de Cenário (f4c2a8e1d9b6)
-        # + as 2 do detalhamento por produto da Visão Geral (5a9c3e7d1b42).
-        self.assertEqual(report.get("tables"), 34)
+        # + as 2 do detalhamento por produto da Visão Geral (5a9c3e7d1b42)
+        # + as 2 do editor e das mídias do Guia (c3e08eb3863a).
+        self.assertEqual(report.get("tables"), 36)
         self.assertEqual(report.get("uploads"), 4)
         self.assertEqual(report.get("files"), 5)
         not_executed = report.get("not_executed", [])
@@ -210,7 +211,7 @@ class BackupDrillSafetyTests(unittest.TestCase):
             for tool in TOOLS:
                 _tool(Path(fake), tool).write_bytes(b"")
             for platform, approved, accepted in cases:
-                report = {"status": "ok", "tables": 34, "uploads": 4, "files": 5,  # espelha o ensaio real
+                report = {"status": "ok", "tables": 36, "uploads": 4, "files": 5,  # espelha o ensaio real
                           "checks": approved, "not_executed": ["etl"]}
                 completed = subprocess.CompletedProcess([], 0, stdout=json.dumps(report))
                 with self.subTest(platform=platform, checks=approved[-1:], accepted=accepted), \
@@ -300,6 +301,7 @@ class _PrivateDrill(unittest.TestCase):
         from extensions import db
         from models import (AceiteDocumento, Analise, ChamadoSuporte, CoberturaPaga, ConfiguracaoSistema,
                             Contrato, DiagnosticoEntrada, DocumentoLegal, Empresa, EventoContratual, GuiaTopico,
+                            GuiaEdicao, GuiaMidia,
                             HistoricoPrecoPlano, IndicadorAnalise, MensagemSuporte, Notificacao, Plano,
                             PreferenciaUsuario, ProdutoCurvaABC, RegimeContratual, RelatorioAnalise, Segmento,
                             UploadRelatorio, Usuario, ValidacaoPdv, LeadAvaliacao, BrainstormingDadosPdv)
@@ -420,8 +422,21 @@ class _PrivateDrill(unittest.TestCase):
                                              flag_venda_abaixo_custo=True, vazamento_estimado_reais=4.5,
                                              criado_em=instante))
         guia_ref = storage.salvar(GUIA, "guia/imagem_ficticia.png")
-        db.session.add(GuiaTopico(categoria="Teste", pergunta="Recuperação fictícia?",
-                                 resposta="Conteúdo fictício restaurado.", imagem_url=guia_ref))
+        guia = GuiaTopico(categoria="Teste", pergunta="Recuperação fictícia?",
+                         resposta="Conteúdo fictício restaurado.", imagem_url=guia_ref)
+        db.session.add(guia)
+        db.session.flush()
+        midia = GuiaMidia(id_topico=guia.id, referencia=guia_ref, tipo="imagem",
+                          legenda="Imagem fictícia recuperável", alt="Captura fictícia do Guia")
+        db.session.add(midia)
+        db.session.flush()
+        db.session.add(GuiaEdicao(
+            id_topico=guia.id, descricao="Tutorial fictício de recuperação", ordem=7,
+            blocos=[{"tipo": "texto", "html": "<p>Conteúdo fictício restaurado.</p>"},
+                    {"tipo": "midia", "id": midia.id}],
+            historico=[{"blocos": [{"tipo": "texto", "html": "<p>Versão fictícia anterior.</p>"}]}],
+            publicado_em=instante,
+        ))
         db.session.commit()
 
     def validate_restore(self, app, source_snapshot, revision):
@@ -429,7 +444,7 @@ class _PrivateDrill(unittest.TestCase):
         from extensions import db
         from sqlalchemy import inspect, select, text
         from sqlalchemy.exc import IntegrityError
-        from models import (Analise, ArquivoArmazenado, Empresa, GuiaTopico,
+        from models import (Analise, ArquivoArmazenado, Empresa, GuiaTopico, GuiaEdicao, GuiaMidia,
                             UploadRelatorio, Usuario)
         from etl_processor import ETLValidationError, calcular_kpis_em_memoria
         import storage
@@ -468,6 +483,16 @@ class _PrivateDrill(unittest.TestCase):
                     self.assertEqual(stored.content_type, "text/csv")
                 guia = db.session.scalar(select(GuiaTopico))
                 self.assertEqual(Path(storage.resolver(guia.imagem_url)).read_bytes(), GUIA)
+                edicao = db.session.get(GuiaEdicao, guia.id)
+                midia = db.session.scalar(select(GuiaMidia).where(GuiaMidia.id_topico == guia.id))
+                self.assertEqual(edicao.ordem, 7)
+                self.assertEqual(edicao.descricao, "Tutorial fictício de recuperação")
+                self.assertEqual(edicao.blocos[-1], {"tipo": "midia", "id": midia.id})
+                self.assertEqual(edicao.historico[0]["blocos"][0]["html"], "<p>Versão fictícia anterior.</p>")
+                self.assertEqual(midia.referencia, guia.imagem_url)
+                self.assertEqual(midia.legenda, "Imagem fictícia recuperável")
+                self.assertEqual(midia.alt, "Captura fictícia do Guia")
+                self.assertEqual(Path(storage.resolver(midia.referencia)).read_bytes(), GUIA)
                 uploads = db.session.get(Analise, self.analysis_ids[0]).uploads
                 paths = {item.tipo_relatorio: storage.resolver(item.caminho_arquivo) for item in uploads}
                 result = _etl_or_platform_refusal(

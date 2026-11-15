@@ -2,14 +2,16 @@
 
 {% block title %}Guia — NEXO{% endblock %}
 {% block page_title %}Guia do Portal{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/nexo-guia.css') }}">{% endblock %}
 
 {% set ICONES = {'Upload': 'bi-cloud-arrow-up', 'Senhas': 'bi-shield-lock', 'PDV': 'bi-file-earmark-spreadsheet'} %}
 
 {% block content %}
+<div class="guia-leitura">
 <div class="page-head">
     <div>
         <h1>Guia do Portal</h1>
-        <p class="sub">Respostas rápidas para as dúvidas mais comuns sobre o uso do NEXO.</p>
+        <p class="sub">Encontre orientações para utilizar as funcionalidades do NEXO.</p>
     </div>
     <div class="page-head-actions">
         <a href="{{ url_for('cliente.tickets') }}" class="btn-ghost"><i class="bi bi-life-preserver"></i> Abrir chamado</a>
@@ -45,12 +47,8 @@
         <div id="body-{{ t.id }}" class="accordion-collapse collapse {{ 'show' if aberto }}"
              aria-labelledby="head-{{ t.id }}" data-bs-parent="#guiaCat{{ catloop.index }}">
             <div class="accordion-body">
-                <div class="guia-resposta">{{ t.resposta }}</div>
-                {% if t.imagem_url %}
-                <figure class="guia-figure">
-                    <img src="{{ url_midia(t.imagem_url) }}" alt="Ilustração: {{ t.pergunta }}" loading="lazy">
-                </figure>
-                {% endif %}
+                {% if t.descricao %}<p class="guia-resumo">{{ t.descricao }}</p>{% endif %}
+                {% include "_guia_conteudo.html" %}
             </div>
         </div>
     </div>
@@ -66,4 +64,6 @@
     <a href="{{ url_for('cliente.tickets') }}" class="btn-nexo btn-sm-x"><i class="bi bi-chat-dots"></i> Abrir chamado</a>
 </div>
 {% endif %}
+</div>
 {% endblock %}
+{% block extra_js %}<script defer src="{{ url_for('static', filename='js/guia-editor.js') }}"></script>{% endblock %}

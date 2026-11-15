@@ -12,6 +12,7 @@ Uso (na raiz do repositório, com as variáveis de ambiente do banco desejado):
     python tools/auditar_guia.py            # tabela legível
     python tools/auditar_guia.py --json     # saída JSON para anexar ao chamado/relatório
     python tools/auditar_guia.py --todos    # inclui tópicos inativos
+    python tools/auditar_guia.py --inventario --json  # todos, ordem legada e classificação
 """
 
 import argparse
@@ -28,6 +29,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--json", action="store_true", help="imprime JSON em vez de tabela")
     parser.add_argument("--todos", action="store_true", help="inclui tópicos inativos")
+    parser.add_argument("--inventario", action="store_true", help="inventário completo na ordem legada, com classificação e impressão de revisão")
     args = parser.parse_args()
 
     from sqlalchemy import select
@@ -39,6 +41,23 @@ def main() -> int:
     app = create_app(os.environ.get("FLASK_ENV", "development"))
     app.config["SQLALCHEMY_ECHO"] = False
     with app.app_context():
+        if args.inventario:
+            from guia_limpeza import fingerprint, inventariar
+            inventario = inventariar()
+            impressao = fingerprint(inventario)
+            db.session.rollback()
+            if args.json:
+                print(json.dumps({"total_analisado": len(inventario), "fingerprint": impressao,
+                                  "inventario": inventario}, ensure_ascii=False, indent=2, default=str))
+            else:
+                print(f"Tópicos analisados: {len(inventario)} | revisão: {impressao}")
+                for item in inventario:
+                    estado = "publicado" if item["ativo"] else "não publicado"
+                    print(f"{item['ordem_visual']}º | id={item['id']} [{estado}] "
+                          f"categoria={item['categoria']!r} pergunta={item['pergunta']!r}")
+                    print(f"    {item['classificacao']}: {item['motivo']} | ação: {item['acao_prevista']}")
+                print("Somente leitura: nenhum registro ou arquivo foi modificado.")
+            return 0
         consulta = select(GuiaTopico).order_by(GuiaTopico.categoria, GuiaTopico.id)
         if not args.todos:
             consulta = consulta.where(GuiaTopico.ativo.is_(True))

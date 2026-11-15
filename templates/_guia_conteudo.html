@@ -1,0 +1,20 @@
+{# Somente blocos normalizados pelo serviço do Guia chegam a este template.
+   O HTML dos blocos de texto já foi sanitizado no servidor. #}
+<div class="guia-conteudo">
+    {% for bloco in t.blocos %}
+        {% if bloco.tipo == 'texto' %}
+        <div class="guia-conteudo-texto">{{ bloco.html | safe }}</div>
+        {% elif bloco.tipo == 'midia' %}
+        <figure class="guia-figure">
+            {% if bloco.url %}
+                {% if bloco.tipo_midia == 'video' %}
+                <div class="guia-conteudo-video"><video controls playsinline preload="metadata" src="{{ bloco.url }}" aria-label="{{ bloco.alt or bloco.legenda or 'Vídeo do tutorial' }}" data-guia-midia>Seu navegador não oferece reprodução de vídeo HTML5.</video><p class="guia-midia-erro" role="status" hidden>Vídeo indisponível. Tente novamente mais tarde.</p></div>
+                {% else %}
+                <img src="{{ bloco.url }}" alt="{{ bloco.alt or ('Ilustração: ' ~ t.pergunta) }}" loading="lazy" decoding="async" data-guia-midia><p class="guia-midia-erro" role="status" hidden>Imagem indisponível. Tente novamente mais tarde.</p>
+                {% endif %}
+            {% else %}<p class="guia-midia-erro" role="status">Mídia indisponível no momento.</p>{% endif %}
+            {% if bloco.legenda %}<figcaption>{{ bloco.legenda }}</figcaption>{% endif %}
+        </figure>
+        {% endif %}
+    {% endfor %}
+</div>

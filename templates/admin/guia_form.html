@@ -1,71 +1,42 @@
 {% extends "base.html" %}
-
-{% block title %}{{ 'Editar' if topico else 'Novo' }} tópico — NEXO Admin{% endblock %}
-{% block page_title %}Base de Conhecimento{% endblock %}
-
+{% set editando = topico and topico.id %}
+{% block title %}{{ 'Editar' if editando else 'Novo' }} tópico — NEXO Admin{% endblock %}
+{% block page_title %}Personalizar Guia{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/nexo-guia.css') }}">{% endblock %}
 {% block content %}
-<div class="page-head">
-    <div>
-        <h1>{{ 'Editar tópico' if topico else 'Novo tópico' }}</h1>
-        <p class="sub">Conteúdo exibido na aba “Guia” do cliente e usado pelo NexoBot.</p>
+<div class="guia-cms">
+    <div class="page-head">
+        <div><h1>{{ 'Editar tópico' if editando else 'Novo tópico' }}</h1><p class="sub">Organize texto, imagens e vídeos na sequência do tutorial.</p></div>
+        <div class="page-head-actions"><a href="{{ url_for('admin.guia') }}" class="btn-ghost"><i class="bi bi-arrow-left" aria-hidden="true"></i> Voltar</a>{% if editando and cms_disponivel %}<a href="{{ url_for('admin.guia_previa', id=topico.id) }}" class="btn-ghost" target="_blank" rel="noopener"><i class="bi bi-eye" aria-hidden="true"></i> Prévia da versão salva</a>{% endif %}</div>
     </div>
-    <div class="page-head-actions">
-        <a href="{{ url_for('admin.guia') }}" class="btn-ghost"><i class="bi bi-arrow-left"></i> Voltar</a>
-    </div>
+    {% if erro %}<div class="guia-cms-erro" role="alert">{{ erro }}</div>{% endif %}
+    {% if not cms_disponivel %}
+    <div class="guia-cms-aviso" role="status"><p>O editor ainda não está disponível neste ambiente. Seus conteúdos existentes foram preservados.</p></div>
+    {% elif topico and topico.excluido %}
+    <div class="guia-cms-aviso" role="status"><p>Este tópico foi excluído da apresentação. Restaure-o pela listagem para editar e publicar novamente.</p></div>
+    {% else %}
+    <form method="POST" enctype="multipart/form-data" id="guiaEditor" class="guia-editor" action="{{ url_for('admin.guia_editar', id=topico.id) if editando else url_for('admin.guia_novo') }}" data-video-disponivel="{{ 'true' if video_disponivel else 'false' }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="versao" value="{{ topico.versao if topico else 0 }}"><input type="hidden" id="guiaBlocosJson" name="blocos_json" value="">
+        <script id="guiaBlocosIniciais" type="application/json" nonce="{{ csp_nonce }}">{{ (topico.blocos if topico else []) | tojson }}</script>
+        <div class="nexo-card mb-4"><div class="nexo-card-body guia-editor-metadados">
+            <div class="guia-editor-campos"><label class="nexo-label" for="pergunta">Título <span class="req">*</span></label><input type="text" class="form-control" id="pergunta" name="pergunta" maxlength="240" value="{{ topico.pergunta if topico else '' }}" required placeholder="Ex.: Como enviar meu primeiro relatório?"></div>
+            <div><label class="nexo-label" for="categoria">Categoria <span class="req">*</span></label><input type="text" class="form-control" id="categoria" name="categoria" maxlength="80" list="categoriasGuia" value="{{ topico.categoria if topico else '' }}" required placeholder="Ex.: Upload"><datalist id="categoriasGuia">{% for categoria in categorias %}<option value="{{ categoria }}">{% endfor %}</datalist></div>
+            <div><label class="nexo-label" for="ordem">Posição na categoria</label><input type="number" class="form-control" id="ordem" name="ordem" min="0" max="9999" step="1" value="{{ topico.ordem if topico else 0 }}" required aria-describedby="guiaOrdemAjuda"><p class="field-hint" id="guiaOrdemAjuda">Valores menores aparecem primeiro; empates mantêm a ordem estável.</p></div>
+            <div class="guia-editor-campos"><label class="nexo-label" for="descricao">Descrição resumida</label><textarea class="form-control" id="descricao" name="descricao" rows="2" maxlength="500" placeholder="Explique brevemente o que o cliente aprenderá.">{{ topico.descricao if topico else '' }}</textarea></div>
+            <div><label class="nexo-label" for="status">Status de publicação</label><select class="form-select" id="status" name="status" aria-describedby="guiaStatusAjuda"><option value="rascunho" {{ 'selected' if not topico or topico.status == 'rascunho' }}>Rascunho</option><option value="publicado" {{ 'selected' if topico and topico.status == 'publicado' }}>Publicado para todos os clientes</option><option value="despublicado" {{ 'selected' if topico and topico.status == 'despublicado' }}>Despublicado</option></select><p class="field-hint" id="guiaStatusAjuda">Rascunhos e conteúdos despublicados ficam disponíveis somente para administradores.</p></div>
+            <div class="guia-editor-campos"><p class="field-hint mb-0">Salve como rascunho e abra a prévia antes de publicar. A prévia mostra a última versão salva.</p></div>
+        </div></div>
+        <div class="nexo-card mb-4"><div class="nexo-card-body">
+            <h2 id="guiaConteudoTitulo">Conteúdo do tutorial</h2><p class="field-hint" id="guiaConteudoAjuda">Adicione blocos e use as setas para inserir imagens ou vídeos entre os passos. A barra de formatação funciona sobre o texto selecionado.</p>
+            <div class="guia-editor-adicionar" role="group" aria-label="Adicionar conteúdo"><button class="btn-ghost" type="button" data-guia-adicionar="texto"><i class="bi bi-paragraph" aria-hidden="true"></i> Adicionar texto</button><button class="btn-ghost" type="button" data-guia-adicionar="imagem"><i class="bi bi-image" aria-hidden="true"></i> Adicionar imagem</button><button class="btn-ghost" type="button" data-guia-adicionar="video" {{ 'disabled' if not video_disponivel }}><i class="bi bi-camera-video" aria-hidden="true"></i> Adicionar vídeo</button><button class="btn-ghost" type="button" id="guiaDesfazerRemocao" disabled><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Desfazer remoção</button></div>
+            {% if not video_disponivel %}<p class="field-hint">O envio de novos vídeos está indisponível neste ambiente. Texto e imagens continuam disponíveis.</p>{% endif %}
+            <p class="field-hint">Imagens PNG, JPEG, WebP ou GIF: até 3 MiB cada. Vídeos MP4: até 8 MiB e 3 minutos. O envio completo deve ter até 20 MiB.</p>
+            <p class="guia-editor-semjs" id="guiaEditorCarregando" role="status">Carregando o editor…</p><noscript><p class="guia-editor-semjs">Ative o JavaScript para organizar o tutorial e enviar mídias. Nenhum conteúdo será alterado sem salvar.</p></noscript>
+            <div class="guia-editor-blocos" id="guiaEditorBlocos" role="group" aria-labelledby="guiaConteudoTitulo" aria-describedby="guiaConteudoAjuda"></div><p class="guia-editor-vazio" id="guiaEditorVazio" hidden>Adicione um bloco de texto para começar o tutorial.</p><div class="guia-editor-status field-hint" id="guiaEditorStatus" role="status" aria-live="polite"></div><p class="guia-cms-erro" id="guiaEditorErro" role="alert" hidden></p>
+        </div></div>
+        <div class="guia-editor-rodape"><a href="{{ url_for('admin.guia') }}" class="btn-ghost">Cancelar</a><button type="submit" class="btn-nexo" id="guiaSalvar" disabled><i class="bi bi-save" aria-hidden="true"></i> Salvar tópico</button></div>
+    </form>
+    {% endif %}
 </div>
-
-<form method="POST" enctype="multipart/form-data"
-      action="{{ url_for('admin.guia_editar', id=topico.id) if topico else url_for('admin.guia_novo') }}">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div class="nexo-card mb-4">
-        <div class="nexo-card-body">
-            <div class="row g-3">
-                <div class="col-12 col-md-5">
-                    <label class="nexo-label" for="categoria">Categoria <span class="req">*</span></label>
-                    <input type="text" class="form-control" id="categoria" name="categoria" list="categorias"
-                           value="{{ topico.categoria if topico else '' }}" placeholder="Ex.: Upload, Senhas, PDV" required>
-                    <datalist id="categorias">
-                        {% for c in categorias %}<option value="{{ c }}">{% endfor %}
-                    </datalist>
-                </div>
-                <div class="col-12 col-md-7">
-                    <label class="nexo-label" for="pergunta">Pergunta <span class="req">*</span></label>
-                    <input type="text" class="form-control" id="pergunta" name="pergunta" maxlength="240"
-                           value="{{ topico.pergunta if topico else '' }}" placeholder="Ex.: Como faço o upload dos relatórios?" required>
-                </div>
-            </div>
-
-            <div class="mt-3">
-                <label class="nexo-label" for="resposta">Resposta (passo a passo) <span class="req">*</span></label>
-                <textarea class="form-control" id="resposta" name="resposta" rows="9"
-                          placeholder="Escreva a resposta. Use uma linha por passo (1., 2., 3.). As quebras de linha são preservadas." required>{{ topico.resposta if topico else '' }}</textarea>
-                <p class="field-hint mt-2 mb-0">Dica: comece com um resumo de uma linha e depois os passos numerados.</p>
-            </div>
-
-            <div class="mt-3">
-                <label class="nexo-label" for="imagem">Imagem / print (opcional)</label>
-                <input type="file" class="form-control" id="imagem" name="imagem" accept=".png,.jpg,.jpeg,.webp,.gif">
-                <p class="field-hint mt-2 mb-0">Formatos: .png, .jpg, .webp, .gif. A imagem será armazenada junto ao conteúdo do guia.</p>
-
-                {% if topico and topico.imagem_url %}
-                <div class="guia-img-atual mt-3">
-                    <img src="{{ url_midia(topico.imagem_url) }}" alt="Imagem atual">
-                    <label class="check-inline"><input type="checkbox" name="remover_imagem" value="1"> Remover imagem atual</label>
-                </div>
-                {% endif %}
-            </div>
-
-            {% if topico %}
-            <div class="mt-3">
-                <label class="check-inline"><input type="checkbox" name="ativo" value="1" {{ 'checked' if topico.ativo }}> Tópico ativo (visível no Guia e ao NexoBot)</label>
-            </div>
-            {% endif %}
-        </div>
-    </div>
-
-    <div class="d-flex justify-content-end gap-2">
-        <a href="{{ url_for('admin.guia') }}" class="btn-ghost">Cancelar</a>
-        <button type="submit" class="btn-nexo"><i class="bi bi-save"></i> {{ 'Salvar alterações' if topico else 'Criar tópico' }}</button>
-    </div>
-</form>
 {% endblock %}
+{% block extra_js %}<script defer src="{{ url_for('static', filename='js/guia-editor.js') }}"></script>{% endblock %}

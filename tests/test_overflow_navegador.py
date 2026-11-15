@@ -554,31 +554,33 @@ class OverflowNavegadorTests(NavegadorCase):
         self.assertEqual(pagina.locator("#buscaEmpresa").input_value(), "")
 
     def test_sidebar_item_longo_nao_encosta_no_indicador(self):
-        """O rótulo mais largo de cada menu (admin: "Dashboard", 75,9 px na Inter; cliente:
+        """O rótulo mais largo de cada menu (admin: "Personalizar Guia"; cliente:
         "Enviar relatórios") nunca encosta no ponto do item ativo."""
-        for email, caminho, rotulo in (("admin-test@example.invalid", "/admin/dashboard", "Dashboard"),
+        for email, caminho, rotulo in (("admin-test@example.invalid", "/admin/guia", "Personalizar Guia"),
                                        ("cliente-test@example.invalid", "/cliente/upload", "Enviar relatórios")):
             pagina = self.abrir(1440, 900)
             self.entrar(pagina, email)
             self.ir(pagina, caminho)
             if email.startswith("admin"):
-                # Pré-condição: a premissa "Dashboard é o rótulo mais largo" só vale com estes seis itens.
+                # Inclui o rótulo restaurado sem perder as demais opções administrativas.
                 self.assertEqual([r.strip() for r in pagina.locator(".sidebar-nav .nav-item").all_text_contents()],
-                                 ["Dashboard", "Empresas", "Contratos", "Lixeira", "Análises", "Suporte", "Configurações"])
+                                 ["Dashboard", "Empresas", "Contratos", "Lixeira", "Análises", "Suporte", "Personalizar Guia", "Configurações"])
             m = self.medir(pagina)
             self.assertEqual(m["sidebar"]["rotulo"], rotulo, m["sidebar"])
             self.assertTrue(m["sidebar"]["fluxo"], "o indicador deve ser um item do flex, não absoluto")
             self.assertLessEqual(m["sidebar"]["texto_direita"] + 6 + 12, m["sidebar"]["item_direita"] + 1, m["sidebar"])
             pagina.context.close()
 
-    def test_menu_administrativo_sem_base_de_conhecimento(self):
+    def test_menu_administrativo_com_personalizar_guia(self):
         pagina = self.abrir(1366, 768)
         self.entrar(pagina, "admin-test@example.invalid")
         self.ir(pagina, "/admin/dashboard")
         rotulos = pagina.locator(".sidebar-nav .nav-item").all_text_contents()
         rotulos = [r.strip() for r in rotulos]
         self.assertNotIn("Base de Conhecimento", rotulos, rotulos)
-        self.assertEqual(rotulos, ["Dashboard", "Empresas", "Contratos", "Lixeira", "Análises", "Suporte", "Configurações"])
+        self.assertEqual(rotulos, ["Dashboard", "Empresas", "Contratos", "Lixeira", "Análises", "Suporte", "Personalizar Guia", "Configurações"])
+        self.ir(pagina, "/admin/guia")
+        self.assertEqual(pagina.locator(".sidebar-nav .nav-item.active").inner_text().strip(), "Personalizar Guia")
 
     def test_upload_acessivel_pelo_teclado_e_sem_envio_vazio(self):
         pagina = self.abrir(1366, 768)

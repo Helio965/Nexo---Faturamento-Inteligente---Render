@@ -1,14 +1,10 @@
 """
-Regressão HTTP (sem navegador) da navegação lateral depois que a "Base de
-Conhecimento" saiu do menu administrativo (PR #33, 28/10/2026).
+Regressão HTTP da navegação com Personalizar Guia restaurado para ADMIN.
 
-Em toda página administrativa — inclusive as do CMS do Guia, que continuam
-alcançáveis por URL — a sidebar renderiza exatamente Dashboard, Empresas,
-Contratos, Lixeira, Análises, Suporte e Configurações; nenhum link da sidebar (menu ou rodapé)
-aponta para /admin/guia; fora das páginas do próprio CMS, "/admin/guia" não
-aparece em lugar nenhum da página; o item ativo é o da página corrente e, no
-CMS, nenhum; "Sair" segue único no rodapé. A sidebar do cliente não ganha o
-item e não aponta para /admin.
+Em toda página administrativa a sidebar mantém as opções existentes e inclui
+Personalizar Guia; todas as telas do CMS marcam esse item como ativo. "Sair"
+permanece único no rodapé. Clientes conservam seu menu e não recebem links
+administrativos. A restauração pontual não desfaz as demais mudanças do PR #33.
 
 Roda com o cliente de teste do Flask (sem Playwright, sem cópias da CDN): é
 executado pelo `unittest discover` do job security-sqlite-browser em todo PR e
@@ -22,7 +18,7 @@ import unittest
 
 from tests.deploy_support import DeployTestCase
 
-ROTULOS_ADMIN = ["Dashboard", "Empresas", "Contratos", "Lixeira", "Análises", "Suporte", "Configurações"]
+ROTULOS_ADMIN = ["Dashboard", "Empresas", "Contratos", "Lixeira", "Análises", "Suporte", "Personalizar Guia", "Configurações"]
 # A configuração padrão preserva os recursos contratuais e oculta o pacote comercial novo.
 ROTULOS_CLIENTE = ["Visão Geral", "Enviar relatórios", "Histórico", "Guia", "Suporte", "Configurações"]
 
@@ -64,7 +60,7 @@ class _Sidebar:
                 self.sair.append(("", classes, _texto(conteudo)))
 
 
-class NavegacaoAdminSemBaseDeConhecimentoTests(DeployTestCase):
+class NavegacaoPersonalizarGuiaTests(DeployTestCase):
     def setUp(self):
         super().setUp()
         from models import Analise, GuiaTopico, IndicadorAnalise, RelatorioAnalise
@@ -88,7 +84,7 @@ class NavegacaoAdminSemBaseDeConhecimentoTests(DeployTestCase):
         return resposta.get_data(as_text=True)
 
     def paginas_admin(self):
-        """Página administrativa -> rótulo do item ativo esperado (None no CMS, que não tem item)."""
+        """Página administrativa -> rótulo do item ativo esperado."""
         e, a, t = self.empresa_id, self.analise_id, self.topico_id
         return {
             "/admin/dashboard": "Dashboard",
@@ -101,10 +97,11 @@ class NavegacaoAdminSemBaseDeConhecimentoTests(DeployTestCase):
             f"/admin/analise/{a}/upload": "Análises", f"/admin/analise/{a}/relatorio": "Análises",
             "/admin/tickets": "Suporte", "/admin/suporte": "Suporte",
             "/admin/configuracoes": "Configurações",
-            "/admin/guia": None, "/admin/guia/novo": None, f"/admin/guia/editar/{t}": None,
+            "/admin/guia": "Personalizar Guia", "/admin/guia/novo": "Personalizar Guia",
+            f"/admin/guia/editar/{t}": "Personalizar Guia", f"/admin/guia/{t}/previa": "Personalizar Guia",
         }
 
-    def test_sidebar_administrativa_sem_base_de_conhecimento_em_todas_as_paginas(self):
+    def test_sidebar_administrativa_com_personalizar_guia_em_todas_as_paginas(self):
         self.login("admin-test@example.invalid")
         for caminho, ativo in self.paginas_admin().items():
             with self.subTest(caminho=caminho):
@@ -113,12 +110,9 @@ class NavegacaoAdminSemBaseDeConhecimentoTests(DeployTestCase):
                 self.assertEqual(sidebar.rotulos, ROTULOS_ADMIN)
                 self.assertEqual(sidebar.ativos, [ativo] if ativo else [])
                 self.assertNotIn("Base de Conhecimento", sidebar.aside)
-                # Nenhum link da sidebar (menu ou rodapé) leva ao CMS do Guia; "Sair" é único.
-                self.assertEqual([h for h, _, _ in sidebar.links_aside if h.startswith("/admin/guia")], [])
+                # O CMS tem um único destino no menu; "Sair" permanece único.
+                self.assertEqual([h for h, _, _ in sidebar.links_aside if h.startswith("/admin/guia")], ["/admin/guia"])
                 self.assertEqual([texto for _, _, texto in sidebar.sair], ["Sair"])
-                if not caminho.startswith("/admin/guia"):
-                    # Fora do próprio CMS, nada na página (topbar, atalhos, scripts) aponta para ele.
-                    self.assertNotIn("/admin/guia", html)
 
     def test_sidebar_do_cliente_nao_ganha_o_item_nem_aponta_para_a_administracao(self):
         self.login("cliente-test@example.invalid")
@@ -128,6 +122,7 @@ class NavegacaoAdminSemBaseDeConhecimentoTests(DeployTestCase):
                 sidebar = _Sidebar(self._pagina(caminho), caminho)
                 self.assertEqual(sidebar.rotulos, ROTULOS_CLIENTE)
                 self.assertNotIn("Base de Conhecimento", sidebar.aside)
+                self.assertNotIn("Personalizar Guia", sidebar.aside)
                 self.assertEqual([h for h, _, _ in sidebar.links_aside if h.startswith("/admin")], [])
 
 

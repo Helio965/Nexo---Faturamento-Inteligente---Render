@@ -1,4 +1,5 @@
 import os
+import re
 import hashlib
 import secrets
 from io import BytesIO
@@ -7,7 +8,7 @@ from datetime import datetime, timezone
 from functools import wraps
 
 from PIL import Image, UnidentifiedImageError
-from flask import Blueprint, render_template, redirect, url_for, flash, current_app, request, abort, make_response
+from flask import Blueprint, render_template, redirect, url_for, flash, current_app, request, abort, make_response, session
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
 from sqlalchemy import select, func
@@ -1570,154 +1571,255 @@ def ticket_detalhe(id_chamado):
 
 
 # =====================================================================
-# CMS — Base de Conhecimento (Guia) gerenciável pelo Admin
+# Personalizar Guia — conteúdo institucional, publicação e mídias
 # =====================================================================
-_GUIA_IMG_EXT = {"png", "jpg", "jpeg", "webp", "gif"}
-
-
 def _categorias_existentes():
-    """Lista de categorias já usadas (para o datalist do formulário)."""
-    return [c for (c,) in db.session.execute(
-        select(GuiaTopico.categoria).distinct().order_by(GuiaTopico.categoria)
-    ).all()]
+    return list(db.session.scalars(select(GuiaTopico.categoria).distinct().order_by(GuiaTopico.categoria)))
 
 
 def _salvar_imagem_guia(arquivo):
-    """
-    Salva com segurança a imagem enviada (via storage.py, no banco) e devolve a
-    referência a gravar em imagem_url (ex.: 'db:guia/abc123.png'), ou None.
-    Valida o conteúdo e a extensão; nomeia pelo hash (evita path traversal).
-    """
+    """Compatibilidade do upload anterior, com validação limitada compartilhada."""
     if not arquivo or not arquivo.filename:
         return None
-    ext = os.path.splitext(secure_filename(arquivo.filename))[1].lower().lstrip(".")
-    if ext not in _GUIA_IMG_EXT:
-        flash(f"Imagem .{ext} não suportada. Use: {sorted(_GUIA_IMG_EXT)}.", "warning")
-        return None
-    conteudo = arquivo.read()
-    if not conteudo:
-        return None
-    formatos = {"png": "PNG", "jpg": "JPEG", "jpeg": "JPEG", "webp": "WEBP", "gif": "GIF"}
+    from guia_midias import validar_upload, GuiaMidiaErro
     try:
-        with Image.open(BytesIO(conteudo)) as imagem:
-            if imagem.format != formatos[ext]:
-                raise ValueError("O formato da imagem não corresponde à extensão.")
-            imagem.verify()
-    except (UnidentifiedImageError, OSError, ValueError, SyntaxError, Image.DecompressionBombError):
-        flash("Imagem inválida ou corrompida. Envie uma imagem PNG, JPEG, WebP ou GIF válida.", "warning")
+        midia = validar_upload(arquivo)
+        if midia.tipo != "imagem":
+            raise GuiaMidiaErro("Use uma imagem PNG, JPEG, WebP ou GIF.")
+    except GuiaMidiaErro as erro:
+        flash(str(erro), "warning")
         return None
-    nome = f"{hashlib.sha256(conteudo).hexdigest()[:16]}.{ext}"
-    return storage.salvar(conteudo, f"guia/{nome}")
+    nome = hashlib.sha256(midia.conteudo).hexdigest()[:16] + "." + midia.extensao
+    return storage.salvar(midia.conteudo, "guia/" + nome)
 
 
-def _descartar_imagem_guia(referencia, id_topico):
-    """Apaga do storage uma imagem que o tópico deixou de usar — só se nenhum
-    OUTRO tópico usa a mesma imagem (nomes por hash: imagens iguais são
-    compartilhadas). Referências legadas em static/ não são tocadas."""
-    if not referencia or not referencia.startswith(storage.PREFIXO_DB):
-        return
-    em_uso = db.session.execute(
-        select(func.count(GuiaTopico.id))
-        .where(GuiaTopico.imagem_url == referencia)
-        .where(GuiaTopico.id != id_topico)
-    ).scalar()
-    if not em_uso:
-        storage.remover(referencia)
+def _guia_formulario(topico=None, erro=None, codigo=200, preservar=False):
+    import json
+    import guia_cms
+    from guia_midias import disponibilidade_video
+    dados = guia_cms.visualizar(topico) if topico else None
+    if preservar:
+        dados = dados or dict(id=None, categoria="", pergunta="", descricao="", ordem=0, versao=0,
+                              status="rascunho", resposta="", blocos=[], excluido=False)
+        for campo in ("categoria", "pergunta", "descricao", "ordem", "versao", "status"):
+            dados[campo] = request.form.get(campo, dados.get(campo, ""))
+        if request.form.get("blocos_json"):
+            try:
+                bruto = json.loads(request.form["blocos_json"][:guia_cms.MAX_TEXTO * 2])
+                dados["blocos"] = []
+                for bloco in bruto[:guia_cms.MAX_BLOCOS] if isinstance(bruto, list) else []:
+                    if isinstance(bloco, dict) and bloco.get("tipo") == "texto":
+                        dados["blocos"].append({"tipo": "texto", "html": guia_cms.sanitizar_html(bloco.get("html", ""))})
+                    elif isinstance(bloco, dict) and bloco.get("tipo") == "midia":
+                        # Só reexibe mídias já autorizadas; arquivos novos devem ser selecionados novamente.
+                        anterior = next((b for b in (guia_cms.visualizar(topico)["blocos"] if topico else [])
+                                         if b.get("tipo") == "midia" and b.get("id") == bloco.get("id")), None)
+                        if anterior:
+                            dados["blocos"].append(anterior)
+                        elif (isinstance(bloco.get("id"), str)
+                              and re.fullmatch(r"nova_[a-zA-Z0-9_]{1,48}", bloco["id"])):
+                            arquivo = request.files.get("midia_" + bloco["id"])
+                            tipo = "video" if arquivo and (arquivo.filename or "").lower().endswith(".mp4") else "imagem"
+                            dados["blocos"].append(dict(tipo="midia", id=bloco["id"], url="", tipo_midia=tipo,
+                                legenda=bloco.get("legenda", "")[:500] if isinstance(bloco.get("legenda", ""), str) else "",
+                                alt=bloco.get("alt", "")[:240] if isinstance(bloco.get("alt", ""), str) else ""))
+            except (ValueError, TypeError):
+                pass
+        elif request.form.get("resposta"):
+            from html import escape
+            dados["blocos"] = [{"tipo": "texto", "html": "<p>" + escape(request.form["resposta"][:guia_cms.MAX_TEXTO]).replace("\n", "<br>") + "</p>"}]
+    return render_template("admin/guia_form.html", topico=dados, categorias=_categorias_existentes(),
+                           cms_disponivel=guia_cms.esquema_disponivel(), video_disponivel=disponibilidade_video(),
+                           erro=erro), codigo
+
+
+def _guia_obter(id):
+    topico = db.session.get(GuiaTopico, id)
+    if topico is None:
+        abort(404)
+    return topico
 
 
 @admin_bp.route("/guia")
 @admin_required
 def guia():
-    """Listagem (CMS) de todas as soluções da Base de Conhecimento."""
-    topicos = db.session.execute(
-        select(GuiaTopico).order_by(GuiaTopico.categoria, GuiaTopico.id)
-    ).scalars().all()
-    # Tópicos com sinais de conteúdo de teste (ver nexobot/higiene.py): apenas
-    # sinalizados para revisão; a desativação/exclusão continua manual, pelo CMS.
+    import guia_cms
     from nexobot.higiene import motivo_teste
-    suspeitos = {t.id: motivo for t in topicos
-                 if (motivo := motivo_teste(t.categoria, t.pergunta, t.resposta))}
-    return render_template("admin/guia.html", topicos=topicos, total=len(topicos), suspeitos=suspeitos)
+    todos = guia_cms.listar()
+    estado = request.args.get("estado", "")
+    topicos = [t for t in todos if (t["status"] == estado if estado else not t["excluido"])]
+    categoria, busca = request.args.get("categoria", ""), request.args.get("busca", "")[:240].casefold()
+    if categoria:
+        topicos = [t for t in topicos if t["categoria"] == categoria]
+    if busca:
+        topicos = [t for t in topicos if busca in " ".join([t["pergunta"], t["descricao"], t["categoria"]]).casefold()]
+    suspeitos = {t["id"]: motivo for t in topicos if (motivo := motivo_teste(t["categoria"], t["pergunta"], t["resposta"]))}
+    return render_template("admin/guia.html", topicos=topicos, total=len(topicos), suspeitos=suspeitos,
+                           categorias=sorted({t["categoria"] for t in todos}), cms_disponivel=guia_cms.esquema_disponivel())
 
 
 @admin_bp.route("/guia/novo", methods=["GET", "POST"])
 @admin_required
 def guia_novo():
-    """Cria um novo tópico da Base de Conhecimento."""
-    if request.method == "POST":
-        categoria = (request.form.get("categoria") or "").strip()
-        pergunta = (request.form.get("pergunta") or "").strip()
-        resposta = (request.form.get("resposta") or "").strip()
-        if not (categoria and pergunta and resposta):
-            flash("Categoria, pergunta e resposta são obrigatórias.", "danger")
-            return redirect(url_for("admin.guia_novo"))
-
-        topico = GuiaTopico(categoria=categoria, pergunta=pergunta, resposta=resposta)
-        img = _salvar_imagem_guia(request.files.get("imagem"))
-        if img:
-            topico.imagem_url = img
-        db.session.add(topico)
+    import guia_cms
+    if request.method == "GET":
+        return _guia_formulario()
+    if not guia_cms.esquema_disponivel():
+        return _guia_formulario(erro="A migração do Guia precisa ser autorizada e aplicada antes de gerenciar conteúdos.", codigo=503, preservar=True)
+    topico = GuiaTopico(categoria="", pergunta="", resposta="", ativo=False)
+    try:
+        guia_cms.salvar(topico, request.form, request.files)
         db.session.commit()
-        flash("Tópico criado na Base de Conhecimento.", "success")
-        return redirect(url_for("admin.guia"))
-
-    return render_template(
-        "admin/guia_form.html", topico=None, categorias=_categorias_existentes(),
-    )
+    except (ValueError, SQLAlchemyError) as erro:
+        db.session.rollback()
+        codigo = 409 if isinstance(erro, (guia_cms.GuiaConflito, StaleDataError)) else 503 if isinstance(erro, SQLAlchemyError) else 400
+        mensagem = "Não foi possível salvar. Os dados não foram publicados; tente novamente." if isinstance(erro, SQLAlchemyError) else str(erro)
+        return _guia_formulario(erro=mensagem, codigo=codigo, preservar=True)
+    flash("Tópico salvo. " + ("Publicado para todos os clientes." if topico.ativo else "Disponível somente para administradores."), "success")
+    return redirect(url_for("admin.guia"))
 
 
 @admin_bp.route("/guia/editar/<int:id>", methods=["GET", "POST"])
 @admin_required
 def guia_editar(id):
-    """Edita um tópico existente (conteúdo e/ou imagem)."""
-    topico = db.session.get(GuiaTopico, id)
-    if topico is None:
-        flash("Tópico não encontrado.", "danger")
-        return redirect(url_for("admin.guia"))
-
-    if request.method == "POST":
-        categoria = (request.form.get("categoria") or "").strip()
-        pergunta = (request.form.get("pergunta") or "").strip()
-        resposta = (request.form.get("resposta") or "").strip()
-        if not (categoria and pergunta and resposta):
-            flash("Categoria, pergunta e resposta são obrigatórias.", "danger")
-            return redirect(url_for("admin.guia_editar", id=id))
-
-        topico.categoria = categoria
-        topico.pergunta = pergunta
-        topico.resposta = resposta
-        topico.ativo = bool(request.form.get("ativo"))
-        imagem_anterior = topico.imagem_url
-        if request.form.get("remover_imagem"):
-            topico.imagem_url = None
-        img = _salvar_imagem_guia(request.files.get("imagem"))
-        if img:
-            topico.imagem_url = img
-        if imagem_anterior and imagem_anterior != topico.imagem_url:
-            _descartar_imagem_guia(imagem_anterior, topico.id)
-        topico.data_atualizacao = datetime.now(timezone.utc)
+    import guia_cms
+    topico = _guia_obter(id)
+    if request.method == "GET":
+        return _guia_formulario(topico)
+    if not guia_cms.esquema_disponivel():
+        return _guia_formulario(topico, "A migração do Guia ainda não está disponível.", 503, True)
+    try:
+        guia_cms.salvar(topico, request.form, request.files)
         db.session.commit()
-        flash("Tópico atualizado.", "success")
-        return redirect(url_for("admin.guia"))
+    except (ValueError, SQLAlchemyError) as erro:
+        db.session.rollback()
+        codigo = 409 if isinstance(erro, (guia_cms.GuiaConflito, StaleDataError)) else 503 if isinstance(erro, SQLAlchemyError) else 400
+        mensagem = "Não foi possível salvar. A versão anterior foi preservada." if isinstance(erro, SQLAlchemyError) else str(erro)
+        return _guia_formulario(_guia_obter(id), mensagem, codigo, True)
+    flash("Tópico atualizado.", "success")
+    return redirect(url_for("admin.guia"))
 
-    return render_template(
-        "admin/guia_form.html", topico=topico, categorias=_categorias_existentes(),
-    )
+
+@admin_bp.route("/guia/<int:id>/previa")
+@admin_required
+def guia_previa(id):
+    import guia_cms
+    return render_template("admin/guia_previa.html", topico=guia_cms.visualizar(_guia_obter(id)))
+
+
+@admin_bp.route("/guia/<int:id>/publicacao", methods=["POST"])
+@admin_required
+def guia_publicacao(id):
+    import guia_cms
+    if not guia_cms.esquema_disponivel():
+        abort(503)
+    try:
+        guia_cms.alterar_publicacao(_guia_obter(id), request.form.get("acao"), request.form.get("versao"))
+        db.session.commit()
+    except (ValueError, SQLAlchemyError) as erro:
+        db.session.rollback()
+        codigo = 409 if isinstance(erro, (guia_cms.GuiaConflito, StaleDataError)) else 503 if isinstance(erro, SQLAlchemyError) else 400
+        return _guia_formulario(_guia_obter(id), "Não foi possível atualizar a publicação." if isinstance(erro, SQLAlchemyError) else str(erro), codigo)
+    flash("Publicação atualizada. Tópicos restaurados permanecem sem publicação até nova revisão.", "success")
+    return redirect(url_for("admin.guia"))
 
 
 @admin_bp.route("/guia/<int:id>/deletar", methods=["POST"])
 @admin_required
 def guia_deletar(id):
-    """Remove um tópico da Base de Conhecimento (POST-only)."""
-    topico = db.session.get(GuiaTopico, id)
-    if topico is None:
-        flash("Tópico não encontrado.", "danger")
-        return redirect(url_for("admin.guia"))
-    _descartar_imagem_guia(topico.imagem_url, topico.id)
-    db.session.delete(topico)
-    db.session.commit()
-    flash("Tópico removido da Base de Conhecimento.", "success")
+    import guia_cms
+    if not guia_cms.esquema_disponivel():
+        abort(503)
+    try:
+        guia_cms.excluir(_guia_obter(id), request.form.get("versao"))
+        db.session.commit()
+    except (ValueError, SQLAlchemyError) as erro:
+        db.session.rollback()
+        codigo = 409 if isinstance(erro, (guia_cms.GuiaConflito, StaleDataError)) else 503 if isinstance(erro, SQLAlchemyError) else 400
+        return _guia_formulario(_guia_obter(id), "A exclusão não foi concluída; os dados foram preservados." if isinstance(erro, SQLAlchemyError) else str(erro), codigo)
+    flash("Tópico retirado da publicação. Conteúdo e mídias preservados para restauração.", "success")
     return redirect(url_for("admin.guia"))
+
+
+def _guia_assinador():
+    from itsdangerous import URLSafeTimedSerializer
+    return URLSafeTimedSerializer(current_app.config["SECRET_KEY"], salt="nexo-guia-limpeza-v1")
+
+
+def _guia_token(token):
+    from itsdangerous import BadSignature
+    import guia_limpeza
+    try:
+        dados = _guia_assinador().loads(token, max_age=900)
+    except BadSignature:
+        raise guia_limpeza.LimpezaGuiaErro("A seleção expirou ou é inválida. Prepare um novo inventário e backup.") from None
+    if not isinstance(dados, dict) or dados.get("usuario") != current_user.get_id():
+        raise guia_limpeza.LimpezaGuiaErro("Este backup pertence a outra sessão administrativa.")
+    return dados
+
+
+@admin_bp.route("/guia/limpeza", methods=["GET", "POST"])
+@admin_required
+def guia_limpeza():
+    import guia_limpeza as limpeza
+    inventario = limpeza.inventariar()
+    impressao = limpeza.fingerprint(inventario)
+    erro, codigo, token, selecionados, resultado = None, 200, None, [], None
+    if request.method == "POST":
+        try:
+            if request.form.get("acao") == "preparar":
+                if request.form.get("fingerprint") != impressao:
+                    raise limpeza.LimpezaGuiaErro("O Guia mudou. Revise o inventário atualizado antes de continuar.")
+                revisados = request.form.getlist("revisados")
+                selecionados = limpeza.validar_selecao(request.form.getlist("ids"), inventario, revisados=revisados)
+                token = _guia_assinador().dumps(dict(usuario=current_user.get_id(), ids=selecionados, fingerprint=impressao, revisados=revisados))
+                session.pop("guia_backup_recibo", None)
+            elif request.form.get("acao") == "aplicar":
+                token = request.form.get("backup_token", "")
+                dados = _guia_token(token)
+                recibo = hashlib.sha256(token.encode()).hexdigest()
+                if request.form.get("confirmar_despublicacao") != "1" or not secrets.compare_digest(session.get("guia_backup_recibo", ""), recibo):
+                    raise limpeza.LimpezaGuiaErro("Baixe o backup recuperável nesta sessão e confirme sua guarda antes de despublicar.")
+                resultado = limpeza.despublicar(dados["ids"], dados["fingerprint"], revisados=dados.get("revisados", []))
+                db.session.commit()
+                session.pop("guia_backup_recibo", None)
+                token = None
+                inventario = limpeza.inventariar()
+                impressao = limpeza.fingerprint(inventario)
+            else:
+                raise limpeza.LimpezaGuiaErro("Ação de revisão inválida.")
+        except (ValueError, SQLAlchemyError) as falha:
+            db.session.rollback()
+            erro = "Não foi possível concluir a limpeza. Os registros foram preservados." if isinstance(falha, SQLAlchemyError) else str(falha)
+            codigo = 503 if isinstance(falha, SQLAlchemyError) else 400
+    return render_template("admin/guia_limpeza.html", inventario=inventario, fingerprint=impressao,
+                           selecionados=selecionados, backup_token=token, backup_baixado=False,
+                           resultado=resultado, erro=erro), codigo
+
+
+@admin_bp.route("/guia/limpeza/backup")
+@admin_required
+def guia_limpeza_backup():
+    import guia_limpeza as limpeza
+    token = request.args.get("token", "")
+    try:
+        dados = _guia_token(token)
+        inventario = limpeza.inventariar()
+        if limpeza.fingerprint(inventario) != dados["fingerprint"]:
+            raise limpeza.LimpezaGuiaErro("O Guia mudou. Revise e prepare um novo backup.")
+        ids = limpeza.validar_selecao(dados["ids"], inventario, revisados=dados.get("revisados", []))
+        conteudo = limpeza.exportar_backup(ids)
+        db.session.expire_all()
+        if limpeza.fingerprint(limpeza.inventariar()) != dados["fingerprint"]:
+            raise limpeza.LimpezaGuiaErro("O Guia mudou durante o backup. Nenhuma despublicação foi feita.")
+    except (ValueError, SQLAlchemyError) as erro:
+        db.session.rollback()
+        abort(503 if isinstance(erro, SQLAlchemyError) else 400)
+    session["guia_backup_recibo"] = hashlib.sha256(token.encode()).hexdigest()
+    resposta = make_response(conteudo)
+    resposta.headers.update({"Content-Type": "application/zip", "Content-Disposition": 'attachment; filename="nexo-guia-backup.zip"',
+                             "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
+    return resposta
 
 
 # =====================================================================

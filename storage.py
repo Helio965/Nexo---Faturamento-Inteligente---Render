@@ -306,4 +306,7 @@ def url_midia(referencia: str) -> str:
     if referencia.startswith(PREFIXO_DB):
         chave = _chave(referencia)
         return url_for("midia", chave=chave) if chave_valida(chave) else ""
+    if referencia.startswith("uploads/guia/"):
+        nome = referencia[len("uploads/guia/"):]
+        return url_for("midia_legada_guia", nome=nome) if chave_valida("guia/" + nome) else ""
     return url_for("static", filename=referencia)

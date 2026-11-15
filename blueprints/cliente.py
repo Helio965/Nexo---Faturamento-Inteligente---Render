@@ -271,21 +271,12 @@ def analise_produtos(id_analise):
 @cliente_bp.route("/guia")
 @cliente_required
 def guia():
-    """
-    Aba Guia/Wiki: dúvidas comuns lidas DINAMICAMENTE do banco (CMS), agrupadas
-    por categoria. Mantém ordem estável (categoria, id).
-    """
-    topicos = db.session.execute(
-        select(GuiaTopico)
-        .where(GuiaTopico.ativo.is_(True))
-        .order_by(GuiaTopico.categoria, GuiaTopico.id)
-    ).scalars().all()
-
-    # Agrupa por categoria preservando a ordem de aparição.
+    """Guia institucional publicado para todos os clientes autorizados."""
+    import guia_cms
+    topicos = guia_cms.listar(somente_publicados=True)
     grupos = {}
-    for t in topicos:
-        grupos.setdefault(t.categoria, []).append(t)
-
+    for topico in topicos:
+        grupos.setdefault(topico["categoria"], []).append(topico)
     return render_template("cliente/guia.html", grupos=grupos, total=len(topicos))
 
 

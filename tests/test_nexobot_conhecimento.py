@@ -241,23 +241,30 @@ class CacheDoGuiaTests(DeployTestCase):
         token = self.csrf_token("/admin/guia/novo")
         resposta = self.client.post("/admin/guia/novo", data={
             "categoria": "Teste", "pergunta": "Como usar o painel quimerax?",
-            "resposta": "Orientação quimerax do CMS.", "csrf_token": token,
+            "resposta": "Orientação quimerax do CMS.", "status": "publicado", "csrf_token": token,
         })
         self.assertEqual(resposta.status_code, 302)
         self.assertEqual(self.buscar("como usar o quimerax").trecho.resposta, "Orientação quimerax do CMS.")
         id_novo = self.db.session.query(self.GuiaTopico).filter_by(
             pergunta="Como usar o painel quimerax?").one().id
         token = self.csrf_token(f"/admin/guia/editar/{id_novo}")
+        from models import GuiaEdicao
+        self.db.session.expire_all()
+        versao = self.db.session.get(GuiaEdicao, id_novo).versao
         self.client.post(f"/admin/guia/editar/{id_novo}", data={
             "categoria": "Teste", "pergunta": "Como usar o painel quimerax?",
-            "resposta": "Texto editado quimerax.", "csrf_token": token,  # sem "ativo" = desativado
+            "resposta": "Texto editado quimerax.", "status": "despublicado", "versao": str(versao),
+            "csrf_token": token,
         })
         self.assertIsNone(self.buscar("como usar o quimerax").trecho)
         pagina = self.client.get("/admin/guia").get_data(as_text=True)
         token = re.search(r'name="csrf_token"[^>]*value="([^"]+)"', pagina).group(1)
-        self.client.post(f"/admin/guia/{id_novo}/deletar", data={"csrf_token": token})
-        self.db.session.expire_all()  # a exclusão aconteceu na sessão da requisição
-        self.assertIsNone(self.db.session.get(self.GuiaTopico, id_novo))
+        self.db.session.expire_all()
+        versao = self.db.session.get(GuiaEdicao, id_novo).versao
+        self.client.post(f"/admin/guia/{id_novo}/deletar", data={"csrf_token": token, "versao": str(versao)})
+        self.db.session.expire_all()  # a remoção lógica aconteceu na sessão da requisição
+        self.assertFalse(self.db.session.get(self.GuiaTopico, id_novo).ativo)
+        self.assertIsNotNone(self.db.session.get(GuiaEdicao, id_novo).excluido_em)
         self.assertIsNone(self.buscar("como usar o quimerax").trecho)
 
 
