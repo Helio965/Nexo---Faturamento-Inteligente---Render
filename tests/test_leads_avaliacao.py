@@ -19,9 +19,9 @@ from tests.deploy_support import ROOT, DeployTestCase
 AGORA = datetime(2026, 11, 8, 12, 0, tzinfo=timezone.utc)
 REVISAO = "f4c2a8e1d9b6"
 REVISAO_ANTERIOR = "b3e9d6c1f7a2"
-# Revisões posteriores à dos leads (ex.: 5a9c3e7d1b42, detalhamento por produto da Visão
-# Geral) ficam acima dela: o banco migrado está no head atual, que contém REVISAO.
-HEAD = "5a9c3e7d1b42"
+# Revisões posteriores à dos leads (incluindo o editor do Guia) ficam acima dela:
+# o banco migrado está no head atual, que contém REVISAO.
+HEAD = "c3e08eb3863a"
 
 
 def _cadeia_ate(revisao_final):

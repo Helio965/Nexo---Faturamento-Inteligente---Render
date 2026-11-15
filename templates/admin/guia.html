@@ -1,68 +1,75 @@
 {% extends "base.html" %}
 {% import "_macros.html" as m %}
-
-{% block title %}Base de Conhecimento — NEXO Admin{% endblock %}
-{% block page_title %}Base de Conhecimento{% endblock %}
-
+{% block title %}Personalizar Guia — NEXO Admin{% endblock %}
+{% block page_title %}Personalizar Guia{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/nexo-guia.css') }}">{% endblock %}
 {% block content %}
-<div class="page-head">
-    <div>
-        <h1>Base de Conhecimento</h1>
-        <p class="sub">{{ total }} solução(ões) — alimentam a aba “Guia” do cliente e o NexoBot.</p>
+<div class="guia-cms">
+    <div class="page-head">
+        <div><h1>Personalizar Guia</h1><p class="sub">Crie orientações e publique uma única vez para todos os clientes.</p></div>
+        <div class="page-head-actions">
+            <a href="{{ url_for('admin.guia_limpeza') }}" class="btn-ghost"><i class="bi bi-list-check" aria-hidden="true"></i> Revisar conteúdos de teste</a>
+            {% if cms_disponivel %}
+            <a href="{{ url_for('admin.guia_novo') }}" class="btn-nexo"><i class="bi bi-plus-lg" aria-hidden="true"></i> Novo tópico</a>
+            {% endif %}
+        </div>
     </div>
-    <div class="page-head-actions">
-        <a href="{{ url_for('admin.guia_novo') }}" class="btn-nexo"><i class="bi bi-plus-lg"></i> Novo tópico</a>
+    {% if not cms_disponivel %}
+    <div class="guia-cms-aviso" role="status"><i class="bi bi-info-circle" aria-hidden="true"></i><p>O gerenciamento ampliado ainda não está disponível neste ambiente. Os conteúdos existentes continuam acessíveis no Guia e ao NexoBot.</p></div>
+    {% endif %}
+    {% set ativos_suspeitos = topicos | selectattr('ativo') | selectattr('id', 'in', suspeitos) | list %}
+    {% if ativos_suspeitos %}
+    <div class="guia-cms-aviso" role="status">
+        <i class="bi bi-exclamation-triangle" aria-hidden="true"></i>
+        <p><strong>{{ ativos_suspeitos | length }} tópico(s) publicado(s) com sinais de conteúdo de teste.</strong> Confira os registros marcados como “Possível teste” antes de retirar sua publicação. O NexoBot reduz a prioridade desses conteúdos, mas eles ainda podem aparecer no Guia.</p>
     </div>
-</div>
-
-{% set ativos_suspeitos = topicos | selectattr('ativo') | selectattr('id', 'in', suspeitos) | list %}
-{% if ativos_suspeitos %}
-<div class="nota-pressao mb-4" style="background:linear-gradient(var(--warning-bg),var(--warning-bg)),var(--glass-strong);border-color:rgba(245,158,11,0.3);">
-    <i class="bi bi-exclamation-triangle"></i>
-    <span><strong>{{ ativos_suspeitos | length }} tópico(s) ativo(s) com sinais de conteúdo de teste.</strong>
-    O NexoBot não os apresenta como assuntos do portal e reduz a prioridade deles nas respostas, mas eles continuam visíveis no Guia do cliente. Revise e desative (ou exclua) os tópicos marcados abaixo.</span>
-</div>
-{% endif %}
-
-{% if total == 0 %}
-<div class="nexo-card">
-    <div class="empty-state">
-        <div class="es-icon"><i class="bi bi-journal-plus"></i></div>
-        <h3>Nenhum tópico cadastrado.</h3>
-        <p>Crie o primeiro tópico para abastecer o Guia do cliente e o NexoBot.</p>
-        <a href="{{ url_for('admin.guia_novo') }}" class="btn-nexo mt-3"><i class="bi bi-plus-lg"></i> Novo tópico</a>
+    {% endif %}
+    <form method="GET" action="{{ url_for('admin.guia') }}" class="nexo-card guia-cms-filtros" role="search" aria-label="Filtrar tópicos do Guia">
+        <div><label class="nexo-label" for="guiaBusca">Buscar</label><input class="form-control" type="search" id="guiaBusca" name="busca" maxlength="240" value="{{ request.args.get('busca', '') }}" placeholder="Título, descrição ou categoria"></div>
+        <div>
+            <label class="nexo-label" for="guiaCategoria">Categoria</label>
+            <select class="form-select" id="guiaCategoria" name="categoria"><option value="">Todas as categorias</option>{% for categoria in categorias | default([]) %}<option value="{{ categoria }}" {{ 'selected' if request.args.get('categoria') == categoria }}>{{ categoria }}</option>{% endfor %}</select>
+        </div>
+        <div>
+            <label class="nexo-label" for="guiaEstado">Publicação</label>
+            <select class="form-select" id="guiaEstado" name="estado">{% for valor, rotulo in [('', 'Todos os disponíveis'), ('publicado', 'Publicados'), ('rascunho', 'Rascunhos'), ('despublicado', 'Despublicados'), ('excluido', 'Excluídos recuperáveis')] %}<option value="{{ valor }}" {{ 'selected' if request.args.get('estado', '') == valor }}>{{ rotulo }}</option>{% endfor %}</select>
+        </div>
+        <div class="guia-cms-acoes"><button class="btn-nexo" type="submit"><i class="bi bi-search" aria-hidden="true"></i> Filtrar</button><a class="btn-ghost" href="{{ url_for('admin.guia') }}">Limpar</a></div>
+    </form>
+    <p class="field-hint" role="status">{{ total }} tópico(s) encontrado(s). A ordem é definida dentro de cada categoria; posições iguais mantêm uma ordem estável.</p>
+    {% if not topicos %}
+    <div class="nexo-card"><div class="empty-state"><div class="es-icon"><i class="bi bi-journal-plus" aria-hidden="true"></i></div><h2>Nenhum tópico encontrado.</h2><p>Altere os filtros ou crie uma nova orientação.</p>{% if cms_disponivel %}<a href="{{ url_for('admin.guia_novo') }}" class="btn-nexo">Novo tópico</a>{% endif %}</div></div>
+    {% else %}
+    <div class="guia-cms-lista">
+        {% for t in topicos %}
+        <article class="nexo-card guia-cms-topico" aria-labelledby="guiaTopico{{ t.id }}">
+            <div class="guia-cms-cabecalho">
+                <div><span class="cat-badge">{{ t.categoria }}</span><h2 id="guiaTopico{{ t.id }}">{{ t.pergunta }}</h2></div>
+                <div class="guia-cms-acoes">
+                    {% if t.status == 'publicado' %}<span class="nexo-badge b-green"><span class="dot"></span>Publicado</span>{% elif t.status == 'excluido' %}<span class="nexo-badge b-muted">Excluído recuperável</span>{% elif t.status == 'despublicado' %}<span class="nexo-badge b-amber">Despublicado</span>{% else %}<span class="nexo-badge b-muted">Rascunho</span>{% endif %}
+                    {% if t.id in suspeitos %}<span class="nexo-badge b-amber" title="{{ suspeitos[t.id] }}">Possível teste</span>{% endif %}
+                </div>
+            </div>
+            <p class="guia-cms-resumo">{{ t.descricao or t.resposta | truncate(220, true) }}</p>
+            <dl class="guia-cms-dados">
+                <div><dt>Conteúdo</dt><dd>{{ t.tipo_conteudo or 'Texto' }}</dd></div><div><dt>Posição na categoria</dt><dd>{{ t.ordem }}</dd></div>
+                <div><dt>Criado em</dt><dd>{{ m.horario(t.data_criacao) }}</dd></div><div><dt>Atualizado em</dt><dd>{{ m.horario(t.data_atualizacao) }}</dd></div>
+            </dl>
+            {% if cms_disponivel %}
+            <div class="guia-cms-acoes">
+                <a href="{{ url_for('admin.guia_previa', id=t.id) }}" class="btn-ghost btn-sm-x"><i class="bi bi-eye" aria-hidden="true"></i> Visualizar</a>
+                {% if t.status == 'excluido' %}
+                <form method="POST" action="{{ url_for('admin.guia_publicacao', id=t.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="versao" value="{{ t.versao }}"><button type="submit" name="acao" value="restaurar" class="btn-ghost btn-sm-x"><i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i> Restaurar como rascunho</button></form>
+                {% else %}
+                <a href="{{ url_for('admin.guia_editar', id=t.id) }}" class="btn-ghost btn-sm-x" aria-label="Editar tópico: {{ t.pergunta }}"><i class="bi bi-pencil" aria-hidden="true"></i> Editar</a>
+                <form method="POST" action="{{ url_for('admin.guia_publicacao', id=t.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="versao" value="{{ t.versao }}">{% if t.ativo %}<button type="submit" name="acao" value="despublicar" class="btn-ghost btn-sm-x"><i class="bi bi-eye-slash" aria-hidden="true"></i> Retirar de publicação</button>{% else %}<button type="submit" name="acao" value="publicar" class="btn-nexo btn-sm-x"><i class="bi bi-send" aria-hidden="true"></i> Publicar</button>{% endif %}</form>
+                <form method="POST" action="{{ url_for('admin.guia_deletar', id=t.id) }}" data-confirm="Remover este tópico do Guia? Ele será retirado da publicação e poderá ser restaurado pelo filtro de excluídos."><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="versao" value="{{ t.versao }}"><button type="submit" class="btn-ghost is-danger btn-sm-x" aria-label="Excluir tópico: {{ t.pergunta }}"><i class="bi bi-trash" aria-hidden="true"></i> Excluir</button></form>
+                {% endif %}
+            </div>
+            {% endif %}
+        </article>
+        {% endfor %}
     </div>
+    {% endif %}
 </div>
-{% else %}
-<div class="table-wrap">
-    <div class="table-responsive-x">
-        <table class="nexo-table">
-            <thead><tr><th>Categoria</th><th>Pergunta</th><th>Imagem</th><th>Status</th><th>Atualizado</th><th class="text-end">Ações</th></tr></thead>
-            <tbody>
-                {% for t in topicos %}
-                <tr>
-                    <td><span class="cat-badge">{{ t.categoria }}</span></td>
-                    <td class="t-strong">{{ t.pergunta }}</td>
-                    <td>{% if t.imagem_url %}<i class="bi bi-image text-purple" title="Possui imagem"></i>{% else %}<span class="t-dim">—</span>{% endif %}</td>
-                    <td>{% if t.ativo %}<span class="nexo-badge b-green"><span class="dot"></span>Ativo</span>{% else %}<span class="nexo-badge b-muted">Inativo</span>{% endif %}
-                        {% if t.id in suspeitos %}<span class="nexo-badge b-amber" title="{{ suspeitos[t.id] }}"><span class="dot"></span>Possível teste</span>{% endif %}</td>
-                    <td class="t-mut t-mono">{{ (t.data_atualizacao or t.data_criacao).strftime('%d/%m/%Y') }}</td>
-                    <td class="text-end">
-                        <div class="acoes">
-                            <a href="{{ url_for('admin.guia_editar', id=t.id) }}" class="btn-ghost btn-sm-x" aria-label="Editar tópico: {{ t.pergunta }}"><i class="bi bi-pencil" aria-hidden="true"></i> Editar</a>
-                            {# SEC-010: sem manipulador inline; base.html confirma via data-confirm (CSP). #}
-                            <form method="POST" action="{{ url_for('admin.guia_deletar', id=t.id) }}" style="display:inline;"
-                                  data-confirm="Remover este tópico da Base de Conhecimento?">
-                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                <button type="submit" class="btn-ghost is-danger btn-sm-x" title="Remover tópico" aria-label="Remover tópico: {{ t.pergunta }}"><i class="bi bi-trash" aria-hidden="true"></i></button>
-                            </form>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
-</div>
-{% endif %}
 {% endblock %}

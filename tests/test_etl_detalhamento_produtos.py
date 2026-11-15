@@ -460,6 +460,8 @@ class PersistenciaEMigracaoTests(DeployTestCase):
 
     def test_downgrade_recusa_dados_e_remove_estruturas_vazias(self):
         from flask_migrate import downgrade, upgrade
+        # Isola a revisão sob teste de expansões posteriores, como o editor do Guia.
+        self._migrar(downgrade, "5a9c3e7d1b42")
         self.assertTrue(self._processar().sucesso)
         with self.assertLogs("flask_migrate", "ERROR") as registro, self.assertRaises(SystemExit):
             self._migrar(downgrade, "f4c2a8e1d9b6")
@@ -476,7 +478,7 @@ class PersistenciaEMigracaoTests(DeployTestCase):
         detalhamento_produtos.esquecer_esquema_detalhamento()
         self.assertTrue(self._processar().sucesso)
         self._migrar(upgrade, "head")
-        self.assertEqual(self.db.session.scalar(text("SELECT version_num FROM alembic_version")), "5a9c3e7d1b42")
+        self.assertEqual(self.db.session.scalar(text("SELECT version_num FROM alembic_version")), "c3e08eb3863a")
 
     def test_old_head_new_head_preserva_dados_existentes(self):
         from flask_migrate import downgrade, upgrade

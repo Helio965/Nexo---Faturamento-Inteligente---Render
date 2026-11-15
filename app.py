@@ -313,25 +313,58 @@ def create_app(config_name: str = None) -> Flask:
     # Expõe o classificador de badge ao template (mesma lógica do payload do socket).
     app.jinja_env.globals["badge_notif"] = classificar_notificacao
 
-    # URL das imagens do Guia (guardadas no banco via storage.py; referências
-    # legadas continuam servidas de static/).
+    # Mídias institucionais: clientes somente acessam publicações; ADMIN tem prévia privada.
     import storage
     app.jinja_env.globals["url_midia"] = storage.url_midia
 
     @app.route("/midia/<path:chave>")
     @login_required
     def midia(chave):
-        """Serve as imagens do Guia guardadas no banco. Restrito ao prefixo
-        guia/ — planilhas de clientes NUNCA saem por aqui."""
-        if not chave.startswith("guia/"):
+        import guia_cms
+        from guia_midias import servir_midia
+        if not guia_cms.pode_servir(chave, current_user):
             abort(404)
-        registro = storage.obter(chave)
-        if registro is None:
+        return servir_midia(chave)
+
+    @app.before_request
+    def proteger_midia_legada_guia():
+        """Normaliza aliases antes de encaminhar imagens antigas à rota autenticada."""
+        if request.endpoint != "static":
+            return None
+        nome = (request.view_args or {}).get("filename", "")
+        raiz = (Path(app.static_folder).resolve() / "uploads" / "guia").resolve()
+        try:
+            caminho = (Path(app.static_folder) / nome).resolve()
+        except (OSError, ValueError):
             abort(404)
-        resp = make_response(registro.conteudo)
-        resp.headers["Content-Type"] = registro.content_type or "application/octet-stream"
-        # Nome = hash do conteúdo: o mesmo URL sempre devolve os mesmos bytes.
-        resp.headers["Cache-Control"] = "private, max-age=86400"
+        if not caminho.is_relative_to(raiz):
+            return None
+        resposta = redirect(url_for("midia_legada_guia", nome=caminho.relative_to(raiz).as_posix()))
+        resposta.headers["Cache-Control"] = "private, no-store"
+        return resposta
+
+    @app.route("/midia-legada-guia/<path:nome>")
+    @login_required
+    def midia_legada_guia(nome):
+        """Aplica também as guardas de sessão e primeiro acesso às referências antigas."""
+        import guia_cms
+        from flask import send_file
+        from guia_midias import MAX_IMAGEM_ARMAZENADA_BYTES
+        if not storage.chave_valida("guia/" + nome):
+            abort(404)
+        referencia = "uploads/guia/" + nome
+        if not guia_cms.pode_servir_referencia(referencia, current_user):
+            abort(404)
+        raiz = Path(app.static_folder).resolve() / "uploads" / "guia"
+        caminho = (raiz / nome).resolve()
+        tipos = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp", ".gif": "image/gif"}
+        tipo = tipos.get(caminho.suffix.lower())
+        if not caminho.is_relative_to(raiz.resolve()) or not caminho.is_file() or not tipo:
+            abort(404)
+        if not 0 < caminho.stat().st_size <= MAX_IMAGEM_ARMAZENADA_BYTES:
+            abort(404)
+        resp = send_file(caminho, mimetype=tipo, conditional=True, max_age=0)
+        resp.headers["Cache-Control"] = "private, no-store"
         resp.headers["X-Content-Type-Options"] = "nosniff"
         resp.headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
         return resp

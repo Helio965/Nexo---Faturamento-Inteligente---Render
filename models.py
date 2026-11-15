@@ -21,7 +21,7 @@ from typing import Optional
 import uuid
 
 from sqlalchemy import (
-    String, Integer, Boolean, Date, DateTime, Numeric, Text, LargeBinary, Uuid,
+    String, Integer, Boolean, Date, DateTime, Numeric, Text, LargeBinary, Uuid, JSON,
     ForeignKey, ForeignKeyConstraint, CheckConstraint, UniqueConstraint, Index, false, text, true,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -1554,4 +1554,61 @@ class BrainstormingDadosPdv(db.Model):
         CheckConstraint('"vazamento_estimado_r$" >= 0', name="ck_brainstorming_dados_pdv_vazamento"),
         Index("ix_brainstorming_dados_pdv_lead", "lead_id"),
         Index("ix_brainstorming_dados_pdv_criado_em", "criado_em"),
+    )
+
+
+# =====================================================================
+# Guia editorial: extensões aditivas do CMS, sem alterar GuiaTopico legado
+# =====================================================================
+class GuiaEdicao(db.Model):
+    """Metadados editoriais do tópico global; ativo segue em GuiaTopico.
+
+    Os blocos e o histórico guardam apenas texto/identificadores de mídia, nunca
+    bytes de arquivos. Uma linha só é criada quando o tópico é editado pelo CMS.
+    A versão impede que dois formulários sobrescrevam silenciosamente um ao outro.
+    """
+    __tablename__ = "guia_edicao"
+
+    id_topico: Mapped[int] = mapped_column(
+        ForeignKey("guia_topico.id", ondelete="CASCADE", name="fk_guia_edicao_topico"), primary_key=True, autoincrement=False,
+    )
+    descricao: Mapped[str] = mapped_column(String(500), nullable=False, default="", server_default=text("''"))
+    ordem: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default=text("0"))
+    blocos: Mapped[Optional[list]] = mapped_column(JSON, nullable=True, default=list, server_default=text("'[]'"))
+    historico: Mapped[Optional[list]] = mapped_column(JSON, nullable=True, default=list, server_default=text("'[]'"))
+    publicado_em: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    excluido_em: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    versao: Mapped[int] = mapped_column(Integer, nullable=False, default=1, server_default=text("1"))
+
+    __table_args__ = (
+        CheckConstraint("ordem BETWEEN 0 AND 9999", name="ck_guia_edicao_ordem"),
+        CheckConstraint("versao > 0", name="ck_guia_edicao_versao"),
+        Index("ix_guia_edicao_ordem", "ordem", "id_topico"),
+    )
+    __mapper_args__ = {"version_id_col": versao}
+
+
+class GuiaMidia(db.Model):
+    """Referência persistente de mídia pertencente a um único tópico do Guia.
+
+    ArquivoArmazenado mantém os bytes na mesma transação. Blocos atuais e histórico
+    citam o identificador desta linha, permitindo preservar referências recuperáveis.
+    """
+    __tablename__ = "guia_midia"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    id_topico: Mapped[int] = mapped_column(
+        ForeignKey("guia_topico.id", ondelete="CASCADE", name="fk_guia_midia_topico"), nullable=False,
+    )
+    referencia: Mapped[str] = mapped_column(String(255), nullable=False)
+    tipo: Mapped[str] = mapped_column(String(10), nullable=False)
+    legenda: Mapped[str] = mapped_column(String(500), nullable=False, default="", server_default=text("''"))
+    alt: Mapped[str] = mapped_column(String(240), nullable=False, default="", server_default=text("''"))
+    data_criacao: Mapped[datetime] = mapped_column(DateTime, nullable=False, server_default=func.current_timestamp())
+
+    __table_args__ = (
+        CheckConstraint("tipo IN ('imagem', 'video')", name="ck_guia_midia_tipo"),
+        CheckConstraint("length(referencia) > 0", name="ck_guia_midia_referencia"),
+        Index("ix_guia_midia_topico", "id_topico"),
+        Index("ix_guia_midia_referencia", "referencia"),
     )

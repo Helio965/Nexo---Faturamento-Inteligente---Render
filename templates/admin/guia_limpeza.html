@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+
+{% block title %}Revisar conteúdos do Guia — NEXO Admin{% endblock %}
+{% block page_title %}Personalizar Guia{% endblock %}
+{% block extra_css %}
+<link href="{{ url_for('static', filename='css/nexo-guia.css') }}" rel="stylesheet">
+{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div>
+        <h1>Revisar conteúdos do Guia</h1>
+        <p class="sub">Inventário na ordem anterior à organização editorial: categoria e ID. A limpeza retira a publicação e conserva os dados.</p>
+    </div>
+    <div class="page-head-actions">
+        <a href="{{ url_for('admin.guia') }}" class="btn-ghost"><i class="bi bi-arrow-left" aria-hidden="true"></i> Voltar para Personalizar Guia</a>
+    </div>
+</div>
+
+{% if erro %}<div class="alert alert-danger" role="alert">{{ erro }}</div>{% endif %}
+{% if resultado %}
+<div class="alert alert-success" role="status">
+    {{ resultado.despublicados }} tópico(s) despublicado(s); {{ resultado.preservados }} preservado(s).
+    Nenhum registro ou mídia foi excluído. Para reverter, revise o tópico em Personalizar Guia e publique novamente.
+</div>
+{% endif %}
+
+<div class="nexo-card mb-4">
+    <div class="nexo-card-body">
+        <h2>Preservação e recuperação</h2>
+        <p>Upload e os tópicos legítimos anteriores à fronteira de testes ficam protegidos.
+           A identificação considera o marcador único <strong>EZ Test Guia</strong> e as famílias confirmadas <strong>ZZTESTE-guia / ZZTEST-guia</strong>.
+           Estar depois do marcador, por si só, não comprova que um tópico é indesejado.</p>
+        <p class="mb-0">Selecione os registros, revise individualmente os casos duvidosos e gere um backup.
+           A despublicação exige que esse backup tenha sido baixado nesta sessão. Se o Guia mudar, uma nova revisão será necessária.</p>
+    </div>
+</div>
+
+{% if backup_token and selecionados %}
+<div class="nexo-card mb-4">
+    <div class="nexo-card-body">
+        <h2>Confirmar a seleção revisada</h2>
+        <p>Somente os tópicos abaixo serão retirados da publicação. Textos, metadados e mídias permanecerão recuperáveis.</p>
+        <ul>
+            {% for item in inventario if item.id in selecionados %}
+            <li><strong>ID {{ item.id }} — {{ item.pergunta }}</strong> ({{ item.categoria }})</li>
+            {% endfor %}
+        </ul>
+        <p>
+            <a href="{{ url_for('admin.guia_limpeza_backup', token=backup_token) }}" class="btn-ghost" target="_blank" rel="noopener">
+                <i class="bi bi-download" aria-hidden="true"></i> Baixar backup recuperável (ZIP)
+            </a>
+        </p>
+        {% if backup_baixado %}
+        <p role="status">Backup gerado e disponibilizado para download nesta sessão.</p>
+        {% else %}
+        <p class="field-hint">Baixe o arquivo antes de confirmar. Guarde-o em local privado e confira o download; não o envie ao GitHub.</p>
+        {% endif %}
+        <form method="POST" action="{{ url_for('admin.guia_limpeza') }}" data-confirm="Despublicar somente os tópicos revisados desta seleção? Os dados e as mídias serão preservados.">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="acao" value="aplicar">
+            <input type="hidden" name="backup_token" value="{{ backup_token }}">
+            <label class="check-inline mb-3">
+                <input type="checkbox" name="confirmar_despublicacao" value="1" required>
+                Conferi a seleção e guardei o backup recuperável dos tópicos e das mídias.
+            </label>
+            <div class="d-flex flex-wrap gap-2">
+                <button class="btn-nexo" type="submit">Confirmar despublicação</button>
+                <a href="{{ url_for('admin.guia_limpeza') }}" class="btn-ghost">Cancelar e revisar novamente</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
+{% if inventario %}
+<form method="POST" action="{{ url_for('admin.guia_limpeza') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="acao" value="preparar">
+    <input type="hidden" name="fingerprint" value="{{ fingerprint }}">
+    <div class="table-wrap mb-3">
+        <div class="table-responsive-x">
+            <table class="nexo-table">
+                <caption class="visually-hidden">Todos os tópicos do Guia em ordem de categoria e ID, com classificação conservadora para a limpeza.</caption>
+                <thead><tr><th scope="col">Seleção</th><th scope="col">Ordem / ID</th><th scope="col">Conteúdo</th><th scope="col">Publicação</th><th scope="col">Classificação e ação prevista</th></tr></thead>
+                <tbody>
+                {% for item in inventario %}
+                <tr>
+                    <td data-label="Seleção">
+                        {% if item.classificacao == 'PRESERVAR' %}
+                        <span class="nexo-badge b-green"><i class="bi bi-shield-check" aria-hidden="true"></i> Protegido</span>
+                        {% else %}
+                        <label class="check-inline">
+                            <input type="checkbox" name="ids" value="{{ item.id }}" aria-label="Selecionar tópico {{ item.id }}: {{ item.pergunta }}">
+                            Selecionar
+                        </label>
+                        {% if item.classificacao == 'REVISAR' %}
+                        <label class="check-inline mt-2">
+                            <input type="checkbox" name="revisados" value="{{ item.id }}" aria-label="Confirmar revisão individual do tópico {{ item.id }}">
+                            Revisei este tópico e confirmei que é indesejado.
+                        </label>
+                        {% endif %}
+                        {% endif %}
+                    </td>
+                    <td class="t-mono" data-label="Ordem / ID">{{ item.ordem_visual }}º · ID {{ item.id }}</td>
+                    <td data-label="Conteúdo"><strong>{{ item.pergunta }}</strong><br><span class="t-mut">{{ item.categoria }}</span>
+                        {% if item.imagem_url %}<br><span class="field-hint">Possui mídia legada; será incluída no backup.</span>{% endif %}
+                    </td>
+                    <td data-label="Publicação">{{ 'Publicado' if item.ativo else 'Não publicado' }}</td>
+                    <td data-label="Classificação e ação prevista"><strong>{{ item.classificacao | replace('_', ' ') }}</strong><br>{{ item.motivo }}<br><span class="t-mut">{{ item.acao_prevista }}</span></td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <button class="btn-nexo" type="submit"><i class="bi bi-check2-square" aria-hidden="true"></i> Revisar seleção e preparar backup</button>
+</form>
+{% else %}
+<div class="nexo-card"><div class="empty-state"><h2>Nenhum tópico cadastrado.</h2><p>Nenhum registro foi alterado.</p></div></div>
+{% endif %}
+{% endblock %}

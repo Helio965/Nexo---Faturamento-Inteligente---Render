@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Prévia do Guia — NEXO Admin{% endblock %}
+{% block page_title %}Personalizar Guia{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{{ url_for('static', filename='css/nexo-guia.css') }}">{% endblock %}
+{% block content %}
+<div class="guia-cms guia-previsualizacao">
+    <div class="page-head"><div><h1>Prévia do tópico</h1><p class="sub">Confira a versão salva antes de disponibilizá-la aos clientes.</p></div><div class="page-head-actions"><a class="btn-ghost" href="{{ url_for('admin.guia') }}"><i class="bi bi-arrow-left" aria-hidden="true"></i> Voltar</a>{% if not topico.excluido and cms_disponivel %}<a class="btn-nexo" href="{{ url_for('admin.guia_editar', id=topico.id) }}"><i class="bi bi-pencil" aria-hidden="true"></i> Editar</a>{% endif %}</div></div>
+    <div class="guia-cms-aviso" role="status"><i class="bi bi-eye" aria-hidden="true"></i><p>Prévia administrativa. {{ 'Este tópico está publicado para todos os clientes.' if topico.ativo else 'Este tópico não está disponível aos clientes.' }}</p></div>
+    <article class="nexo-card"><div class="nexo-card-body"><span class="cat-badge">{{ topico.categoria }}</span><h2>{{ topico.pergunta }}</h2>{% if topico.descricao %}<p class="guia-resumo">{{ topico.descricao }}</p>{% endif %}{% set t = topico %}{% include "_guia_conteudo.html" %}</div></article>
+</div>
+{% endblock %}
+{% block extra_js %}<script defer src="{{ url_for('static', filename='js/guia-editor.js') }}"></script>{% endblock %}
