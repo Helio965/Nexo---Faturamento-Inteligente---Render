@@ -51,6 +51,9 @@
   --nexo-radius-xs: 8px;
   --nexo-shadow:    0 10px 30px -12px rgba(0, 0, 0, 0.6);
   --nexo-shadow-lg: 0 24px 60px -20px rgba(0, 0, 0, 0.7);
+
+  /* ---- Cabeçalho fixo: altura usada na rolagem até as âncoras ---- */
+  --nexo-header-height: 73px;
 }
 
 /* ============================================================
@@ -58,7 +61,12 @@
    ============================================================ */
 * { box-sizing: border-box; }
 
-html { scroll-behavior: smooth; scroll-padding-top: 100px; }
+html { scroll-behavior: smooth; }
+/* Com JavaScript, a rolagem suave começa quando a página termina de carregar:
+   no acesso direto por âncora, a posição inicial é imediata e acompanha as
+   mudanças de altura do carregamento (gráficos, fontes), em vez de uma animação
+   terminar no destino calculado antes delas. */
+html.landing-enhanced:not(.landing-smooth-scroll) { scroll-behavior: auto; }
 
 [hidden] { display: none !important; }
 
@@ -66,7 +74,19 @@ html { scroll-behavior: smooth; scroll-padding-top: 100px; }
 
 :focus-visible { outline: 3px solid #d4b1ff; outline-offset: 4px; }
 
-section[id], main[id], footer[id] { scroll-margin-top: 100px; }
+/* Âncoras e foco do teclado: o que a rolagem leva à vista para logo abaixo da
+   borda do cabeçalho fixo. Mecanismo único: scroll-margin-top com a altura real
+   do cabeçalho (--nexo-header-height) em todo o conteúdo fora do cabeçalho. O
+   landing.js mede o cabeçalho e atualiza a variável (largura, fontes, zoom e
+   menu móvel); os valores desta folha valem sem JavaScript e antes da primeira
+   medição, por faixa de largura (seção 15), com a fonte padrão do navegador.
+   Sem scroll-padding na raiz: ele se somaria à margem e, no Chromium, desloca
+   a posição restaurada por Voltar/Avançar e faz o foco num link do próprio
+   cabeçalho rolar a página. */
+main, main *, footer, footer * { scroll-margin-top: var(--nexo-header-height); }
+/* Controles focáveis: mais 8 px, para o contorno de foco (3 px e 4 px de
+   afastamento) aparecer inteiro abaixo do cabeçalho. */
+:is(main, footer) :is(a[href], button, input, select, textarea, summary, [tabindex]) { scroll-margin-top: calc(var(--nexo-header-height) + 8px); }
 
 .container { width: 100%; max-width: 1160px; margin-inline: auto; padding-inline: 24px; }
 
@@ -537,6 +557,7 @@ section { padding: 80px 0; position: relative; }
   #process-demo .summary-chart-card { margin-bottom: 0; }
 }
 @media (max-width: 1100px) {
+  :root { --nexo-header-height: 71px; }
   .nexo-header-inner { gap: 16px; }
   .nav-links { gap: 10px; }
   .nav-links a { font-size: 0.8rem; }
@@ -545,6 +566,8 @@ section { padding: 80px 0; position: relative; }
   .report-blocks { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 @media (max-width: 992px) {
+  /* Sem JavaScript, os links ficam abertos no cabeçalho (segunda linha). */
+  :root { --nexo-header-height: 186px; }
   .nexo-header-inner { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; }
   .nexo-header-inner > .brand { grid-column: 1; grid-row: 1; }
   .header-actions { grid-column: 2; grid-row: 1; }
@@ -567,6 +590,7 @@ section { padding: 80px 0; position: relative; }
   .report-blocks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
+  :root { --nexo-header-height: 226px; }
   .container { padding-inline: 20px; }
   section { padding: 64px 0; }
   .hero { padding: 52px 0 60px; }
