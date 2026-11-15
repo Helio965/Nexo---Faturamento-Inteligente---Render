@@ -341,3 +341,121 @@ Para remover fisicamente o esquema editorial, fazer backup e recuperação de en
 - Homologação em outros navegadores, dispositivos físicos e tecnologias assistivas.
 
 O código recupera o acesso administrativo e oferece gerenciamento institucional de texto e mídias pela interface, com publicação global, controles de segurança e recuperação. O projeto empresarial permanece fora do escopo. Nenhum merge automático, deploy manual, ajuste do Render ou migração hospedada foi executado.
+
+## 12. Correção complementar: falha de validação MP4 no GitHub Actions
+
+### 12.1. Identificação e falha original
+
+- Data da correção: **2026-11-15**, fuso `America/Sao_Paulo`.
+- Mesmo PR [#51](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/51) e mesma branch `feature/restaurar-personalizar-guia-midias`.
+- Commit corretivo do validador: **`0d1382435ed7161a86067cf99c694812cd3567ac`**, `fix(guia): limita arenas do validador MP4 sem ampliar recursos`.
+- Execução original: [#168 / 43676493437](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/43676493437), HEAD `2b7e516cf0941208d41b74c30051d296c6f12efc`.
+- Resultado original: PostgreSQL e SCA/SAST aprovados; `security-sqlite-browser` falhou. A suíte encontrou **1.801 testes, duas falhas, um erro e uma captura opcional ignorada**, em 1.689,388 s.
+
+O primeiro erro era a rejeição do MP4 H.264/AAC válido em `_rodar_validador("decode")`. No navegador, a mesma rejeição provocava HTTP 400 na criação do tópico, impedindo o redirecionamento esperado. O registro de HTTP 400 no console era reportado também pelo `tearDown`, formando a segunda falha. Não eram três causas funcionais independentes.
+
+### 12.2. Causa técnica e reprodução compatível
+
+O validador já limitava a memória virtual do processo com **`RLIMIT_AS=512 MiB`**. O FFmpeg e bibliotecas nativas utilizam threads e arenas do alocador da glibc; essas arenas podem reservar grandes regiões virtuais mesmo quando a memória residente efetivamente usada é pequena. A reserva deixava margem insuficiente para o processamento do MP4 válido, que encerrava a filtragem com código **245** e a mensagem técnica `Error while filtering: Resource temporarily unavailable`.
+
+A reprodução foi feita em ambiente descartável **Ubuntu 24.04**, FFmpeg do pacote **`7:6.1.1-3ubuntu5`** e Python **3.12.3**, com as dependências da aplicação e, para o navegador, Google Chrome **157** nativo do Ubuntu. A execução real do GitHub utilizou Ubuntu 24.04.5/Python 3.12.16 e o mesmo pacote FFmpeg 6.1.1. A aprovação posterior no runner real confirma a compatibilidade, além dos ensaios locais.
+
+Para tornar a pressão virtual reproduzível, os ensaios controlaram a stack herdada do processo para 16 MiB e 32 MiB, **sem alterar os limites originais do worker**. A stack efetiva do runner que falhou não foi registrada e não é apresentada como um valor observado. Essas variantes demonstram o mecanismo de falha por reserva virtual no ambiente suportado.
+
+| Ensaio Ubuntu 24.04/FFmpeg 6.1.1 | Worker original | Somente `MALLOC_ARENA_MAX=1` no filho |
+| --- | --- | --- |
+| MP4 válido, stack herdada de 16 MiB, 200 decodificações | 179 falhas, saída 245 | 200 aprovadas, zero falhas |
+| MP4 válido, stack herdada de 32 MiB, 200 decodificações | 76 falhas, saída 245 | 200 aprovadas, zero falhas |
+| Perfil medido com stack de 16 MiB | Pico virtual de 523.052 KiB; RSS próximo de 64 MiB | Pico virtual de 343.220 KiB; RSS semelhante |
+
+O teto continua em 512 MiB. O ajuste reduz a reserva virtual aproximadamente de 511 MiB para 335 MiB, sem disponibilizar mais memória ou CPU ao arquivo enviado.
+
+### 12.3. Alterações pontuais e diagnóstico controlado
+
+Somente quatro arquivos foram corrigidos nesta etapa complementar:
+
+| Arquivo | Alteração e justificativa |
+| --- | --- |
+| `guia_midias.py` | `_rodar_validador` passa `MALLOC_ARENA_MAX=1` exclusivamente no ambiente dos filhos; o ambiente do servidor permanece intacto. Captura stderr em arquivo temporário limitado, lê no máximo 4.096 bytes e converte o diagnóstico em classificação técnica. A exceção conserva apenas operação, código de saída e classificação, sem guardar/logar stderr, caminhos, nomes ou conteúdo privado. |
+| `tests/test_guia_midias.py` | Acrescenta três verificações de ambiente exclusivo do filho, diagnóstico sem dados privados e preservação dos limites/argumentos de segurança. O teste real de MP4 válido inclui diagnóstico técnico seguro quando falha; continua exigindo aceitação e bytes preservados. |
+| `tests/test_guia_navegador.py` | Exige o HTTP **302 real** do POST e o redirecionamento para a listagem. Na falha, coleta somente as mensagens visíveis de validação; elementos auxiliares ocultos não provocam erro de seleção estrita nem mascaram o HTTP recebido. Não aceita HTTP 400 como sucesso. |
+| `POSSIVEIS ATUALIZAÇÕES EMPRESA/2026-11-15_Restauracao_Personalizar_Guia_e_Midias.md` | Acrescenta esta seção, preservando integralmente o registro anterior da implementação. |
+
+O stderr bruto permanece somente no arquivo temporário privado durante a chamada e é descartado ao encerrá-la. A classificação não muda a decisão de segurança: **qualquer retorno não zero continua sendo rejeitado**. Não foram habilitados logs verbosos de mídias hospedadas.
+
+Permanecem inalterados:
+
+- `RLIMIT_AS`: 512 MiB; `RLIMIT_CPU`: 8/9 s no probe e 20/21 s na decodificação.
+- `RLIMIT_FSIZE`: 128 KiB; `RLIMIT_NOFILE`: 64; timeouts de 10 s e 30 s.
+- `-max_alloc 67108864`, threads e filtragem limitadas a uma, `-xerror` e `-err_detect explode`.
+- Demuxer MOV/MP4 explícito, protocolos `file,pipe`, referências externas desabilitadas.
+- Upload de até 8 MiB, duração de até 180 s, resolução de até 1920 × 1080 e até 60 fps, H.264/AAC, decodificação efetiva e recusa de arquivos inválidos.
+- Semáforo de validação, admissão de lote editorial, transação, persistência, autorização e CSRF.
+
+### 12.4. Relação comprovada com o HTTP 400
+
+O mesmo formulário real, com administrador fictício autenticado, CSRF válido e vídeo sintético de quatro segundos, foi submetido ao backend no Ubuntu 24.04:
+
+| Estado | HTTP e validador | Estado persistido |
+| --- | --- | --- |
+| Worker original sob pressão virtual controlada | Probe 0, decode 245; HTTP 400 com a mensagem de rejeição do vídeo | Zero tópicos, edições, mídias e blobs; transação desfeita |
+| Worker corrigido, mesmo ambiente e arquivo | Probe 0, decode 0; HTTP 302 para `/admin/guia` | Um tópico publicado, uma edição, uma mídia e um blob persistente |
+
+Portanto, o 400 era causado pela validação de vídeo. Não se alteraram CSRF, autenticação, permissões ou regras do formulário para obter o redirecionamento.
+
+### 12.5. Testes e resultados posteriores
+
+Os testes específicos foram executados nesta ordem:
+
+```bash
+.venv/bin/python -B -m unittest \
+  tests.test_guia_midias.ValidacaoVideosGuiaTests.test_mp4_h264_aac_real_e_decodificado_e_preservado -v
+
+.venv/bin/python -B -m unittest tests.test_guia_midias -v
+
+NEXO_TEST_BROWSER=1 NEXO_TEST_CHROMIUM=/usr/bin/chromium \
+NEXO_TEST_CDN_DIR=/tmp/nexo-cdn .venv/bin/python -B -m unittest \
+  tests.test_guia_navegador.GuiaNavegadorTests.test_video_mp4_persistente_reproduz_pausa_busca_volume_e_tela_cheia -v
+
+NEXO_TEST_BROWSER=1 NEXO_TEST_CHROMIUM=/usr/bin/chromium \
+NEXO_TEST_CDN_DIR=/tmp/nexo-cdn \
+NEXO_TEST_POSTGRES_BIN=/tmp/nexo-pg17-tools/usr/lib/postgresql/17/bin \
+.venv/bin/python -B -m unittest discover -s tests -t . -v
+```
+
+| Verificação | Resultado efetivamente observado |
+| --- | --- |
+| MP4 real específico, ambiente local | 1 aprovado em 0,281 s |
+| Módulo de mídias, ambiente local | 24 aprovados em 3,518 s, sem falhas ou skips |
+| MP4 real específico no Ubuntu 24.04/FFmpeg 6.1.1, stack de 16 MiB | 1 aprovado em 0,167 s |
+| Módulo de mídias no Ubuntu, stack de 16 MiB | 24 aprovados em 3,243 s |
+| Módulo de mídias no Ubuntu, stack de 32 MiB | 24 aprovados em 4,057 s |
+| Navegador específico local | Aprovado em 9,720 s; após aperfeiçoar a coleta dos alertas, aprovado novamente em 13,006 s |
+| Navegador específico nativo Ubuntu 24.04/Chrome 157/FFmpeg 6.1.1 | Aprovado em 18,047 s; repetido após o ajuste de coleta dos alertas: aprovado em 7,745 s |
+| Suíte completa local | **1.804 descobertos em 1.679,209 s: zero falhas/erros, uma captura opcional ignorada** |
+| Suíte completa no GitHub Actions #169 | **1.804 descobertos em 2.041,799 s: zero falhas/erros, uma captura opcional ignorada** |
+
+O navegador comprova criação/publicação, POST 302, acesso pelo cliente, play, pausa, volume, busca, tela cheia, persistência após atualização/remoção do arquivo de origem, Range HTTP e ausência de erros JavaScript/HTTP inesperados. Os testes de arquivos disfarçados, corrompidos, codecs incompatíveis, duração/resolução/fps, concorrência e timeouts continuam exigindo rejeição.
+
+Os logs e imagens de reprodução ficaram somente em diretórios temporários, sem mídias reais: `/tmp/nexo-mp4-ubuntu24/`, `/tmp/nexo-mp4-corrigido-midias.log`, `/tmp/nexo-mp4-suite-completa.log` e `/tmp/nexo-mp4-diagnostico-final.log`. Não foram adicionados ao Git.
+
+### 12.6. GitHub Actions verificado
+
+A [execução #169 / 43681460058](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/43681460058), sobre o commit corretivo **`0d1382435ed7161a86067cf99c694812cd3567ac`**, terminou com **SUCCESS**:
+
+- [security-sqlite-browser](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/43681460058/job/132712784097): **SUCCESS**; ambos os testes MP4 anteriormente falhos passaram.
+- [security-postgresql](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/43681460058/job/132712784279): **SUCCESS**.
+- [security-sca-sast](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/actions/runs/43681460058/job/132712784249): **SUCCESS**.
+
+Esse resultado foi consultado para o SHA indicado e não inferido a partir do sistema operacional local. A coleta de alertas visíveis do teste e este registro são versionados em commit posterior, sem mudança adicional no validador; seus checks também devem ser conferidos no [PR #51](https://github.com/Helio965/Nexo---Faturamento-Inteligente---Render/pull/51/checks).
+
+### 12.7. Reprodução empresarial futura e reversão pontual
+
+1. Examinar o validador empresarial existente e seus limites, sem substituir arquivos completos nem clonar esta base sobre ele.
+2. Confirmar a distribuição, versão do FFmpeg/ffprobe, glibc, ambiente do subprocesso e limites herdados. Fazer a reprodução somente com MP4 sintético e banco descartável.
+3. Se houver o mesmo mecanismo de reserva virtual, acrescentar o limite de arenas **no ambiente passado ao subprocesso**. Preservar os tetos de segurança; não criar uma variável global do serviço nem ampliar RAM/CPU para contornar o problema.
+4. Adaptar o diagnóstico restrito, preservando o descarte de stderr bruto e a rejeição de qualquer saída não zero.
+5. Executar o MP4 válido, os arquivos inválidos, todos os limites e o formulário completo com CSRF, POST 302, persistência e reprodução real no sistema operacional de destino. Executar a regressão e consultar a CI do commit empresarial próprio.
+6. Para reverter esta correção, revisar somente o ambiente do validador, o diagnóstico técnico e seus testes específicos. Considerar que retirar o limite de arenas pode restabelecer a rejeição indevida; não reverter o CMS ou sua migração.
+
+Continuam pendentes a configuração/validação de FFmpeg no runtime do Render e as demais ativações hospedadas já descritas. Esta correção não instalou binários no Render, não realizou deploy ou merge, não executou SQL no Supabase e não acessou o projeto empresarial.

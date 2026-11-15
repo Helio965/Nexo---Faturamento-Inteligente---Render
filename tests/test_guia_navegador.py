@@ -70,8 +70,8 @@ class GuiaNavegadorTests(navegador.NavegadorCase):
         with pagina.expect_response(lambda r: r.request.method == "POST" and "/admin/guia" in r.url) as envio, \
                 pagina.expect_navigation(wait_until="load"):
             pagina.locator("#guiaSalvar").click()
-        alerta = pagina.locator(".guia-cms-erro[role=alert]")
-        mensagem = alerta.inner_text() if alerta.count() else ""
+        alertas = pagina.locator(".guia-cms-erro[role=alert]:visible")
+        mensagem = "; ".join(alertas.all_inner_texts())
         self.assertEqual(envio.value.status, 302, f"Publicação retornou HTTP {envio.value.status}: {mensagem}")
         self.assertTrue(pagina.url.endswith("/admin/guia"), pagina.url)
 
