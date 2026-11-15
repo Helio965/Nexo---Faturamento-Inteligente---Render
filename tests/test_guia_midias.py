@@ -6,6 +6,7 @@ exercita o entregador após a autorização (testada separadamente nas rotas CMS
 
 from io import BytesIO
 from pathlib import Path
+import os
 import shutil
 import subprocess
 import tempfile
@@ -129,7 +130,10 @@ class ValidacaoVideosGuiaTests(unittest.TestCase):
         return caminho.read_bytes()
 
     def test_mp4_h264_aac_real_e_decodificado_e_preservado(self):
-        resultado = midias.validar_upload(upload(self.valido, "tutorial.mp4"))
+        try:
+            resultado = midias.validar_upload(upload(self.valido, "tutorial.mp4"))
+        except midias.GuiaMidiaErro as erro:
+            self.fail(f"MP4 válido rejeitado: etapa={erro.operacao}; código={erro.codigo_saida}; motivo={erro.motivo}")
         self.assertEqual(resultado.conteudo, self.valido)
         self.assertEqual((resultado.tipo, resultado.content_type, resultado.extensao), ("video", "video/mp4", "mp4"))
 
@@ -155,6 +159,55 @@ class ValidacaoVideosGuiaTests(unittest.TestCase):
         with patch.object(midias.subprocess, "run", side_effect=subprocess.TimeoutExpired("validador", 10)):
             with self.assertRaisesRegex(midias.GuiaMidiaErro, "limites do servidor"):
                 midias.validar_upload(upload(self.valido, "tutorial.mp4"))
+
+
+class ExecucaoValidadorGuiaTests(unittest.TestCase):
+    def test_uma_arena_apenas_no_filho_sem_ampliar_limites(self):
+        def executar(comando, **opcoes):
+            self.assertEqual(opcoes["env"]["MALLOC_ARENA_MAX"], "1")
+            self.assertEqual(opcoes["timeout"], 30)
+            self.assertTrue(opcoes["start_new_session"])
+            self.assertEqual(opcoes["stdin"], subprocess.DEVNULL)
+            self.assertEqual(comando[-3:], ["decode", "/bin/ffmpeg-sintetico", "/sintetico.mp4"])
+            return subprocess.CompletedProcess(comando, 0)
+
+        with patch.dict(os.environ, {"MALLOC_ARENA_MAX": "64"}), \
+                patch.object(midias.shutil, "which", return_value="/bin/ffmpeg-sintetico"), \
+                patch.object(midias.subprocess, "run", side_effect=executar):
+            self.assertEqual(midias._rodar_validador("decode", "/sintetico.mp4"), b"")
+            self.assertEqual(os.environ["MALLOC_ARENA_MAX"], "64")
+
+    def test_falha_retem_somente_etapa_codigo_e_classificacao_sem_stderr_privado(self):
+        def executar(comando, **opcoes):
+            opcoes["stderr"].write(b"Resource temporarily unavailable /privado/nome-secreto.mp4 credencial-secreta\n")
+            return subprocess.CompletedProcess(comando, 245)
+
+        with patch.object(midias.shutil, "which", return_value="/bin/ffmpeg-sintetico"), \
+                patch.object(midias.subprocess, "run", side_effect=executar), \
+                self.assertRaises(midias.GuiaMidiaErro) as falha:
+            midias._rodar_validador("decode", "/sintetico.mp4")
+        erro = falha.exception
+        self.assertEqual((erro.operacao, erro.codigo_saida, erro.motivo), ("decode", 245, "recursos"))
+        self.assertNotIn("nome-secreto", str(erro) + repr(vars(erro)))
+        self.assertNotIn("credencial-secreta", str(erro) + repr(vars(erro)))
+
+    @unittest.skipUnless(os.name == "posix", "Limites POSIX do worker.")
+    def test_worker_preserva_memoria_cpu_saida_descritores_e_restricoes_ffmpeg(self):
+        import resource
+        with patch.object(resource, "setrlimit") as limitar, patch.object(midias.os, "execv") as executar:
+            midias._processo_video("decode", "/bin/ffmpeg-sintetico", "/sintetico.mp4")
+        limites = dict(chamada.args for chamada in limitar.call_args_list)
+        self.assertEqual(limites[resource.RLIMIT_AS], (512 * 1024 * 1024,) * 2)
+        self.assertEqual(limites[resource.RLIMIT_CPU], (20, 21))
+        self.assertEqual(limites[resource.RLIMIT_FSIZE], (128 * 1024,) * 2)
+        self.assertEqual(limites[resource.RLIMIT_NOFILE], (64, 64))
+        argumentos = executar.call_args.args[1]
+        for flag, valor in (("-max_alloc", "67108864"), ("-f", "mov"),
+                            ("-protocol_whitelist", "file,pipe"), ("-enable_drefs", "0"),
+                            ("-use_absolute_path", "0"), ("-filter_threads", "1"), ("-err_detect", "explode")):
+            self.assertEqual(argumentos[argumentos.index(flag) + 1], valor)
+        self.assertIn("-xerror", argumentos)
+        self.assertEqual([argumentos[i + 1] for i, arg in enumerate(argumentos) if arg == "-threads"], ["1", "1"])
 
 
 class EntregaMidiasGuiaTests(DeployTestCase):

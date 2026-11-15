@@ -59,6 +59,13 @@ _RANGE = re.compile(r"bytes=(\d*)-(\d*)\Z", re.ASCII)
 class GuiaMidiaErro(ValueError):
     """Arquivo inválido, acima do limite ou validador indisponível."""
 
+    def __init__(self, mensagem, *, operacao=None, codigo_saida=None, motivo=None):
+        super().__init__(mensagem)
+        # Diagnóstico técnico restrito: nunca retém stderr, nome ou conteúdo da mídia.
+        self.operacao = operacao
+        self.codigo_saida = codigo_saida
+        self.motivo = motivo
+
 
 @dataclass(frozen=True)
 class MidiaValidada:
@@ -117,6 +124,17 @@ def _validar_imagem(conteudo, extensao):
         raise GuiaMidiaErro("Imagem inválida ou corrompida. Envie PNG, JPEG, WebP ou GIF íntegro.") from erro
 
 
+def _motivo_validador(codigo, diagnostico):
+    texto = diagnostico.lower()
+    if b"cannot allocate memory" in texto or b"resource temporarily unavailable" in texto:
+        return "recursos"
+    if b"unrecognized option" in texto or b"option not found" in texto:
+        return "opcao_incompativel"
+    if codigo < 0:
+        return "sinal"
+    return "decodificacao"
+
+
 def _rodar_validador(operacao, caminho):
     binario = shutil.which("ffprobe" if operacao == "probe" else "ffmpeg")
     if not binario:
@@ -125,13 +143,21 @@ def _rodar_validador(operacao, caminho):
     # preexec_fn (inseguro em um servidor com várias threads).
     comando = [sys.executable, "-I", str(Path(__file__).resolve()), "--processo-video",
                operacao, binario, str(caminho)]
+    # As arenas de malloc por thread reservam memória VIRTUAL mesmo com RSS
+    # pequeno. No FFmpeg 6.1.1 elas deixam pouca margem sob RLIMIT_AS=512 MiB.
+    # Uma arena reduz essa reserva sem ampliar nenhum limite do worker. A
+    # configuração é exclusiva dos processos filhos, inclusive após exec().
+    ambiente = dict(os.environ, MALLOC_ARENA_MAX="1")
     try:
-        with tempfile.TemporaryFile() as saida:
+        with tempfile.TemporaryFile() as saida, tempfile.TemporaryFile() as diagnostico:
             resultado = subprocess.run(comando, stdin=subprocess.DEVNULL, stdout=saida,
-                                       stderr=subprocess.DEVNULL, timeout=10 if operacao == "probe" else 30,
+                                       stderr=diagnostico, env=ambiente, timeout=10 if operacao == "probe" else 30,
                                        check=False, start_new_session=True)
             if resultado.returncode:
-                raise GuiaMidiaErro("Vídeo inválido, corrompido ou acima dos recursos permitidos para validação.")
+                diagnostico.seek(0)
+                motivo = _motivo_validador(resultado.returncode, diagnostico.read(4096))
+                raise GuiaMidiaErro("Vídeo inválido, corrompido ou acima dos recursos permitidos para validação.",
+                                   operacao=operacao, codigo_saida=resultado.returncode, motivo=motivo)
             saida.seek(0)
             dados = saida.read(_MAX_SAIDA_VALIDADOR + 1)
             if len(dados) > _MAX_SAIDA_VALIDADOR:
