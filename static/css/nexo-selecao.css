@@ -1,0 +1,23 @@
+/* Política visual compartilhada pela landing, autenticação e portal NEXO.
+   Não protege dados: apenas evita seleção acidental da apresentação.
+   Não altera eventos de ponteiro, teclado, área de transferência ou foco. */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Controles nativos (inclusive readonly) e editores sem dependência de classes.
+   Descendentes de um editor mantêm a seleção pelo valor usado de user-select:
+   auto acompanha o ancestral. Novos campos dinâmicos recebem a mesma regra. */
+body :where(input, textarea, select, option,
+            [contenteditable=""], [contenteditable="true" i],
+            [contenteditable="plaintext-only" i], [role="textbox"]) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* Ilhas explicitamente não editáveis dentro de editores são apresentação. */
+body [contenteditable="false" i] {
+  -webkit-user-select: none;
+  user-select: none;
+}
