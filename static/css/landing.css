@@ -55,8 +55,8 @@
   /* ---- Cabeçalho fixo: altura usada na rolagem até as âncoras ----
      Reserva sem JavaScript, com a composição do cabeçalho em cada faixa:
      borda de 1 px + padding vertical + item mais alto da linha (marca, links
-     ou botão Acessar Portal, cuja altura é a linha do texto + 24 px) e, até
-     992 px, a segunda linha com os links. Em rem, acompanha a fonte padrão do
+     ou botão Acessar Portal: linha do texto + 24 px, no mínimo 44 px) e, até
+     992 px, as linhas com os links. Em rem, acompanha a fonte padrão do
      navegador; com JavaScript, vale a altura medida pelo landing.js. */
   --nexo-header-height: calc(25px + max(44px, 2.871rem, 1.518rem + 24px));
 }
@@ -572,7 +572,7 @@ section { padding: 80px 0; position: relative; }
 }
 @media (max-width: 992px) {
   /* Sem JavaScript, os links ficam abertos no cabeçalho, em duas linhas de três. */
-  :root { --nexo-header-height: calc(52px + max(40px, 1.683rem, 1.386rem + 24px) + 2 * max(44px, 1.485rem + 20px)); }
+  :root { --nexo-header-height: calc(52px + max(44px, 1.683rem, 1.386rem + 24px) + 2 * max(44px, 1.485rem + 20px)); }
   .nexo-header-inner { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; }
   .nexo-header-inner > .brand { grid-column: 1; grid-row: 1; }
   .header-actions { grid-column: 2; grid-row: 1; }

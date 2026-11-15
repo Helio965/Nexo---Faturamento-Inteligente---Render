@@ -8,10 +8,11 @@ maior, sem JavaScript e com movimento reduzido.
 
 Tolerância de 1 px: a posição de rolagem é arredondada para pixels inteiros e as
 posições do layout são fracionárias, então o início da seção pode ficar até meio
-pixel acima ou abaixo da borda do cabeçalho. Dois casos somam um segundo
-arredondamento e usam 2 px: sem JavaScript (valem as alturas do cabeçalho escritas
-na folha de estilos, em pixels inteiros arredondados para baixo) e depois de o
-navegador compensar uma mudança de altura acima da seção (ancoragem de rolagem).
+pixel acima ou abaixo da borda do cabeçalho. Usam 2 px: o alinhamento depois de o
+navegador compensar uma mudança de altura acima da seção (ancoragem de rolagem,
+um segundo arredondamento) e a navegação sem JavaScript, em que vale a reserva
+calculada pela folha de estilos a partir da composição do cabeçalho, com margem
+para diferenças de métrica de fonte entre ambientes.
 """
 
 import os
