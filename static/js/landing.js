@@ -1,7 +1,25 @@
 /* COM-001: navegação e estrutura de avaliações independem do CDN de gráficos. */
 (function () {
   'use strict';
-  document.documentElement.classList.add('landing-enhanced');
+  var htmlRoot = document.documentElement;
+  htmlRoot.classList.add('landing-enhanced');
+  /* Âncoras: --nexo-header-height (scroll-margin-top no landing.css) segue a
+     altura real do cabeçalho fixo em qualquer largura, fonte, zoom ou estado do
+     menu, para o início da seção parar logo abaixo da borda do cabeçalho. */
+  var header = document.querySelector('.nexo-header');
+  var demoFrame = document.getElementById('nexo-demo-frame');
+  var syncedHeight = 0;
+  function syncHeaderOffset() {
+    var height = header ? header.getBoundingClientRect().height : 0;
+    if (!(height > 0) || height === syncedHeight) return;
+    syncedHeight = height;
+    htmlRoot.style.setProperty('--nexo-header-height', height + 'px');
+    // O vídeo reserva o cabeçalho pela mesma medida (--nexo-demo-header, que o
+    // landing-video.js regrava no quadro seguinte). Gravada já aqui, a altura
+    // do vídeo fica definitiva antes de o navegador calcular a rolagem até uma
+    // seção abaixo dele (menu móvel em telas baixas, como o celular deitado).
+    if (demoFrame) demoFrame.style.setProperty('--nexo-demo-header', Math.ceil(height) + 'px');
+  }
   var toggle = document.getElementById('landing-menu-toggle');
   var navigation = document.getElementById('landing-navigation');
   if (toggle && navigation) {
@@ -9,6 +27,10 @@
     function setMenu(open) {
       toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
       navigation.hidden = mobile.matches && !open;
+      // Altura já com o menu na nova posição: ao clicar num link do menu móvel,
+      // a rolagem até a seção acontece logo após este evento, antes de o
+      // ResizeObserver avisar a mudança, e deve usar o cabeçalho fechado.
+      syncHeaderOffset();
     }
     function syncMenu() {
       toggle.hidden = !mobile.matches;
@@ -34,6 +56,18 @@
     else if (mobile.addListener) mobile.addListener(syncMenu);
     syncMenu();
   }
+  syncHeaderOffset();
+  if (header && typeof window.ResizeObserver === 'function') {
+    new window.ResizeObserver(syncHeaderOffset).observe(header, { box: 'border-box' });
+  } else {
+    window.addEventListener('resize', syncHeaderOffset);
+  }
+  // Rolagem suave a partir do fim do carregamento (ver landing.css).
+  function enableSmoothScroll() {
+    window.requestAnimationFrame(function () { htmlRoot.classList.add('landing-smooth-scroll'); });
+  }
+  if (document.readyState === 'complete') enableSmoothScroll();
+  else window.addEventListener('load', enableSmoothScroll, { once: true });
 
   function initReviews(root) {
     if (!root) return;
